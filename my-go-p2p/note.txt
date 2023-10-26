@@ -1,0 +1,40 @@
+node 
+  k_v store 
+  udp 
+    - discovery
+  nodes
+    - tcp
+
+reception_action
+  new_node
+  remove_node
+  broadcast
+  send_to
+
+go reception
+  go listen_connect {
+    loop node <-node {
+      NodeInfo {
+        addr,
+        connect,
+        in_chan,
+        out_chan,
+      }
+      spawn stream_connection(node_info)
+    }
+  }
+
+  go listen_disconnect {
+    loop node <-dis
+      remove node from mem
+  }
+
+go stream_connection
+  connect
+  go {
+    in_chan<-tcp
+  }
+  go {
+    out_chan -> tcp
+  }
+  error -> disconnect
