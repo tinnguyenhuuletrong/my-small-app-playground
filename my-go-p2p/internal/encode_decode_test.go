@@ -1,6 +1,7 @@
 package internal_test
 
 import (
+	"net"
 	"reflect"
 	"testing"
 
@@ -9,7 +10,10 @@ import (
 
 func Test_Encode_Decode_NetworkMessage(t *testing.T) {
 	msg := internal.BuildUDPDiscoveryMessage(internal.UDPDiscoveryBody{
-		Ipv4: "127.0.0.1:5000",
+		TcpAddr: net.TCPAddr{
+			IP:   net.ParseIP("127.0.0.1"),
+			Port: 5000,
+		},
 	})
 
 	data, err := internal.Msg2Bytes(msg)
