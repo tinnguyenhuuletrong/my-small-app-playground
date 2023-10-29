@@ -4,6 +4,9 @@ import (
 	"context"
 	"log"
 	"net"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/my-go-p2p/internal"
@@ -11,6 +14,8 @@ import (
 )
 
 func main() {
+	var signalChan chan (os.Signal) = make(chan os.Signal, 1)
+	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
 
 	appState := internal.
 		NewAppState()
@@ -21,31 +26,22 @@ func main() {
 			IP:   net.ParseIP("127.0.0.1"),
 			Port: 6543,
 		})
+	log.Println("NodeId: ", appState.Config.NodeName)
 
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, internal.CTX_Key_AppState, *appState)
+	ctx, cancel := context.WithCancel(ctx)
 
-	go func(ctx context.Context) {
-		appState, ok := ctx.Value(internal.CTX_Key_AppState).(internal.AppState)
-		appState.AppWaitGroup.Add(1)
-		defer appState.AppWaitGroup.Done()
-		if !ok {
-			log.Fatalln("ctx.appstate not exists")
-			return
-		}
+	receptionModule := pkg.NewModuleReception()
 
-		for itm := range appState.Chan_reception_cmd {
-			switch itm.GetType() {
-			case internal.CMDAddNode:
-				{
-					data := itm.(internal.CMD_AddNode)
-					log.Println("<-", data)
-				}
-			}
-			break
-		}
-	}(ctx)
 	go pkg.StartBroadCast(ctx)
+	go receptionModule.Start(ctx)
+
+	go func() {
+		sig := <-signalChan
+		log.Printf("%s signal caught", sig)
+		cancel()
+	}()
 
 	time.Sleep(1 * time.Second)
 	appState.AppWaitGroup.Wait()

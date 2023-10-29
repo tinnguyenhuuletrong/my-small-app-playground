@@ -21,7 +21,8 @@ const (
 
 // Implementation of NetworkMessage for UDPDiscoveryMessage message.
 type UDPDiscoveryBody struct {
-	TcpAddr net.TCPAddr
+	NodeName string
+	TcpAddr  net.TCPAddr
 }
 type UDPDiscoveryMessage struct {
 	Body UDPDiscoveryBody

@@ -21,7 +21,8 @@ func StartBroadCast(ctx context.Context) {
 	var wg sync.WaitGroup
 	port := appState.Config.Udp_discovery_port
 	msg := internal.BuildUDPDiscoveryMessage(internal.UDPDiscoveryBody{
-		TcpAddr: appState.Config.Tcp_address,
+		NodeName: appState.Config.NodeName,
+		TcpAddr:  appState.Config.Tcp_address,
 	})
 	msg_bytes, _ := internal.Msg2Bytes(msg)
 
@@ -56,10 +57,11 @@ func StartBroadCast(ctx context.Context) {
 			}
 
 			// Print the broadcast message.
-			// log.Printf("Server recieved %v from %s", discoveryPacket, addr)
+			// log.Printf("Server recieved %v", discoveryPacket)
 
 			cmdAddNode := internal.CMD_AddNode{
-				Addr: &discoveryPacket.Body.TcpAddr,
+				NodeName: discoveryPacket.Body.NodeName,
+				Addr:     discoveryPacket.Body.TcpAddr,
 			}
 
 			appState.Chan_reception_cmd <- cmdAddNode
