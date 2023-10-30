@@ -47,24 +47,3 @@ func (s *appConfig) WithUDPDiscoveryPort(port int) *appConfig {
 	s.Udp_discovery_port = port
 	return s
 }
-
-type RemoteNodeInfo struct {
-	name string
-	addr net.TCPAddr
-	con  net.TCPConn
-}
-
-func NewRemoveNoteInfo(name string, addr net.TCPAddr) *RemoteNodeInfo {
-	return &RemoteNodeInfo{
-		name: name,
-		addr: addr,
-	}
-}
-
-func (s RemoteNodeInfo) GetName() string {
-	return s.name
-}
-
-func (s *RemoteNodeInfo) Start() {
-	// TODO: do connect
-}

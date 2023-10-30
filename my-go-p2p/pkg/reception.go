@@ -10,13 +10,13 @@ import (
 
 type ModuleReception struct {
 	mRWMutex       sync.RWMutex
-	mRemoteNodeMap map[string]internal.RemoteNodeInfo
+	mRemoteNodeMap map[string]*internal.RemoteNodeInfo
 }
 
 func NewModuleReception() *ModuleReception {
 	return &ModuleReception{
 		mRWMutex:       sync.RWMutex{},
-		mRemoteNodeMap: make(map[string]internal.RemoteNodeInfo),
+		mRemoteNodeMap: make(map[string]*internal.RemoteNodeInfo),
 	}
 }
 
@@ -27,7 +27,7 @@ func (s *ModuleReception) HasRemoteNodeName(nodeName string) bool {
 	return exists
 }
 
-func (s *ModuleReception) addRemoteNode(nodeInfo internal.RemoteNodeInfo) {
+func (s *ModuleReception) addRemoteNode(nodeInfo *internal.RemoteNodeInfo) {
 	s.mRWMutex.Lock()
 	defer s.mRWMutex.Unlock()
 	s.mRemoteNodeMap[nodeInfo.GetName()] = nodeInfo
@@ -87,8 +87,8 @@ func (s *ModuleReception) runCmdLoop(ctx context.Context) {
 				case internal.CmdAddNode:
 					{
 						cmd := v.(internal.CMD_AddNode)
-						remoteNodeInfo := internal.NewRemoveNoteInfo(cmd.NodeName, cmd.Addr)
-						s.addRemoteNode(*remoteNodeInfo)
+						remoteNodeInfo := internal.NewRemoteNode(cmd.NodeName, cmd.Addr)
+						s.addRemoteNode(remoteNodeInfo)
 						continue
 					}
 				case internal.CmdRemoveNode:
