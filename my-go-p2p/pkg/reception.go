@@ -87,7 +87,7 @@ func (s *ModuleReception) runCmdLoop(ctx context.Context) {
 				case internal.CmdAddNode:
 					{
 						cmd := v.(internal.CMD_AddNode)
-						remoteNodeInfo := internal.NewRemoteNode(cmd.NodeName, cmd.Addr)
+						remoteNodeInfo := internal.NewRemoteNodeClient(cmd.NodeName, cmd.Addr)
 						s.addRemoteNode(remoteNodeInfo)
 						continue
 					}

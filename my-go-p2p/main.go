@@ -22,7 +22,7 @@ func main() {
 
 	appState.Config.
 		WithUDPDiscoveryPort(5000).
-		WithTCPAddresst(net.TCPAddr{
+		WithTCPAddress(net.TCPAddr{
 			IP:   net.ParseIP("127.0.0.1"),
 			Port: 6543,
 		})

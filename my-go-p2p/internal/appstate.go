@@ -38,7 +38,7 @@ func (s *appConfig) WithName(name string) *appConfig {
 	return s
 }
 
-func (s *appConfig) WithTCPAddresst(tcp_address net.TCPAddr) *appConfig {
+func (s *appConfig) WithTCPAddress(tcp_address net.TCPAddr) *appConfig {
 	s.Tcp_address = tcp_address
 	return s
 }

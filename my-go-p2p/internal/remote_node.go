@@ -2,9 +2,27 @@ package internal
 
 import (
 	"bufio"
+	"fmt"
 	"net"
+	"strconv"
+	"strings"
 	"sync"
 )
+
+type RemoteNodeType uint
+
+const (
+	NODE_TYPE_CLIENT RemoteNodeType = iota + 1
+	NODE_TYPE_REMOTE_PEER
+)
+
+var RemoteNodeTypeHumanize = []string{
+	"NODE_TYPE_CLIENT", "NODE_TYPE_REMOTE_PEER",
+}
+
+func (s RemoteNodeType) String() string {
+	return RemoteNodeTypeHumanize[s-NODE_TYPE_CLIENT]
+}
 
 type RemoteNoteConnectionState int
 
@@ -26,6 +44,7 @@ func (s RemoteNoteConnectionState) String() string {
 type RemoteNodeInfo struct {
 	sync.Mutex
 
+	mType RemoteNodeType
 	name  string
 	addr  net.TCPAddr
 	conn  net.Conn
@@ -37,14 +56,37 @@ type RemoteNodeInfo struct {
 	OnStateChange func(RemoteNoteConnectionState)
 }
 
-func NewRemoteNode(name string, addr net.TCPAddr) *RemoteNodeInfo {
+func NewRemoteNodeClient(name string, addr net.TCPAddr) *RemoteNodeInfo {
 	return &RemoteNodeInfo{
+		mType: NODE_TYPE_CLIENT,
 		name:  name,
 		addr:  addr,
 		state: NONE,
 
 		OnStateChange: nil,
 	}
+}
+
+func NewRemoteNodePeer(name string, conn net.Conn) *RemoteNodeInfo {
+	tmp := strings.Split(conn.RemoteAddr().String(), ":")
+	portNum, _ := strconv.ParseInt(tmp[1], 10, 32)
+
+	return &RemoteNodeInfo{
+		mType: NODE_TYPE_REMOTE_PEER,
+		name:  name,
+		conn:  conn,
+		addr: net.TCPAddr{
+			IP:   net.ParseIP(tmp[0]),
+			Port: int(portNum),
+		},
+		state: NONE,
+
+		OnStateChange: nil,
+	}
+}
+
+func (s *RemoteNodeInfo) GetType() RemoteNodeType {
+	return s.mType
 }
 
 func (s *RemoteNodeInfo) GetState() RemoteNoteConnectionState {
@@ -83,7 +125,10 @@ func (s *RemoteNodeInfo) Stop() error {
 	return nil
 }
 
-func (s *RemoteNodeInfo) Start() error {
+func (s *RemoteNodeInfo) StartConnectTo() error {
+	if s.mType != NODE_TYPE_CLIENT {
+		return fmt.Errorf("required Node type = NODE_TYPE_CLIENT")
+	}
 	s.setState(CONNECTING)
 	conn, err := net.Dial("tcp", s.addr.String())
 	if err != nil {
@@ -91,6 +136,21 @@ func (s *RemoteNodeInfo) Start() error {
 		return err
 	}
 	s.conn = conn
+	s.Outgoing_Chan = make(chan []byte)
+	s.Incoming_Chan = make(chan []byte)
+	s.setState(CONNECTED)
+
+	go s.startNetworkWriteStream()
+	go s.startNetworkReadStream()
+
+	return nil
+}
+
+func (s *RemoteNodeInfo) StartRemotePeer() error {
+	if s.mType != NODE_TYPE_REMOTE_PEER {
+		return fmt.Errorf("required Node type = NODE_TYPE_REMOTE_PEER")
+	}
+
 	s.Outgoing_Chan = make(chan []byte)
 	s.Incoming_Chan = make(chan []byte)
 	s.setState(CONNECTED)

@@ -38,3 +38,12 @@ go stream_connection
     out_chan -> tcp
   }
   error -> disconnect
+
+
+
+Server 
+  remoteNodePeer[] <- connectTo
+
+
+
+  

@@ -43,19 +43,20 @@ func Test_WithEcho(t *testing.T) {
 	wg.Add(2)
 
 	onNewClient := func(conn net.Conn) {
-		log.Println("server client connected")
-		buf := make([]byte, 256)
-		_, err := conn.Read(buf)
+
+		peerNode := internal.NewRemoteNodePeer("peer-test-1", conn)
+		err := peerNode.StartRemotePeer()
+		log.Printf("server peer created")
 		if err != nil {
-			log.Fatalln(err)
+			log.Panicln(err)
 		}
+
+		buf := <-peerNode.Incoming_Chan
 		log.Printf("server recv: %s", string(buf))
+
 		echoMsg := fmt.Sprintf("Echo %s", string(buf))
 		log.Printf("server repl: %s", echoMsg)
-		_, err = conn.Write([]byte(echoMsg))
-		if err != nil {
-			log.Fatalln(err)
-		}
+		peerNode.Outgoing_Chan <- []byte(echoMsg)
 
 		defer wg.Done()
 	}
@@ -65,7 +66,7 @@ func Test_WithEcho(t *testing.T) {
 		defer wg.Done()
 		time.Sleep(20 * time.Millisecond)
 
-		remoteNode := internal.NewRemoteNode("test-1", net.TCPAddr{
+		remoteNode := internal.NewRemoteNodeClient("test-1", net.TCPAddr{
 			IP:   net.ParseIP(ip),
 			Port: port,
 		})
@@ -73,12 +74,12 @@ func Test_WithEcho(t *testing.T) {
 			log.Println("state changed", state)
 		}
 
-		err := remoteNode.Start()
+		err := remoteNode.StartConnectTo()
 		if err != nil {
 			log.Panicln(err)
 		}
 
-		remoteNode.Outgoing_Chan <- []byte("Ping")
+		remoteNode.Outgoing_Chan <- append([]byte("Ping"), 0)
 		for v := range remoteNode.Incoming_Chan {
 			log.Printf("client recv: %s", string(v))
 			break
@@ -102,18 +103,18 @@ func Test_WithRemoteClose(t *testing.T) {
 	wg.Add(2)
 
 	onNewClient := func(conn net.Conn) {
-		log.Println("server client connected")
-		buf := make([]byte, 256)
-		_, err := conn.Read(buf)
-		if err != nil {
-			log.Fatalln(err)
+		peerNode := internal.NewRemoteNodePeer("peer-test-1", conn)
+		peerNode.OnStateChange = func(state internal.RemoteNoteConnectionState) {
+			log.Println("server peer state changed", state)
 		}
-		log.Printf("server recv: %s", string(buf))
-		log.Println("server: force close")
 
-		// remote close
-		conn.Close()
+		err := peerNode.StartRemotePeer()
+		log.Printf("server peer created")
+		if err != nil {
+			log.Panicln(err)
+		}
 
+		peerNode.Stop()
 		defer wg.Done()
 	}
 
@@ -122,7 +123,7 @@ func Test_WithRemoteClose(t *testing.T) {
 		defer wg.Done()
 		time.Sleep(20 * time.Millisecond)
 
-		remoteNode := internal.NewRemoteNode("test-1", net.TCPAddr{
+		remoteNode := internal.NewRemoteNodeClient("test-1", net.TCPAddr{
 			IP:   net.ParseIP(ip),
 			Port: port,
 		})
@@ -130,7 +131,7 @@ func Test_WithRemoteClose(t *testing.T) {
 			log.Println("state changed", state)
 		}
 
-		err := remoteNode.Start()
+		err := remoteNode.StartConnectTo()
 		if err != nil {
 			log.Panicln(err)
 		}
