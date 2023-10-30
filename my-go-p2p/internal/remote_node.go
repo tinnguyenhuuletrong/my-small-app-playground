@@ -66,6 +66,11 @@ func (s *RemoteNodeInfo) GetName() string {
 }
 
 func (s *RemoteNodeInfo) Stop() error {
+	// already disconnect -> ignore
+	if s.GetState() == DISCONNECTED {
+		return nil
+	}
+
 	err := s.conn.Close()
 	if err != nil {
 		return err
@@ -97,10 +102,6 @@ func (s *RemoteNodeInfo) Start() error {
 }
 
 func (s *RemoteNodeInfo) onReadStreamError() {
-	// already disconnect -> ignore
-	if s.GetState() == DISCONNECTED {
-		return
-	}
 	s.Stop()
 }
 

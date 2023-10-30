@@ -33,7 +33,7 @@ func dummyTcpServer(ctx context.Context, addr string, handleNewClient func(net.C
 	}
 }
 
-func TestRemoteNodeTCP(t *testing.T) {
+func Test_WithEcho(t *testing.T) {
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	ip := "127.0.0.1"
@@ -86,6 +86,66 @@ func TestRemoteNodeTCP(t *testing.T) {
 
 		// disconnect
 		remoteNode.Stop()
+	}()
+
+	wg.Wait()
+	cancel()
+}
+
+func Test_WithRemoteClose(t *testing.T) {
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+	ip := "127.0.0.1"
+	port := 4301
+
+	wg := sync.WaitGroup{}
+	wg.Add(2)
+
+	onNewClient := func(conn net.Conn) {
+		log.Println("server client connected")
+		buf := make([]byte, 256)
+		_, err := conn.Read(buf)
+		if err != nil {
+			log.Fatalln(err)
+		}
+		log.Printf("server recv: %s", string(buf))
+		log.Println("server: force close")
+
+		// remote close
+		conn.Close()
+
+		defer wg.Done()
+	}
+
+	go dummyTcpServer(ctx, fmt.Sprintf("%s:%d", ip, port), onNewClient)
+	go func() {
+		defer wg.Done()
+		time.Sleep(20 * time.Millisecond)
+
+		remoteNode := internal.NewRemoteNode("test-1", net.TCPAddr{
+			IP:   net.ParseIP(ip),
+			Port: port,
+		})
+		remoteNode.OnStateChange = func(state internal.RemoteNoteConnectionState) {
+			log.Println("state changed", state)
+		}
+
+		err := remoteNode.Start()
+		if err != nil {
+			log.Panicln(err)
+		}
+
+		remoteNode.Outgoing_Chan <- []byte("Ping")
+		for v := range remoteNode.Incoming_Chan {
+			log.Printf("client recv: %s", string(v))
+			break
+		}
+
+		// disconnect
+		err = remoteNode.Stop()
+		if err != nil {
+			log.Panicln(err)
+		}
 	}()
 
 	wg.Wait()
