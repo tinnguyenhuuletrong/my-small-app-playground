@@ -15,6 +15,7 @@ type NetworkMessage interface {
 
 const (
 	NetworkMessageType_UDP_DISCOVERY NetworkMessageType = iota + 1
+	NetworkMessageType_HANDSHAKE
 	NetworkMessageType_PING
 	NetworkMessageType_PONG
 )
@@ -41,6 +42,34 @@ func (m UDPDiscoveryMessage) GetBody() any {
 func BuildUDPDiscoveryMessage(body UDPDiscoveryBody) *UDPDiscoveryMessage {
 	return &UDPDiscoveryMessage{
 		Body: body,
+	}
+}
+
+// Implementation of NetworkMessage for HandshakeMessage message.
+type HandshakeBody struct {
+	NodeName string
+}
+type HandshakeMessage struct {
+	Body HandshakeBody
+}
+
+var _ NetworkMessage = (*HandshakeMessage)(nil)
+
+// GetBody implements NetworkMessage.
+func (m HandshakeMessage) GetBody() any {
+	return m.Body
+}
+
+// GetType implements NetworkMessage.
+func (m HandshakeMessage) GetType() NetworkMessageType {
+	return NetworkMessageType_HANDSHAKE
+}
+
+func BuildHandshakeMessage(nodeName string) *HandshakeMessage {
+	return &HandshakeMessage{
+		Body: HandshakeBody{
+			NodeName: nodeName,
+		},
 	}
 }
 

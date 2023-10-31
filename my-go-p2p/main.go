@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log"
 	"net"
 	"os"
@@ -14,27 +15,35 @@ import (
 )
 
 func main() {
-	var signalChan chan (os.Signal) = make(chan os.Signal, 1)
-	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
+	// Args
+	nodeName := flag.String("name", "node:"+internal.GetHostName()+":"+internal.GenerateRandomString(5), "nodeName")
+	port := flag.Int("port", int(internal.GenRandInt(6000, 9000)), "port")
+	flag.Parse()
 
 	appState := internal.
 		NewAppState()
 
 	appState.Config.
-		WithUDPDiscoveryPort(5000).
+		WithName(*nodeName).
+		WithUDPDiscoveryPort(9998).
 		WithTCPAddress(net.TCPAddr{
 			IP:   net.ParseIP("127.0.0.1"),
-			Port: 6543,
+			Port: *port,
 		})
-	log.Println("NodeId: ", appState.Config.NodeName)
+	log.Println("NodeName: ", appState.Config.NodeName)
+	log.Println("TCPAddress: ", appState.Config.Tcp_address.String())
+
+	var signalChan chan (os.Signal) = make(chan os.Signal, 1)
+	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
+
+	receptionModule := pkg.NewModuleReception()
+	broadcastModule := pkg.NewModuleBroadcast()
 
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, internal.CTX_Key_AppState, *appState)
 	ctx, cancel := context.WithCancel(ctx)
 
-	receptionModule := pkg.NewModuleReception()
-
-	go pkg.StartBroadCast(ctx)
+	go broadcastModule.Start(ctx)
 	go receptionModule.Start(ctx)
 
 	go func() {

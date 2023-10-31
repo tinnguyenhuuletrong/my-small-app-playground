@@ -107,6 +107,10 @@ func (s *RemoteNodeInfo) GetName() string {
 	return s.name
 }
 
+func (s *RemoteNodeInfo) GetAddr() string {
+	return s.addr.String()
+}
+
 func (s *RemoteNodeInfo) Stop() error {
 	// already disconnect -> ignore
 	if s.GetState() == DISCONNECTED {

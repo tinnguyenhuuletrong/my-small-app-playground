@@ -11,6 +11,13 @@ reception_action
   broadcast
   send_to
 
+go discovery
+  go reciver
+    if nodeName exists
+      ignore
+
+  go broadcast
+
 go reception
   go listen_connect {
     loop node <-node {
@@ -20,6 +27,7 @@ go reception
         in_chan,
         out_chan,
       }
+      check_duplicate
       spawn stream_connection(node_info)
     }
   }
@@ -47,3 +55,14 @@ Server
 
 
   
+Scenario
+  A 
+    broadcast (A{name, tcp_addr})
+
+  B
+    broadcast (A{name, tcp_addr})
+
+
+  A -> b exists ? -> connect -> [NodeInfo{B.name}]
+  B -> connected -> [NodeInfo{B.name}]
+    B.discovery.reciver -> ignore B.name
