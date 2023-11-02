@@ -11,6 +11,9 @@ const (
 	CmdBroadcastAllNode
 	CmdSendToNode
 
+	// P2P message
+	CmdPeerMessage
+
 	// Admin cmd
 	CmdAdminListNode
 )
@@ -73,4 +76,15 @@ var _ CMD_Any = (*CMD_CmdAdminListNode)(nil)
 
 func (s CMD_CmdAdminListNode) GetType() CMDType {
 	return CmdAdminListNode
+}
+
+type CMD_PeerMessage struct {
+	NodeName string
+	Data     map[string]any
+}
+
+var _ CMD_Any = (*CMD_PeerMessage)(nil)
+
+func (s CMD_PeerMessage) GetType() CMDType {
+	return CmdPeerMessage
 }

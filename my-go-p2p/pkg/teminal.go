@@ -79,7 +79,7 @@ func (s *ModuleTerminal) handleTerminalCmd(ctx context.Context, cmdLine string) 
 	if len(tmp) == 0 {
 		return
 	}
-	cmd, _ := tmp[0], tmp[1:]
+	cmd, args := tmp[0], tmp[1:]
 
 	switch cmd {
 	case ".info":
@@ -96,12 +96,18 @@ func (s *ModuleTerminal) handleTerminalCmd(ctx context.Context, cmdLine string) 
 		data := <-replyChan
 		fmt.Println(formatToDisplay(data))
 		close(replyChan)
+	case ".bc":
+		msg := internal.BuildStringDataMessage(strings.Join(args, ","))
+		appState.Chan_reception_cmd <- internal.CMD_BroadcastAllNode{
+			Data: msg,
+		}
 
 	default:
 		fmt.Println(`
 Help:
 	.info	print node info
 	.list	print remote node list
+	.bc <data> broadcast to all node
 		`)
 	}
 }

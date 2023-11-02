@@ -5,7 +5,6 @@ import (
 	"log"
 	"net"
 	"sync"
-	"time"
 
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/my-go-p2p/internal"
 )
@@ -39,7 +38,28 @@ func (s *ModuleReception) addRemoteNode(nodeInfo *internal.RemoteNodeInfo) {
 		}
 	}
 
+	go s.startReadStreamRemoteNode(nodeInfo)
+
 	log.Println("[ModuleReception] add node", nodeInfo.GetName(), nodeInfo.GetAddr())
+}
+
+func (s *ModuleReception) startReadStreamRemoteNode(nodeInfo *internal.RemoteNodeInfo) {
+	appState, ok := s.ctx.Value(internal.CTX_Key_AppState).(internal.AppState)
+	if !ok {
+		log.Fatalln("ctx.appstate not exists")
+		return
+	}
+	for data := range nodeInfo.Incoming_Chan {
+		body, err := internal.Bytes2GenericMsg(data)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		appState.Chan_peer_message <- internal.CMD_PeerMessage{
+			NodeName: nodeInfo.GetName(),
+			Data:     body,
+		}
+	}
 }
 
 func (s *ModuleReception) removeRemoteNode(nodeName string) {
@@ -148,10 +168,51 @@ func (s *ModuleReception) runCmdLoop(ctx context.Context) {
 						cmd := v.(internal.CMD_CmdAdminListNode)
 						s.handleCmdAdminListNode(cmd)
 					}
+				case internal.CmdBroadcastAllNode:
+					{
+						cmd := v.(internal.CMD_BroadcastAllNode)
+						s.handleCmdBroadcastAllNode(cmd)
+					}
+				case internal.CmdSendToNode:
+					{
+						cmd := v.(internal.CMD_SendToNode)
+						s.handleCmdSendToNode(cmd)
+					}
 				}
 			}
 
 		}
+	}
+}
+
+func (s *ModuleReception) handleCmdSendToNode(cmd internal.CMD_SendToNode) {
+	s.mRWMutex.Lock()
+	defer s.mRWMutex.Unlock()
+
+	data, err := internal.Msg2Bytes(cmd.Data)
+	if err != nil {
+		return
+	}
+
+	remoteNode := s.mRemoteNodeMap[cmd.NodeId]
+	if remoteNode == nil {
+		return
+	}
+
+	remoteNode.Outgoing_Chan <- data
+}
+
+func (s *ModuleReception) handleCmdBroadcastAllNode(cmd internal.CMD_BroadcastAllNode) {
+	s.mRWMutex.Lock()
+	defer s.mRWMutex.Unlock()
+
+	data, err := internal.Msg2Bytes(cmd.Data)
+	if err != nil {
+		return
+	}
+
+	for _, v := range s.mRemoteNodeMap {
+		v.Outgoing_Chan <- data
 	}
 }
 
@@ -207,7 +268,7 @@ func (s *ModuleReception) handlePeerRequestConnect(conn net.Conn) {
 	data := make([]byte, 256)
 
 	// 5 seconds for handshake
-	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	// conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 	n, err := conn.Read(data)
 	if err != nil {
 		conn.Close()
@@ -219,7 +280,7 @@ func (s *ModuleReception) handlePeerRequestConnect(conn net.Conn) {
 		return
 	}
 
-	conn.SetDeadline(time.Time{})
+	// conn.SetDeadline(time.Time{})
 
 	log.Println("[ModuleReception][runTcpListener] accept new connection ", conn.RemoteAddr(), msg.Body.NodeName)
 	s.mRWMutex.Lock()

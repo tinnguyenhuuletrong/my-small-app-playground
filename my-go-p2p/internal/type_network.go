@@ -16,8 +16,7 @@ type NetworkMessage interface {
 const (
 	NetworkMessageType_UDP_DISCOVERY NetworkMessageType = iota + 1
 	NetworkMessageType_HANDSHAKE
-	NetworkMessageType_PING
-	NetworkMessageType_PONG
+	NetworkMessageType_STRINGDATA
 )
 
 // Implementation of NetworkMessage for UDPDiscoveryMessage message.
@@ -73,52 +72,26 @@ func BuildHandshakeMessage(nodeName string) *HandshakeMessage {
 	}
 }
 
-// Implementation of NetworkMessage for PingMessage message.
-type PingBody struct {
-}
-type PingMessage struct {
-	Body PingBody
+// Implementation of NetworkMessage for HandshakeMessage message.
+type StringDataBody string
+type StringDataMessage struct {
+	Body StringDataBody
 }
 
-var _ NetworkMessage = (*PingMessage)(nil)
+var _ NetworkMessage = (*StringDataMessage)(nil)
 
 // GetBody implements NetworkMessage.
-func (m PingMessage) GetBody() any {
+func (m StringDataMessage) GetBody() any {
 	return m.Body
 }
 
 // GetType implements NetworkMessage.
-func (m PingMessage) GetType() NetworkMessageType {
-	return NetworkMessageType_PING
+func (m StringDataMessage) GetType() NetworkMessageType {
+	return NetworkMessageType_STRINGDATA
 }
 
-func BuildPingMessage() *PingMessage {
-	return &PingMessage{
-		Body: PingBody{},
-	}
-}
-
-// Implementation of NetworkMessage for PongMessage message.
-type PongBody struct {
-}
-type PongMessage struct {
-	Body PongBody
-}
-
-var _ NetworkMessage = (*PongMessage)(nil)
-
-// GetBody implements NetworkMessage.
-func (m PongMessage) GetBody() any {
-	return m.Body
-}
-
-// GetType implements NetworkMessage.
-func (m PongMessage) GetType() NetworkMessageType {
-	return NetworkMessageType_PONG
-}
-
-func BuildPongMessage() *PongMessage {
-	return &PongMessage{
-		Body: PongBody{},
+func BuildStringDataMessage(body string) *StringDataMessage {
+	return &StringDataMessage{
+		Body: StringDataBody(body),
 	}
 }

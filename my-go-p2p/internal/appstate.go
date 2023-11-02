@@ -21,6 +21,7 @@ type AppState struct {
 	Config             appConfig
 	AppWaitGroup       *sync.WaitGroup
 	Chan_reception_cmd chan CMD_Any
+	Chan_peer_message  chan CMD_PeerMessage
 }
 
 func NewAppState() *AppState {
@@ -30,6 +31,7 @@ func NewAppState() *AppState {
 		},
 		AppWaitGroup:       &sync.WaitGroup{},
 		Chan_reception_cmd: make(chan CMD_Any),
+		Chan_peer_message:  make(chan CMD_PeerMessage),
 	}
 }
 

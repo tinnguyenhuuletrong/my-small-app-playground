@@ -3,6 +3,7 @@ package internal
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"net"
 	"strconv"
 	"strings"
@@ -172,7 +173,7 @@ func (s *RemoteNodeInfo) onReadStreamError() {
 func (s *RemoteNodeInfo) startNetworkReadStream() {
 	for {
 		reader := bufio.NewReader(s.conn)
-		data, err := reader.ReadBytes(0)
+		data, err := reader.ReadBytes(DELIM_BYTE)
 		if err != nil {
 			s.onReadStreamError()
 			return
@@ -188,6 +189,7 @@ func (s *RemoteNodeInfo) startNetworkWriteStream() {
 	for data := range s.Outgoing_Chan {
 		n, err := s.conn.Write(data)
 		if n != len(data) || err != nil {
+			log.Fatalln(err)
 			return
 		}
 	}

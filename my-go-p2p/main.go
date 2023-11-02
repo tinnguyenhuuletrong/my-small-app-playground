@@ -49,6 +49,12 @@ func main() {
 	go ternimalModule.Start(ctx)
 
 	go func() {
+		for v := range appState.Chan_peer_message {
+			log.Println("<-", v)
+		}
+	}()
+
+	go func() {
 		sig := <-signalChan
 		log.Printf("%s signal caught", sig)
 		cancel()
