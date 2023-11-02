@@ -141,12 +141,32 @@ func (s *ModuleReception) runCmdLoop(ctx context.Context) {
 					{
 						cmd := v.(internal.CMD_RemoveNode)
 						s.handleCmdRemoveNode(cmd)
+
+					}
+				case internal.CmdAdminListNode:
+					{
+						cmd := v.(internal.CMD_CmdAdminListNode)
+						s.handleCmdAdminListNode(cmd)
 					}
 				}
 			}
 
 		}
 	}
+}
+
+func (s *ModuleReception) handleCmdAdminListNode(cmd internal.CMD_CmdAdminListNode) {
+	s.mRWMutex.Lock()
+	defer s.mRWMutex.Unlock()
+
+	res := make([]internal.CMD_CmdAdminListNodeReplyItem, 0)
+	for _, v := range s.mRemoteNodeMap {
+		res = append(res, internal.CMD_CmdAdminListNodeReplyItem{
+			Name: v.GetName(),
+			Addr: v.GetAddr(),
+		})
+	}
+	cmd.Reply <- res
 }
 
 func (s *ModuleReception) handleCmdRemoveNode(cmd internal.CMD_RemoveNode) {

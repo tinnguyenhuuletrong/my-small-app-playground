@@ -10,6 +10,9 @@ const (
 
 	CmdBroadcastAllNode
 	CmdSendToNode
+
+	// Admin cmd
+	CmdAdminListNode
 )
 
 type CMD_Any interface {
@@ -56,4 +59,18 @@ var _ CMD_Any = (*CMD_BroadcastAllNode)(nil)
 
 func (s CMD_BroadcastAllNode) GetType() CMDType {
 	return CmdBroadcastAllNode
+}
+
+type CMD_CmdAdminListNodeReplyItem struct {
+	Name string
+	Addr string
+}
+type CMD_CmdAdminListNode struct {
+	Reply chan []CMD_CmdAdminListNodeReplyItem
+}
+
+var _ CMD_Any = (*CMD_CmdAdminListNode)(nil)
+
+func (s CMD_CmdAdminListNode) GetType() CMDType {
+	return CmdAdminListNode
 }

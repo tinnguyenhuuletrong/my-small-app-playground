@@ -38,6 +38,7 @@ func main() {
 
 	receptionModule := pkg.NewModuleReception()
 	broadcastModule := pkg.NewModuleBroadcast()
+	ternimalModule := pkg.NewModuleTerminal()
 
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, internal.CTX_Key_AppState, *appState)
@@ -45,6 +46,7 @@ func main() {
 
 	go broadcastModule.Start(ctx)
 	go receptionModule.Start(ctx)
+	go ternimalModule.Start(ctx)
 
 	go func() {
 		sig := <-signalChan
