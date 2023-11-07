@@ -1,32 +1,22 @@
 import { useState, useCallback } from "react";
 import ReactFlow, {
-  addEdge,
   FitViewOptions,
-  applyNodeChanges,
-  applyEdgeChanges,
-  Node,
-  Edge,
   DefaultEdgeOptions,
-  OnConnect,
-  OnEdgesChange,
-  OnNodesChange,
   Background,
   Controls,
   MiniMap,
   BackgroundVariant,
   ReactFlowInstance,
   Panel,
+  NodeTypes,
+  Node,
 } from "reactflow";
 import "reactflow/dist/style.css";
 
-const initialNodes: Node[] = [
-  { id: "1", data: { label: "Node 1" }, position: { x: 5, y: 5 } },
-  { id: "2", data: { label: "Node 2" }, position: { x: 5, y: 100 } },
-];
-
-const initialEdges: Edge[] = [{ id: "e1-2", source: "1", target: "2" }];
-
-const getNodeId = () => `randomnode_${+new Date()}`;
+import useAppStore, { RFState } from "../stores/appStore";
+import NoteCustomNode from "./NoteCustomNode";
+import Dropdown from "./input/Dropdown";
+import { getNodeId } from "../utils";
 
 const fitViewOptions: FitViewOptions = {
   padding: 0.2,
@@ -36,44 +26,63 @@ const defaultEdgeOptions: DefaultEdgeOptions = {
   animated: false,
 };
 
+const nodeTypes: NodeTypes = {
+  noteNode: NoteCustomNode,
+};
+
+const selector = (state: RFState) => ({
+  nodes: state.nodes,
+  edges: state.edges,
+  onNodesChange: state.onNodesChange,
+  onEdgesChange: state.onEdgesChange,
+  onConnect: state.onConnect,
+  addNode: state.addNode,
+  save: state.save,
+  load: state.load,
+  reset: state.reset,
+});
+
 export function FlowEditor() {
-  const [nodes, setNodes] = useState<Node[]>(initialNodes);
-  const [edges, setEdges] = useState<Edge[]>(initialEdges);
+  const {
+    nodes,
+    edges,
+    onNodesChange,
+    onEdgesChange,
+    onConnect,
+    addNode,
+    save,
+    load,
+    reset,
+  } = useAppStore(selector);
   const [flowIns, setFlowIns] = useState<ReactFlowInstance | null>(null);
 
-  const onNodesChange: OnNodesChange = useCallback(
-    (changes) => setNodes((nds) => applyNodeChanges(changes, nds)),
-    [setNodes]
-  );
-  const onEdgesChange: OnEdgesChange = useCallback(
-    (changes) => setEdges((eds) => applyEdgeChanges(changes, eds)),
-    [setEdges]
-  );
-  const onConnect: OnConnect = useCallback(
-    (connection) => setEdges((eds) => addEdge(connection, eds)),
-    [setEdges]
-  );
-
   const onSave = useCallback(() => {
-    if (flowIns) {
-      const flow = flowIns.toObject();
-      console.log("saved: ", flow);
-    }
-  }, [flowIns]);
+    save();
+  }, [save]);
+
+  const onLoad = useCallback(() => {
+    load();
+  }, [load]);
+
+  const onReset = useCallback(() => {
+    reset();
+  }, [reset]);
 
   const onAdd = useCallback(() => {
     if (!flowIns) return;
 
-    const newNode = {
+    const newNode: Node = {
       id: getNodeId(),
-      data: { label: "Added node" },
+      type: "noteNode",
+      data: { value: "say something..." },
       position: {
         x: flowIns.getViewport().x,
         y: flowIns.getViewport().y,
       },
     };
-    setNodes((nds) => nds.concat(newNode));
-  }, [setNodes, flowIns]);
+
+    addNode(newNode);
+  }, [addNode, flowIns]);
 
   return (
     <ReactFlow
@@ -86,15 +95,36 @@ export function FlowEditor() {
       fitView
       fitViewOptions={fitViewOptions}
       defaultEdgeOptions={defaultEdgeOptions}
+      nodeTypes={nodeTypes}
     >
       <Panel position="top-right" className=" flex gap-2 ">
         <button className="btn btn-blue" onClick={onSave}>
           save
         </button>
-        {/* <button onClick={onRestore}>restore</button> */}
+        <button className="btn btn-blue" onClick={onLoad}>
+          load
+        </button>
+        <button className="btn btn-yellow" onClick={onReset}>
+          reset
+        </button>
         <button className="btn btn-blue" onClick={onAdd}>
           add node
         </button>
+
+        <Dropdown
+          classNames="btn btn-blue"
+          label="Pick one"
+          options={[
+            {
+              label: "Option 1",
+              onClick: () => console.log("on option 1 choice"),
+            },
+            {
+              label: "Option 2",
+              onClick: () => console.log("on option 2 choice"),
+            },
+          ]}
+        />
       </Panel>
       <Controls />
       <MiniMap />

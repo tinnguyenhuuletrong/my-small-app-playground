@@ -12,3 +12,10 @@
 .btn-blue:hover {
   @apply bg-blue-700;
 }
+
+.btn-yellow {
+  @apply bg-yellow-500 text-white;
+}
+.btn-yellow:hover {
+  @apply bg-yellow-700;
+}

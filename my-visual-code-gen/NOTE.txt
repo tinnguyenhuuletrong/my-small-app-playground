@@ -1,0 +1,25 @@
+Gen code somehow
+
+StateBegin
+  update 
+    if(onCLick)
+      -> moveToStateSetVar
+
+StateSetVar
+    update 
+      setValue
+        -> moveToStateHold
+
+StateHold
+    update 
+      if(!onHold)
+        -> moveToStateStart
+
+      subState.update
+        
+  subStateWaitForHold
+    update 
+      time += dt
+      if (time > x)
+        moveToSubState
+    
