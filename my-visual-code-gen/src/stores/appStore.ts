@@ -12,6 +12,7 @@ import {
   applyNodeChanges,
   applyEdgeChanges,
   NodeAddChange,
+  NodeSelectionChange,
 } from "reactflow";
 import { DefaultNodes, DefaultEdges } from "./defaultData";
 
@@ -20,6 +21,7 @@ const SAVE_KEY = "my-rfs";
 export type RFState = {
   nodes: Node[];
   edges: Edge[];
+  activeNode?: string;
   onNodesChange: OnNodesChange;
   onEdgesChange: OnEdgesChange;
   onConnect: OnConnect;
@@ -89,8 +91,24 @@ const useAppStore = create<RFState>(
     },
 
     onNodesChange: (changes: NodeChange[]) => {
+      // update active node
+      const selectedEvent = changes.find(
+        (itm) => itm.type === "select" && itm.selected === true
+      );
+      const unSelectedEvent = changes.find(
+        (itm) => itm.type === "select" && itm.selected === false
+      );
+      let activeNode: string | undefined = get().activeNode;
+      if (selectedEvent) {
+        const tmp = selectedEvent as NodeSelectionChange;
+        activeNode = tmp.id;
+      } else if (unSelectedEvent) {
+        activeNode = undefined;
+      }
+
       set({
         nodes: applyNodeChanges(changes, get().nodes),
+        activeNode,
       });
     },
     onEdgesChange: (changes: EdgeChange[]) => {

@@ -17,6 +17,7 @@ import useAppStore, { RFState } from "../stores/appStore";
 import NoteCustomNode from "./NoteCustomNode";
 import Dropdown from "./input/Dropdown";
 import { getNodeId } from "../utils";
+import SlideOverNodeDetail from "./SlideOverNodeDetail";
 
 const fitViewOptions: FitViewOptions = {
   padding: 0.2,
@@ -126,6 +127,10 @@ export function FlowEditor() {
           ]}
         />
       </Panel>
+      <Panel position="top-left" className="m-0">
+        <SlideOverNodeDetail />
+      </Panel>
+
       <Controls />
       <MiniMap />
       <Background variant={BackgroundVariant.Dots} gap={12} size={1} />

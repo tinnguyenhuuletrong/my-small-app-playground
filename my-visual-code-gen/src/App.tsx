@@ -6,7 +6,7 @@ function App() {
       <main className="w-screen h-screen">
         <div className=" bg-purple-50 flex flex-col items-center ">
           <div className="prose">
-            <h1>This is title</h1>
+            <h1>My React Flow Playground</h1>
           </div>
         </div>
         <FlowEditor />
