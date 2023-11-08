@@ -15,7 +15,8 @@ import NoteCustomNode from "./NoteCustomNode";
 import PanelNodeDetail from "./PanelNodeDetail";
 import PanelTopMenu from "./PanelTopMenu";
 import { useState } from "react";
-import ContextMenu from "./input/ContextMenu";
+import PanelContextMenu from "./PanelContextMenu";
+import ColorCustomNode from "./ColorCustomNode";
 
 const fitViewOptions: FitViewOptions = {
   padding: 0.2,
@@ -27,6 +28,7 @@ const defaultEdgeOptions: DefaultEdgeOptions = {
 
 const nodeTypes: NodeTypes = {
   noteNode: NoteCustomNode,
+  colorNode: ColorCustomNode,
 };
 
 const selector = (state: RFState) => ({
@@ -40,7 +42,10 @@ const selector = (state: RFState) => ({
 export function FlowEditor() {
   const { nodes, edges, onNodesChange, onEdgesChange, onConnect } =
     useAppStore(selector);
-  const [contextMenu, setContextMenu] = useState<any>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
 
   return (
     <ReactFlow
@@ -83,15 +88,11 @@ export function FlowEditor() {
             style={{ top: contextMenu.top, left: contextMenu.left }}
             className="absolute z-10"
           >
-            <ContextMenu
-              options={[
-                {
-                  label: "option 1",
-                },
-                {
-                  label: "option 2",
-                },
-              ]}
+            <PanelContextMenu
+              {...contextMenu}
+              onClose={() => {
+                setContextMenu(null);
+              }}
             />
           </div>
         </>

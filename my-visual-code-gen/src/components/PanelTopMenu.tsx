@@ -1,8 +1,6 @@
 import { useCallback } from "react";
-import { getNodeId } from "../utils";
 import Dropdown from "./input/Dropdown";
 import useAppStore, { RFState } from "../stores/appStore";
-import { useReactFlow, Node } from "reactflow";
 
 const selector = (state: RFState) => ({
   nodes: state.nodes,
@@ -17,8 +15,7 @@ const selector = (state: RFState) => ({
 });
 
 export default function PanelTopMenu() {
-  const flowIns = useReactFlow();
-  const { addNode, save, load, reset } = useAppStore(selector);
+  const { save, load, reset } = useAppStore(selector);
 
   const onSave = useCallback(() => {
     save();
@@ -32,22 +29,6 @@ export default function PanelTopMenu() {
     reset();
   }, [reset]);
 
-  const onAdd = useCallback(() => {
-    if (!flowIns) return;
-
-    const newNode: Node = {
-      id: getNodeId(),
-      type: "noteNode",
-      data: { value: "say something..." },
-      position: {
-        x: flowIns.getViewport().x,
-        y: flowIns.getViewport().y,
-      },
-    };
-
-    addNode(newNode);
-  }, [addNode, flowIns]);
-
   return (
     <>
       <button className="btn btn-blue" onClick={onSave}>
@@ -58,9 +39,6 @@ export default function PanelTopMenu() {
       </button>
       <button className="btn btn-yellow" onClick={onReset}>
         reset
-      </button>
-      <button className="btn btn-blue" onClick={onAdd}>
-        add node
       </button>
 
       <Dropdown
