@@ -1,4 +1,3 @@
-import { useState, useCallback } from "react";
 import ReactFlow, {
   FitViewOptions,
   DefaultEdgeOptions,
@@ -6,18 +5,17 @@ import ReactFlow, {
   Controls,
   MiniMap,
   BackgroundVariant,
-  ReactFlowInstance,
   Panel,
   NodeTypes,
-  Node,
 } from "reactflow";
 import "reactflow/dist/style.css";
 
 import useAppStore, { RFState } from "../stores/appStore";
 import NoteCustomNode from "./NoteCustomNode";
-import Dropdown from "./input/Dropdown";
-import { getNodeId } from "../utils";
-import SlideOverNodeDetail from "./SlideOverNodeDetail";
+import PanelNodeDetail from "./PanelNodeDetail";
+import PanelTopMenu from "./PanelTopMenu";
+import { useState } from "react";
+import ContextMenu from "./input/ContextMenu";
 
 const fitViewOptions: FitViewOptions = {
   padding: 0.2,
@@ -37,53 +35,12 @@ const selector = (state: RFState) => ({
   onNodesChange: state.onNodesChange,
   onEdgesChange: state.onEdgesChange,
   onConnect: state.onConnect,
-  addNode: state.addNode,
-  save: state.save,
-  load: state.load,
-  reset: state.reset,
 });
 
 export function FlowEditor() {
-  const {
-    nodes,
-    edges,
-    onNodesChange,
-    onEdgesChange,
-    onConnect,
-    addNode,
-    save,
-    load,
-    reset,
-  } = useAppStore(selector);
-  const [flowIns, setFlowIns] = useState<ReactFlowInstance | null>(null);
-
-  const onSave = useCallback(() => {
-    save();
-  }, [save]);
-
-  const onLoad = useCallback(() => {
-    load();
-  }, [load]);
-
-  const onReset = useCallback(() => {
-    reset();
-  }, [reset]);
-
-  const onAdd = useCallback(() => {
-    if (!flowIns) return;
-
-    const newNode: Node = {
-      id: getNodeId(),
-      type: "noteNode",
-      data: { value: "say something..." },
-      position: {
-        x: flowIns.getViewport().x,
-        y: flowIns.getViewport().y,
-      },
-    };
-
-    addNode(newNode);
-  }, [addNode, flowIns]);
+  const { nodes, edges, onNodesChange, onEdgesChange, onConnect } =
+    useAppStore(selector);
+  const [contextMenu, setContextMenu] = useState<any>(null);
 
   return (
     <ReactFlow
@@ -92,48 +49,53 @@ export function FlowEditor() {
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onConnect={onConnect}
-      onInit={setFlowIns}
+      onPaneClick={() => {
+        setContextMenu(null);
+      }}
+      onPaneContextMenu={(e) => {
+        e.preventDefault();
+
+        const contextMenuParams = {
+          top: e.clientY - 50,
+          left: e.clientX,
+        };
+        setContextMenu(contextMenuParams);
+      }}
       fitView
       fitViewOptions={fitViewOptions}
       defaultEdgeOptions={defaultEdgeOptions}
       nodeTypes={nodeTypes}
     >
       <Panel position="top-right" className=" flex gap-2 ">
-        <button className="btn btn-blue" onClick={onSave}>
-          save
-        </button>
-        <button className="btn btn-blue" onClick={onLoad}>
-          load
-        </button>
-        <button className="btn btn-yellow" onClick={onReset}>
-          reset
-        </button>
-        <button className="btn btn-blue" onClick={onAdd}>
-          add node
-        </button>
-
-        <Dropdown
-          classNames="btn btn-blue"
-          label="Pick one"
-          options={[
-            {
-              label: "Option 1",
-              onClick: () => console.log("on option 1 choice"),
-            },
-            {
-              label: "Option 2",
-              onClick: () => console.log("on option 2 choice"),
-            },
-          ]}
-        />
+        <PanelTopMenu />
       </Panel>
       <Panel position="top-left" className="m-0">
-        <SlideOverNodeDetail />
+        <PanelNodeDetail />
       </Panel>
 
       <Controls />
       <MiniMap />
       <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
+
+      {contextMenu && (
+        <>
+          <div
+            style={{ top: contextMenu.top, left: contextMenu.left }}
+            className="absolute z-10"
+          >
+            <ContextMenu
+              options={[
+                {
+                  label: "option 1",
+                },
+                {
+                  label: "option 2",
+                },
+              ]}
+            />
+          </div>
+        </>
+      )}
     </ReactFlow>
   );
 }

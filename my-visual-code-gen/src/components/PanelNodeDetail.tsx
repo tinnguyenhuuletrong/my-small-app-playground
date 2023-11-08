@@ -1,6 +1,6 @@
 import useAppStore from "../stores/appStore";
 
-export default function SlideOverNodeDetail() {
+export default function PanelNodeDetail() {
   const { activeNode } = useAppStore((state) => ({
     activeNode: state.nodes.find((itm) => itm.id === state.activeNode),
   }));
