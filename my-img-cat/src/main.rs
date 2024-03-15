@@ -4,7 +4,6 @@ use termion::{color, style};
 
 #[derive(Parser, Debug)]
 struct Args {
-    #[clap(short = 'i', long = "img")]
     img_path: String,
 
     #[clap(short = 'v', default_value_t=false)]
