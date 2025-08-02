@@ -3,6 +3,8 @@ package wal
 import (
 	"fmt"
 	"os"
+
+	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
 )
 
 type WAL struct {
@@ -17,12 +19,12 @@ func NewWAL(path string) (*WAL, error) {
 	return &WAL{file: f}, nil
 }
 
-func (w *WAL) LogDraw(requestID uint64, itemID string, success bool) error {
+func (w *WAL) LogDraw(item types.WalLogItem) error {
 	var line string
-	if success {
-		line = fmt.Sprintf("DRAW %d %s\n", requestID, itemID)
+	if item.Success {
+		line = fmt.Sprintf("DRAW %d %s\n", item.RequestID, item.ItemID)
 	} else {
-		line = fmt.Sprintf("DRAW %d FAILED\n", requestID)
+		line = fmt.Sprintf("DRAW %d FAILED\n", item.RequestID)
 	}
 	_, err := w.file.WriteString(line)
 	return err

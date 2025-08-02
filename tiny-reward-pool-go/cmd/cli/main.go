@@ -5,6 +5,8 @@ import (
 	"os"
 
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/rewardpool"
+	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
+	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/utils"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal"
 )
 
@@ -21,13 +23,19 @@ func main() {
 	}
 	defer w.Close()
 
-	// Example: Draw first item
-	if len(pool.Catalog) > 0 && pool.Catalog[0].Quantity > 0 {
-		pool.Catalog[0].Quantity--
-		w.LogDraw(1, pool.Catalog[0].ItemID, true)
-		fmt.Printf("Drew %s, remaining: %d\n", pool.Catalog[0].ItemID, pool.Catalog[0].Quantity)
+	ctx := &types.Context{
+		WAL:   w,
+		Utils: &utils.UtilsImpl{},
+	}
+
+	result, err := pool.Draw(ctx)
+	if err != nil {
+		fmt.Println("Draw error:", err)
+		os.Exit(1)
+	}
+	if result != nil {
+		fmt.Printf("Drew %s, remaining: %d\n", result.ItemID, result.Quantity)
 	} else {
-		w.LogDraw(1, "", false)
 		fmt.Println("Draw failed: pool empty")
 	}
 }

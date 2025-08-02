@@ -3,21 +3,37 @@ package rewardpool
 import (
 	"encoding/json"
 	"os"
+
+	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
 )
 
-// Item represents a reward item in the pool
-type Item struct {
-	ItemID      string  `json:"item_id"`
-	Quantity    int     `json:"quantity"`
-	Probability float64 `json:"probability"`
-}
-
-// Pool holds all items
 type Pool struct {
-	Catalog []Item
+	Catalog []types.PoolReward
 }
 
-// LoadPool loads pool from config.json
+func (p *Pool) Load(config types.ConfigPool) error {
+	p.Catalog = config.Catalog
+	return nil
+}
+
+func (p *Pool) Draw(ctx *types.Context) (*types.PoolReward, error) {
+	idx, err := ctx.Utils.RandomItem(p.Catalog)
+	if err != nil {
+		return nil, err
+	}
+	if p.Catalog[idx].Quantity <= 0 {
+		return nil, nil
+	}
+	p.Catalog[idx].Quantity--
+	logItem := types.WalLogItem{
+		RequestID: 0, // should be generated
+		ItemID:    p.Catalog[idx].ItemID,
+		Success:   true,
+	}
+	ctx.WAL.LogDraw(logItem)
+	return &p.Catalog[idx], nil
+}
+
 func LoadPool(configPath string) (*Pool, error) {
 	file, err := os.Open(configPath)
 	if err != nil {
@@ -25,9 +41,7 @@ func LoadPool(configPath string) (*Pool, error) {
 	}
 	defer file.Close()
 
-	var data struct {
-		Catalog []Item `json:"catalog"`
-	}
+	var data types.ConfigPool
 	if err := json.NewDecoder(file).Decode(&data); err != nil {
 		return nil, err
 	}
