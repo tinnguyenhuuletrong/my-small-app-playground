@@ -23,11 +23,15 @@ type WalLogItem struct {
 type RewardPool interface {
 	Draw(ctx *Context) (*PoolReward, error)
 	Load(config ConfigPool) error
+	SaveSnapshot(path string) error
+	LoadSnapshot(path string) error
 }
 
 // WAL interface
 type WAL interface {
 	LogDraw(item WalLogItem) error
+	Flush() error
+	SetSnapshotPath(path string)
 	Close() error
 }
 

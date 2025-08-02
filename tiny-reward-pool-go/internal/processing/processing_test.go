@@ -22,6 +22,8 @@ func (m *mockPool) Draw(ctx *types.Context) (*types.PoolReward, error) {
 	return nil, nil
 }
 func (m *mockPool) Load(cfg types.ConfigPool) error { return nil }
+func (m *mockPool) LoadSnapshot(path string) error  { return nil }
+func (m *mockPool) SaveSnapshot(path string) error  { return nil }
 
 type mockWAL struct {
 	logged []types.WalLogItem
@@ -31,7 +33,9 @@ func (m *mockWAL) LogDraw(item types.WalLogItem) error {
 	m.logged = append(m.logged, item)
 	return nil
 }
-func (m *mockWAL) Close() error { return nil }
+func (m *mockWAL) Close() error                { return nil }
+func (m *mockWAL) Flush() error                { return nil }
+func (m *mockWAL) SetSnapshotPath(path string) {}
 
 func TestProcessor_Draw(t *testing.T) {
 	pool := &mockPool{item: types.PoolReward{ItemID: "gold", Quantity: 1, Probability: 1.0}}

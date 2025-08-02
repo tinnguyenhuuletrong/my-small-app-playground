@@ -31,3 +31,5 @@ type mockWAL struct{}
 
 func (m *mockWAL) LogDraw(item types.WalLogItem) error { return nil }
 func (m *mockWAL) Close() error                        { return nil }
+func (m *mockWAL) Flush() error                        { return nil }
+func (m *mockWAL) SetSnapshotPath(path string)         {}

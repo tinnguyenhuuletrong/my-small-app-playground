@@ -6,6 +6,12 @@
 
 - Before do a task iter. Read Task target, previous iter.Problem -> think and note iter.Plan before do
 - After finish a task iter. Please update the iter.Result
+- Some cmds 
+```sh
+
+# Test all file
+go test ./internal/...
+```
 
 Example task 
 ```md

@@ -16,12 +16,23 @@ import (
 )
 
 func main() {
-	pool, err := rewardpool.LoadPool("./samples/config.json")
-	if err != nil {
-		fmt.Println("Error loading pool:", err)
-		os.Exit(1)
+	snapshotPath := "./tmp/pool_snapshot.json"
+	walPath := "./tmp/wal.log"
+
+	pool := &rewardpool.Pool{}
+	if err := pool.LoadSnapshot(snapshotPath); err != nil {
+		fmt.Println("Error loading snapshot, fallback to config:", err)
+		loaded, err := rewardpool.LoadPool("./samples/config.json")
+		if err != nil {
+			fmt.Println("Error loading config:", err)
+			os.Exit(1)
+		}
+		pool = loaded
+	} else {
+		fmt.Println("Loaded pool from snapshot.")
 	}
-	w, err := wal.NewWAL("./tmp/wal.log")
+
+	w, err := wal.NewWAL(walPath)
 	if err != nil {
 		fmt.Println("Error opening WAL:", err)
 		os.Exit(1)
@@ -39,8 +50,12 @@ func main() {
 
 	fmt.Println("Press Ctrl+C or send SIGTERM to exit.")
 
+	drawLock := make(chan struct{}, 1) // Used to lock draw requests
+	drawLock <- struct{}{}             // Initially unlocked
+
 	go func() {
 		for {
+			<-drawLock // Wait for unlock
 			reqID := proc.Draw(func(resp processing.DrawResponse) {
 				if resp.Item != nil {
 					fmt.Printf("[Request %d] Drew %s, remaining: %d\n", resp.RequestID, resp.Item.ItemID, resp.Item.Quantity)
@@ -50,11 +65,40 @@ func main() {
 			})
 			fmt.Printf("Draw requested, requestID: %d\n", reqID)
 			time.Sleep(2 * time.Second)
+			drawLock <- struct{}{} // Unlock for next draw
+		}
+	}()
+
+	go func() {
+		for {
+			time.Sleep(5 * time.Second)
+			// Lock draw requests
+			<-drawLock
+			w.Flush()
+			fmt.Println("Saving pool snapshot...")
+			if err := pool.SaveSnapshot(snapshotPath); err != nil {
+				fmt.Println("Error saving snapshot:", err)
+			} else {
+				fmt.Println("Snapshot saved.")
+			}
+			fmt.Println("Rotating WAL file...")
+			w.Close()
+			os.Remove(walPath)
+			w, err = wal.NewWAL(walPath)
+			if err != nil {
+				fmt.Println("Error creating new WAL:", err)
+				os.Exit(1)
+			}
+			ctx.WAL = w
+			fmt.Println("WAL rotated.")
+			drawLock <- struct{}{} // Unlock draw requests
 		}
 	}()
 
 	<-sigChan
 	fmt.Println("Shutting down gracefully...")
 	proc.Stop()
+	w.Flush()
+	w.Close()
 	fmt.Println("Shutdown complete.")
 }

@@ -45,3 +45,31 @@ var requestId := processing.Draw(onResult)
     - Make request ID generation concurrency-safe using atomic
     - Remove direct dependency injection of modules; use Context only
   - Update CLI and tests to use the new Context-based API
+
+## Iter 04
+### Target
+  - Refactor wal, pool module prepare for next task
+  - Pool module 
+      Support save, load snapshot. which is current state of reward pool
+  - Now it only have a Add Draw log. It should have 
+    - Add Snapshot path
+    - Flush. Makesure all log save and flush into disk - supporting batch write or transaction like later 
+### Plan
+  - Refactor wal and pool modules to prepare for snapshot and flush features
+  - Pool module:
+    - Add support for saving the current state as a snapshot (e.g., to a JSON file)
+    - Add support for loading pool state from a snapshot file
+  - WAL module:
+    - Add support for specifying a snapshot path
+    - Implement a Flush() method to ensure all logs are written and flushed to disk
+    - Prepare for future batch write or transaction-like operations
+  - Update interfaces in types.go to reflect new methods
+  - Add unit tests for snapshot save/load and WAL flush
+
+### Result
+  - Processing model implemented: single-threaded goroutine, buffered channel, atomic request IDs, WAL-first logging, callback pattern for draw results
+  - All modules refactored to use centralized Context for dependency injection
+  - Pool module supports save/load snapshot (JSON), tested and integrated in CLI
+  - WAL module supports Flush and snapshot path, tested and integrated in CLI
+  - CLI demonstrates loading snapshot on start, periodic snapshot save, WAL rotation, and graceful shutdown
+  - All interfaces updated in types.go; all unit tests passing

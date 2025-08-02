@@ -1,3 +1,4 @@
+// ...existing code...
 package wal
 
 import (
@@ -7,8 +8,18 @@ import (
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
 )
 
+var snapshotPath string
+
 type WAL struct {
 	file *os.File
+}
+
+func (w *WAL) SetSnapshotPath(path string) {
+	snapshotPath = path
+}
+
+func (w *WAL) Flush() error {
+	return w.file.Sync()
 }
 
 func NewWAL(path string) (*WAL, error) {

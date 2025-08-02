@@ -16,6 +16,31 @@ func (p *Pool) Load(config types.ConfigPool) error {
 	return nil
 }
 
+func (p *Pool) SaveSnapshot(path string) error {
+	file, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	enc := json.NewEncoder(file)
+	return enc.Encode(p.Catalog)
+}
+
+func (p *Pool) LoadSnapshot(path string) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	var catalog []types.PoolReward
+	dec := json.NewDecoder(file)
+	if err := dec.Decode(&catalog); err != nil {
+		return err
+	}
+	p.Catalog = catalog
+	return nil
+}
+
 func (p *Pool) Draw(ctx *types.Context) (*types.PoolReward, error) {
 	idx, err := ctx.Utils.RandomItem(p.Catalog)
 	if err != nil {
