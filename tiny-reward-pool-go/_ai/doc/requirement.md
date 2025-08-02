@@ -32,6 +32,7 @@ The initial prototype will be developed in **Golang**.
     2.  The format should be `DRAW <request_id> <item_id>` for a successful draw or `DRAW <request_id> FAILED` for a failure (e.g., pool empty).
     3.  The response to the client should only be sent **after** the WAL entry is successfully flushed to disk.
 * **Internal Request ID**: The service generates a unique, incrementing `uint64` `request_id` for each operation.
+* **Internal State and Snapshot**: Memory pool should init from config by default. After that maitain the state in memory structure. It support snapshot and restore for persistent storage later - see 3.2 below
 
 ### 3. WAL Recovery & Cleanup Procedures
 

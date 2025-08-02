@@ -25,12 +25,6 @@ func (p *Pool) Draw(ctx *types.Context) (*types.PoolReward, error) {
 		return nil, nil
 	}
 	p.Catalog[idx].Quantity--
-	logItem := types.WalLogItem{
-		RequestID: 0, // should be generated
-		ItemID:    p.Catalog[idx].ItemID,
-		Success:   true,
-	}
-	ctx.WAL.LogDraw(logItem)
 	return &p.Catalog[idx], nil
 }
 
