@@ -11,3 +11,6 @@ build:
 
 test:
 	go test ./internal/...
+
+bench:
+	go test -bench=. ./cmd/bench/
