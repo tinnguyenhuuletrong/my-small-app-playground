@@ -17,65 +17,6 @@ import (
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/utils"
 )
 
-type MmapWAL struct {
-	file   *os.File
-	mmap   mmap.MMap
-	offset int64
-	mu     sync.Mutex
-	size   int64
-}
-
-func NewMmapWAL(path string) (*MmapWAL, error) {
-	// Allocate 64MB for WAL file (adjust as needed)
-	const walSize = 64 * 1024 * 1024
-	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0644)
-	if err != nil {
-		return nil, err
-	}
-	if err := f.Truncate(walSize); err != nil {
-		f.Close()
-		return nil, err
-	}
-	mm, err := mmap.Map(f, mmap.RDWR, 0)
-	if err != nil {
-		f.Close()
-		return nil, err
-	}
-	return &MmapWAL{file: f, mmap: mm, size: walSize}, nil
-}
-
-func (w *MmapWAL) LogDraw(item types.WalLogItem) error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	var line string
-	if item.Success {
-		line = fmt.Sprintf("DRAW %d %s\n", item.RequestID, item.ItemID)
-	} else {
-		line = fmt.Sprintf("DRAW %d FAILED\n", item.RequestID)
-	}
-	lineBytes := []byte(line)
-	if w.offset+int64(len(lineBytes)) > w.size {
-		return fmt.Errorf("WAL mmap full")
-	}
-	copy(w.mmap[w.offset:], lineBytes)
-	w.offset += int64(len(lineBytes))
-	return nil
-}
-
-func (w *MmapWAL) Flush() error {
-	return w.mmap.Flush()
-}
-
-func (w *MmapWAL) Close() error {
-	if err := w.mmap.Flush(); err != nil {
-		return err
-	}
-	if err := w.mmap.Unmap(); err != nil {
-		return err
-	}
-	return w.file.Close()
-}
-
 func BenchmarkPoolDrawWithMmapWAL(b *testing.B) {
 	tmpDir := filepath.Join("_tmp")
 	walPath := filepath.Join(tmpDir, "wal_mmap.log")
@@ -128,6 +69,61 @@ func BenchmarkPoolDrawWithMmapWAL(b *testing.B) {
 	b.ReportMetric(float64(b.N)/elapsed.Seconds(), "draws/sec")
 	b.ReportMetric(float64(memStatsEnd.TotalAlloc-memStatsStart.TotalAlloc)/float64(b.N), "bytes/draw")
 	b.ReportMetric(float64(memStatsEnd.NumGC-memStatsStart.NumGC), "gc_count")
-	// b.ReportMetric(walSize/float64(b.N), "wal_bytes/draw")
 	// b.ReportMetric(walSize, "wal_file_size")
+}
+
+type MmapWAL struct {
+	file   *os.File
+	mmap   mmap.MMap
+	offset int64
+	size   int64
+}
+
+func NewMmapWAL(path string) (*MmapWAL, error) {
+	// Allocate 64MB for WAL file (adjust as needed)
+	const walSize = 64 * 1024 * 1024
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0644)
+	if err != nil {
+		return nil, err
+	}
+	if err := f.Truncate(walSize); err != nil {
+		f.Close()
+		return nil, err
+	}
+	mm, err := mmap.Map(f, mmap.RDWR, 0)
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+	return &MmapWAL{file: f, mmap: mm, size: walSize}, nil
+}
+
+func (w *MmapWAL) LogDraw(item types.WalLogItem) error {
+	var line string
+	if item.Success {
+		line = fmt.Sprintf("DRAW %d %s\n", item.RequestID, item.ItemID)
+	} else {
+		line = fmt.Sprintf("DRAW %d FAILED\n", item.RequestID)
+	}
+	lineBytes := []byte(line)
+	if w.offset+int64(len(lineBytes)) > w.size {
+		return fmt.Errorf("WAL mmap full")
+	}
+	copy(w.mmap[w.offset:], lineBytes)
+	w.offset += int64(len(lineBytes))
+	return nil
+}
+
+func (w *MmapWAL) Flush() error {
+	return w.mmap.Flush()
+}
+
+func (w *MmapWAL) Close() error {
+	if err := w.mmap.Flush(); err != nil {
+		return err
+	}
+	if err := w.mmap.Unmap(); err != nil {
+		return err
+	}
+	return w.file.Close()
 }
