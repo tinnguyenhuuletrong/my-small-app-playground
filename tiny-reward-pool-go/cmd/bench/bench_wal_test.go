@@ -15,7 +15,7 @@ import (
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal"
 )
 
-func BenchmarkPoolDrawWithRealWAL(b *testing.B) {
+func BenchmarkPoolDrawWithBasicWAL(b *testing.B) {
 	tmpDir := filepath.Join("_tmp")
 	_ = os.MkdirAll(tmpDir, 0755)
 	walPath := filepath.Join(tmpDir, "wal.log")

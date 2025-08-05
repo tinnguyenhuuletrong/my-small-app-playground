@@ -1,10 +1,11 @@
-package wal
+package wal_test
 
 import (
 	"os"
 	"testing"
 
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
+	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal"
 )
 
 func TestParseWAL(t *testing.T) {
@@ -16,7 +17,7 @@ func TestParseWAL(t *testing.T) {
 	_, _ = f.WriteString("DRAW 1 gold\nDRAW 2 silver\nDRAW 3 FAILED\nDRAW 4 bronze\n")
 	f.Close()
 
-	items, err := ParseWAL(path)
+	items, err := wal.ParseWAL(path)
 	if err != nil {
 		t.Fatalf("ParseWAL failed: %v", err)
 	}
@@ -34,7 +35,7 @@ func TestParseWAL(t *testing.T) {
 
 func TestLogDraw(t *testing.T) {
 	path := "test_wal.log"
-	w, err := NewWAL(path)
+	w, err := wal.NewWAL(path)
 	if err != nil {
 		t.Fatalf("Failed to create WAL: %v", err)
 	}
@@ -43,5 +44,18 @@ func TestLogDraw(t *testing.T) {
 	item := types.WalLogItem{RequestID: 1, ItemID: "gold", Success: true}
 	if err := w.LogDraw(item); err != nil {
 		t.Fatalf("LogDraw failed: %v", err)
+	}
+}
+
+func TestWALFlush(t *testing.T) {
+	path := "test_wal_flush.log"
+	w, err := wal.NewWAL(path)
+	if err != nil {
+		t.Fatalf("Failed to create WAL: %v", err)
+	}
+	defer os.Remove(path)
+	defer w.Close()
+	if err := w.Flush(); err != nil {
+		t.Fatalf("Flush failed: %v", err)
 	}
 }

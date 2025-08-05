@@ -35,7 +35,7 @@ BenchmarkPoolDrawWithMmapWAL-8    2,298,444   485.4 ns/op   54.64 bytes/draw   2
 
 ### Real WAL (file logging)
 ```
-BenchmarkPoolDrawWithRealWAL-8    198,525   5,101 ns/op   59.99 bytes/draw   196,038 draws/sec   3.00 gc_count   16.44 wal_bytes/draw   3,263,820 wal_file_size
+BenchmarkPoolDrawWithBasicWAL-8    198,525   5,101 ns/op   59.99 bytes/draw   196,038 draws/sec   3.00 gc_count   16.44 wal_bytes/draw   3,263,820 wal_file_size
 ```
 
 ## Summary & Analysis
@@ -54,15 +54,14 @@ BenchmarkPoolDrawWithRealWAL-8    198,525   5,101 ns/op   59.99 bytes/draw   196
 |--------------|-------------|---------|------------|----------|----------------|---------------|
 | No WAL       | 5,699,800   | 175.4   | 16.00      | 29.00    | N/A            | N/A           |
 | Mmap WAL     | 2,060,333   | 485.4   | 54.64      | 33.00    | N/A            | N/A           |
-| Real WAL     |   196,038   | 5101    | 59.99      | 3.00     | 16.44          | 3,263,820     |
+| Basic WAL    |   196,038   | 5101    | 59.99      | 3.00     | 16.44          | 3,263,820     |
 
 - Mmap WAL is a strong middle ground, offering much better performance than file WAL, with durability and auditability, but not matching pure in-memory speed.
 
 ### Plan for Improvement
-- **Batch WAL Writes:** Buffer multiple draw operations in memory and write them to disk in batches to reduce the number of file operations. This is especially relevant for file WAL, but can also be explored for mmap WAL to reduce flush frequency.
 - **Optimize WAL Format:** Reduce the size of each WAL entry and use more efficient serialization to minimize bytes/draw and WAL file size.
 - **Snapshot & WAL Rotation:** Periodically save snapshots and rotate WAL files to keep file sizes manageable and improve recovery speed. Consider automating rotation based on size or time.
-- **Benchmark Variants:** Add more benchmark scenarios to measure the impact of batching, WAL rotation, and different mmap flush strategies.
+- **Benchmark Variants:** Add more benchmark scenarios to measure the impact of WAL rotation, and different mmap flush strategies.
 - **Tune mmap WAL:** Experiment with different mmap region sizes, flush intervals, and OS sync strategies to further improve mmap WAL performance.
 - **Advanced Recovery:** Explore parallel WAL replay and incremental snapshotting for faster recovery and lower downtime.
 
