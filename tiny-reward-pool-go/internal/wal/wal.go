@@ -1,21 +1,15 @@
-// ...existing code...
 package wal
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
 )
 
-var snapshotPath string
-
 type WAL struct {
 	file *os.File
-}
-
-func (w *WAL) SetSnapshotPath(path string) {
-	snapshotPath = path
 }
 
 func (w *WAL) Flush() error {
@@ -43,4 +37,29 @@ func (w *WAL) LogDraw(item types.WalLogItem) error {
 
 func (w *WAL) Close() error {
 	return w.file.Close()
+}
+
+// ParseWAL reads the WAL log file and returns a slice of WalLogItem
+func ParseWAL(path string) ([]types.WalLogItem, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	var items []types.WalLogItem
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Text()
+		var reqID uint64
+		var itemID string
+		n, _ := fmt.Sscanf(line, "DRAW %d %s", &reqID, &itemID)
+		if n == 2 {
+			if itemID == "FAILED" {
+				items = append(items, types.WalLogItem{RequestID: reqID, ItemID: "", Success: false})
+			} else {
+				items = append(items, types.WalLogItem{RequestID: reqID, ItemID: itemID, Success: true})
+			}
+		}
+	}
+	return items, scanner.Err()
 }

@@ -7,10 +7,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
-
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/processing"
-	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/rewardpool"
+	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/recovery"
+	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/utils"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal"
 )
@@ -19,17 +18,10 @@ func main() {
 	snapshotPath := "./tmp/pool_snapshot.json"
 	walPath := "./tmp/wal.log"
 
-	pool := &rewardpool.Pool{}
-	if err := pool.LoadSnapshot(snapshotPath); err != nil {
-		fmt.Println("Error loading snapshot, fallback to config:", err)
-		loaded, err := rewardpool.LoadPool("./samples/config.json")
-		if err != nil {
-			fmt.Println("Error loading config:", err)
-			os.Exit(1)
-		}
-		pool = loaded
-	} else {
-		fmt.Println("Loaded pool from snapshot.")
+	pool, err := recovery.RecoverPool(snapshotPath, walPath, "./samples/config.json")
+	if err != nil {
+		fmt.Println("Recovery failed:", err)
+		os.Exit(1)
 	}
 
 	w, err := wal.NewWAL(walPath)
@@ -47,6 +39,8 @@ func main() {
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	fmt.Println("[Pool state] ", pool)
 
 	fmt.Println("Press Ctrl+C or send SIGTERM to exit.")
 
@@ -75,6 +69,7 @@ func main() {
 			// Lock draw requests
 			<-drawLock
 			w.Flush()
+			fmt.Println("[Pool state] ", pool)
 			fmt.Println("Saving pool snapshot...")
 			if err := pool.SaveSnapshot(snapshotPath); err != nil {
 				fmt.Println("Error saving snapshot:", err)

@@ -24,18 +24,13 @@ make test    # Run all unit tests
 ```
 
 ### CLI Demo
+- Recovery from WAL log
 - Draws rewards in a loop
 - Saves pool snapshot and rotates WAL every 5 seconds
 - Graceful shutdown via SIGTERM/Ctrl+C
 
 ## Project Structure
 - `cmd/cli/main.go` - CLI demo
-- `internal/rewardpool/` - Reward pool logic
-- `internal/wal/` - WAL logging
-- `internal/processing/` - Processing model
-- `internal/types/` - Centralized types and interfaces
-- `internal/utils/` - Random selection logic
-- `internal/config/` - Config loader
 
 ## Documentation
 - See `_ai/doc/agent_note.md` for quick project summary and onboarding

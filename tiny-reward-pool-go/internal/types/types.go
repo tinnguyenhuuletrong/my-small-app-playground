@@ -31,7 +31,6 @@ type RewardPool interface {
 type WAL interface {
 	LogDraw(item WalLogItem) error
 	Flush() error
-	SetSnapshotPath(path string)
 	Close() error
 }
 

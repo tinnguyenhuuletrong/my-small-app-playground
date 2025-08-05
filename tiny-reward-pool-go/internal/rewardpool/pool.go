@@ -66,3 +66,13 @@ func LoadPool(configPath string) (*Pool, error) {
 	}
 	return &Pool{Catalog: data.Catalog}, nil
 }
+
+// applyDrawLog decrements the quantity for a given itemID if available (internal use only)
+func (p *Pool) ApplyDrawLog(itemID string) {
+	for i := range p.Catalog {
+		if p.Catalog[i].ItemID == itemID && p.Catalog[i].Quantity > 0 {
+			p.Catalog[i].Quantity--
+			break
+		}
+	}
+}

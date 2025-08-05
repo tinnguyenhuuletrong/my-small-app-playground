@@ -73,3 +73,54 @@ var requestId := processing.Draw(onResult)
   - WAL module supports Flush and snapshot path, tested and integrated in CLI
   - CLI demonstrates loading snapshot on start, periodic snapshot save, WAL rotation, and graceful shutdown
   - All interfaces updated in types.go; all unit tests passing
+
+## Iter 05
+### Target
+  - now we have snapshot and wal file. Time to implement the recovery from start.
+  - scenario service is running. write snapshot X, some wal log before next snapshot X + 1
+    - service crash or server has a problem
+    - service restart. 
+      - It should check the latest snapshot X + read and apply pending change from wal log
+      - Write new snapshot and rotate the wal log file
+### Plan
+1. Snapshot & WAL File Discovery
+   - On service startup, locate the latest snapshot file (e.g., `pool_snapshot.json`).
+   - Locate the WAL log file (e.g., `wal.log`).
+
+2. Load Snapshot
+   - Load the pool state from the snapshot file into memory.
+
+3. Replay WAL Log
+   - Read WAL log entries written after the snapshot.
+   - For each entry:
+     - If `DRAW <request_id> <item_id>`, decrement the corresponding item's quantity in the pool.
+     - If `DRAW <request_id> FAILED`, skip (no change to pool).
+
+4. Write New Snapshot
+   - After replaying WAL, write a new snapshot reflecting the recovered state.
+
+5. Rotate WAL Log
+   - Clear or archive the WAL log file after snapshot is written, so future WAL entries start fresh.
+
+6. Integration
+   - Update CLI startup logic to perform recovery automatically.
+   - Add unit/integration tests to simulate crash and verify correct recovery.
+
+7. Edge Cases
+   - Handle missing or corrupted snapshot/WAL files gracefully (fallback to config or empty pool).
+   - Ensure atomicity: snapshot and WAL rotation should be robust against partial failures.
+
+### Result
+
+- WAL recovery logic implemented in new `internal/recovery` module
+- CLI refactored to use recovery module for pool initialization and WAL replay on startup
+- WAL log is replayed after snapshot, new snapshot is written, WAL log is rotated
+- Unit test for recovery module covers crash/restart scenarios and passes
+- All modules and interfaces updated, all tests passing
+Recovery logic for pool state implemented and moved to new module `internal/recovery`.
+- `RecoverPool` function loads snapshot, replays WAL log, writes new snapshot, and rotates WAL file.
+- CLI refactored to use recovery module for startup recovery.
+- Unit test added for recovery logic (`recovery_test.go`), simulating crash/restart scenarios and verifying correct state restoration.
+- All previous features (snapshot, WAL, atomic request IDs, callback pattern, single-threaded processing) remain integrated and tested.
+- Edge cases handled: missing/corrupt snapshot or WAL files fall back to config or empty pool.
+- All tests passing.
