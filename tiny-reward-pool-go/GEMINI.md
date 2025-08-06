@@ -1,0 +1,75 @@
+# Gemini Code Assistant Context
+
+This document provides context for the Gemini Code Assistant to understand and effectively assist with the development of this project.
+
+## Project Overview
+
+This project is a high-performance, in-memory Reward Pool Service written in Go. It's designed for rapid and reliable reward distribution, featuring a robust logging and snapshotting mechanism to ensure data integrity and fast recovery.
+
+The core of the service is a single-threaded processing model that ensures low-latency and high-throughput for reward distribution. A Write-Ahead Log (WAL) is implemented for deterministic recovery, and the system supports snapshots for quick state restoration.
+
+The project is structured into several internal modules, including `config`, `processing`, `recovery`, `rewardpool`, `types`, `utils`, and `wal`. A command-line interface (CLI) demo is provided in the `cmd/cli` directory, which showcases the usage of all modules, including graceful shutdown, periodic snapshotting, and WAL rotation.
+
+The project uses Go modules for dependency management, with `github.com/edsrzf/mmap-go` being a key dependency for memory-mapped file I/O in the WAL implementation.
+
+## Building and Running
+
+The project uses a `Makefile` for common development tasks.
+
+*   **Build the CLI binary:**
+    ```sh
+    make build
+    ```
+
+*   **Run the CLI demo:**
+    ```sh
+    make run
+    ```
+
+*   **Run all unit tests:**
+    ```sh
+    make test
+    ```
+
+## Development Conventions
+
+*   **Modular Design:** The project follows a modular design, with clear separation of concerns between different packages.
+*   **Interfaces:** Interfaces are used to define contracts between different modules, promoting testability and loose coupling.
+*   **Testing:** Unit tests are provided for all key modules, and the project includes benchmark tests for performance-critical components like the WAL.
+*   **Dependency Injection:** The `Context` struct is used for dependency injection, making it easy to provide mock implementations for testing.
+*   **Concurrency:** A single-threaded processing model with a dedicated goroutine and buffered channels is used to handle state changes, ensuring thread safety and predictable execution.
+*   **Error Handling:** Errors are handled explicitly, and the CLI demo includes error handling for recovery and WAL operations.
+*   **Logging:** The CLI demo includes basic logging to the console to provide visibility into the system's state and operations.
+
+## AI Agent Working Procedure
+
+The AI agent's workflow is designed to be systematic, iterative, and well-documented, ensuring context is maintained and tasks are completed efficiently.
+
+**1. Onboarding & Context Gathering:**
+
+*   **Primary Directive:** Before starting any task, the agent must first read the entire `_ai/doc/` directory to understand the project's goals, architecture, and established workflow.
+*   **Key Documents:**
+    *   `_ai/doc/requirement.md`: The Product Requirements Document (PRD) that defines the project's features and constraints. All work must align with this document.
+    *   `_ai/doc/working_flow.md`: The high-level guide on how to approach tasks.
+    *   `_ai/doc/agent_note.md`: A quick summary and handover note from the previous agent to get up to speed on the latest project state.
+    *   `_ai/doc/bench.md`: A summary of performance benchmarks, which informs decisions related to performance-critical code.
+
+**2. Task Execution (Iterative Development):**
+
+The development process is broken down into tasks, which are documented in files like `_ai/task_01.md`, `_ai/task_02.md`, etc.
+
+*   **Task Structure:** Each task is composed of one or more iterations (`Iter`).
+*   **The Iteration Cycle (Plan -> Do -> Document):**
+    1.  **Review Previous Work:** Read the current task file to understand the overall `Target` and the `Problem` identified in the previous iteration.
+    2.  **Formulate a `Plan`:** Based on the target and previous problems, create a clear and concise plan for the current iteration. This plan should be documented under the `Plan` section for the current `Iter`.
+    3.  **Implement the Plan:** Execute the plan by writing or modifying the Go code and corresponding tests. The agent must adhere to the project's existing structure and conventions.
+    4.  **Verify with Tests:** After implementation, run the project's tests to ensure all changes are correct and have not introduced regressions. The primary command for this is `go test ./internal/...`. For benchmarks, use `make bench`.
+    5.  **Document the `Result`:** Once the implementation is complete and verified, document the outcome under the `Result` section of the current iteration.
+    6.  **Identify `Problem`s:** If any limitations, bugs, or areas for improvement are found, document them in the `Problem` section. This sets the stage for the next iteration.
+
+**3. Core Principles:**
+
+*   **Iterative Refinement:** The agent works in small, incremental steps. Problems found in one iteration are addressed in the plan for the next.
+*   **Test-Driven:** Every functional component or module must be accompanied by unit tests.
+*   **Documentation is a Priority:** The agent is responsible for keeping the `_ai` directory updated. This includes filling out the `Plan`, `Result`, and `Problem` sections for each iteration and updating benchmark documents when relevant.
+*   **Performance-Aware:** When working on performance-sensitive areas, the agent should create and run benchmarks, analyze the results, and use the data to guide implementation choices.
