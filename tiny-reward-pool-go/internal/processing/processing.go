@@ -94,7 +94,20 @@ func (p *Processor) run() {
 				req.Callback(resp)
 			}
 		case <-p.stopChan:
-			// Final flush/commit on shutdown if any staged draws remain
+			// Graceful shutdown: stop receiving requests, cancel pending, then flush
+			// Drain reqChan and cancel all pending requests
+			if p.ctx.Logger != nil {
+				p.ctx.Logger.Debug("[Processor] Shutdown")
+			}
+			close(p.reqChan)
+			for req := range p.reqChan {
+				// Respond to each pending request with cancellation
+				resp := DrawResponse{RequestID: req.RequestID, Item: "", Err: fmt.Errorf("request cancelled: processor shutting down")}
+				if req.Callback != nil {
+					req.Callback(resp)
+				}
+			}
+			// Final flush/commit on shutdown
 			p.Flush()
 			return
 		}

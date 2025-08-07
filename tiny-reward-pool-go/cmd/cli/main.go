@@ -58,12 +58,12 @@ func main() {
 				if resp.Err == nil {
 					fmt.Printf("[Request %d] Drew %s Remaining %d\n", resp.RequestID, resp.Item, pool.GetItemRemaining(resp.Item))
 				} else {
-					fmt.Printf("[Request %d] Draw failed: pool empty\n", resp.RequestID)
+					fmt.Printf("[Request %d] Draw failed: %s \n", resp.RequestID, resp.Err)
 				}
 			})
 			fmt.Printf("Draw requested, requestID: %d\n", reqID)
-			time.Sleep(1 * time.Second)
 			drawLock <- struct{}{} // Unlock for next draw
+			time.Sleep(1 * time.Second)
 		}
 	}()
 
@@ -95,6 +95,9 @@ func main() {
 
 	<-sigChan
 	fmt.Println("Shutting down gracefully...")
+	// Lock draw requests
+	<-drawLock
+
 	proc.Stop()
 	w.Close()
 
