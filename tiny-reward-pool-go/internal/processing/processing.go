@@ -15,7 +15,7 @@ type DrawRequest struct {
 
 type DrawResponse struct {
 	RequestID uint64
-	Item      *types.PoolReward
+	Item      string
 	Err       error
 }
 
@@ -31,7 +31,12 @@ type Processor struct {
 }
 
 type ProcessorOptional struct {
+	// Number of draw operations after which the processor should flush its state.
 	FlushAfterNDraw int
+
+	// Size of the buffer for incoming requests.
+	RequestBufferSize int
+
 	// Add more optional fields here in future
 }
 
@@ -41,10 +46,15 @@ func NewProcessor(ctx *types.Context, pool types.RewardPool, opt *ProcessorOptio
 	if opt != nil && opt.FlushAfterNDraw > 0 {
 		n = opt.FlushAfterNDraw
 	}
+	bufSize := 100
+	if opt != nil && opt.RequestBufferSize > 0 {
+		bufSize = opt.RequestBufferSize
+	}
+
 	p := &Processor{
 		ctx:             ctx,
 		pool:            pool,
-		reqChan:         make(chan DrawRequest, 100),
+		reqChan:         make(chan DrawRequest, bufSize),
 		stopChan:        make(chan struct{}),
 		flushAfterNDraw: n,
 	}
@@ -60,8 +70,8 @@ func (p *Processor) run() {
 		case req := <-p.reqChan:
 			item, err := p.pool.SelectItem(p.ctx)
 			var walErr error
-			if item != nil && err == nil {
-				walErr = p.ctx.WAL.LogDraw(types.WalLogItem{RequestID: req.RequestID, ItemID: item.ItemID, Success: true})
+			if item != "" && err == nil {
+				walErr = p.ctx.WAL.LogDraw(types.WalLogItem{RequestID: req.RequestID, ItemID: item, Success: true})
 			} else {
 				walErr = p.ctx.WAL.LogDraw(types.WalLogItem{RequestID: req.RequestID, ItemID: "", Success: false})
 			}
@@ -73,7 +83,7 @@ func (p *Processor) run() {
 			}
 
 			// Construct the response
-			resp := DrawResponse{RequestID: req.RequestID, Item: nil, Err: err}
+			resp := DrawResponse{RequestID: req.RequestID, Item: "", Err: err}
 			if walErr == nil {
 				resp.Item = item
 			} else {

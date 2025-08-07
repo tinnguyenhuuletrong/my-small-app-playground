@@ -23,7 +23,7 @@ type WalLogItem struct {
 
 // RewardPool interface
 type RewardPool interface {
-	SelectItem(ctx *Context) (*PoolReward, error)
+	SelectItem(ctx *Context) (string, error)
 	CommitDraw()
 	RevertDraw()
 	Load(config ConfigPool) error

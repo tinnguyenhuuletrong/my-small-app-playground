@@ -24,7 +24,7 @@ func TestTransactionalDraw(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SelectItem failed: %v", err)
 	}
-	if item == nil || item.ItemID != "gold" {
+	if item == "" || item != "gold" {
 		t.Fatalf("Expected gold, got %v", item)
 	}
 	// CommitDraw should decrement quantity

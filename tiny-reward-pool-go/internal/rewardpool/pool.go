@@ -13,6 +13,8 @@ type Pool struct {
 	pendingDraws map[string]int
 }
 
+var _ types.RewardPool = (*Pool)(nil)
+
 type poolSnapshot struct {
 	Catalog []types.PoolReward `json:"catalog"`
 }
@@ -77,7 +79,7 @@ func (p *Pool) GetItemRemaining(ItemID string) int {
 }
 
 // SelectItem stages an item for draw if available
-func (p *Pool) SelectItem(ctx *types.Context) (*types.PoolReward, error) {
+func (p *Pool) SelectItem(ctx *types.Context) (string, error) {
 	// Build a temporary catalog of available items
 	var available []types.PoolReward
 	for _, item := range p.catalog {
@@ -87,17 +89,17 @@ func (p *Pool) SelectItem(ctx *types.Context) (*types.PoolReward, error) {
 		}
 	}
 	if len(available) == 0 {
-		return nil, nil
+		return "", nil
 	}
 	idx, err := ctx.Utils.RandomItem(available)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	selected := available[idx]
 	p.pendingDraws[selected.ItemID]++
 	// Return a copy
-	copyItem := selected
-	return &copyItem, nil
+
+	return selected.ItemID, nil
 }
 
 // CommitDraw finalizes a staged draw

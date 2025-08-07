@@ -55,8 +55,8 @@ func main() {
 		for {
 			<-drawLock // Wait for unlock
 			reqID := proc.Draw(func(resp processing.DrawResponse) {
-				if resp.Item != nil {
-					fmt.Printf("[Request %d] Drew %s Remaining %d\n", resp.RequestID, resp.Item.ItemID, pool.GetItemRemaining(resp.Item.ItemID))
+				if resp.Err == nil {
+					fmt.Printf("[Request %d] Drew %s Remaining %d\n", resp.RequestID, resp.Item, pool.GetItemRemaining(resp.Item))
 				} else {
 					fmt.Printf("[Request %d] Draw failed: pool empty\n", resp.RequestID)
 				}
@@ -97,5 +97,7 @@ func main() {
 	fmt.Println("Shutting down gracefully...")
 	proc.Stop()
 	w.Close()
+
+	fmt.Println("[Pool state] ", pool)
 	fmt.Println("Shutdown complete.")
 }

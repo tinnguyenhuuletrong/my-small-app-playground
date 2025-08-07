@@ -13,6 +13,8 @@ type WAL struct {
 	buffer []types.WalLogItem
 }
 
+var _ types.WAL = (*WAL)(nil)
+
 func (w *WAL) Flush() error {
 	if len(w.buffer) == 0 {
 		return nil

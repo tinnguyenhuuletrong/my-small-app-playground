@@ -27,7 +27,7 @@ func TestProcessor_TransactionalDraw(t *testing.T) {
 	if gotResp.RequestID != reqID {
 		t.Fatalf("Expected requestID %d, got %d", reqID, gotResp.RequestID)
 	}
-	if gotResp.Item == nil || gotResp.Item.ItemID != "gold" {
+	if gotResp.Item == "" || gotResp.Item != "gold" {
 		t.Fatalf("Expected gold, got %v", gotResp.Item)
 	}
 	if len(wal.logged) == 0 || !wal.logged[0].Success {
@@ -47,7 +47,7 @@ func TestProcessor_TransactionalDraw(t *testing.T) {
 		close(done2)
 	})
 	<-done2
-	if gotResp2.Item != nil {
+	if gotResp2.Item != "" {
 		t.Fatalf("Expected nil item on WAL failure, got %v", gotResp2.Item)
 	}
 }
@@ -172,13 +172,13 @@ type mockPool struct {
 	pending   []string // track staged itemIDs for batch commit/revert
 }
 
-func (m *mockPool) SelectItem(ctx *types.Context) (*types.PoolReward, error) {
+func (m *mockPool) SelectItem(ctx *types.Context) (string, error) {
 	if m.item.Quantity-len(m.pending) > 0 {
 		copyItem := m.item
 		m.pending = append(m.pending, copyItem.ItemID)
-		return &copyItem, nil
+		return copyItem.ItemID, nil
 	}
-	return nil, nil
+	return "", nil
 }
 func (m *mockPool) CommitDraw() {
 	// Commit all pending draws
