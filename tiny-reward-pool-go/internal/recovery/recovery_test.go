@@ -15,7 +15,7 @@ func TestRecoverPool_Basic(t *testing.T) {
 	// Setup: create a snapshot and WAL log
 	pool := &rewardpool.Pool{}
 	if err := pool.LoadSnapshot(snapshot); err != nil {
-		loaded, err := rewardpool.LoadPool(config)
+		loaded, err := rewardpool.CreatePoolFromConfigPath(config)
 		if err != nil {
 			t.Fatalf("failed to load config: %v", err)
 		}

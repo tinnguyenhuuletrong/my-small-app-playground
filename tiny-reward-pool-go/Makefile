@@ -12,5 +12,8 @@ build:
 test:
 	go test ./internal/...
 
+clean:
+	go clean -testcache
+
 bench:
 	go test -bench=. ./cmd/bench/

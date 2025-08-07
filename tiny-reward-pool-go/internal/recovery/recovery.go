@@ -13,7 +13,7 @@ func RecoverPool(snapshotPath, walPath, configPath string) (*rewardpool.Pool, er
 	pool := &rewardpool.Pool{}
 	// 1. Load snapshot or fallback to config
 	if err := pool.LoadSnapshot(snapshotPath); err != nil {
-		loaded, err := rewardpool.LoadPool(configPath)
+		loaded, err := rewardpool.CreatePoolFromConfigPath(configPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load config: %w", err)
 		}
