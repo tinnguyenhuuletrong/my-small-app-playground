@@ -60,3 +60,15 @@ type Context struct {
 type Utils interface {
 	RandomItem(items []PoolReward) (int, error)
 }
+
+// Error
+type errString string
+
+func (e errString) Error() string {
+	return string(e)
+}
+
+const ErrWalBufferNotEmpty = errString("Wal buffer is not empty. Should Flush before rotate")
+const ErrEmptyRewardPool = errString("reward pool is empty")
+const ErrPendingDrawsNotEmpty = errString("PendingDraws remaining. Please CommitDraw or RevertDraw before")
+const ErrShutingDown = errString("request cancelled: processor shutting down")

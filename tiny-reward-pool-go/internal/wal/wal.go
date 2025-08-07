@@ -58,7 +58,7 @@ func (w *WAL) Close() error {
 
 func (w *WAL) Rotate(path string) error {
 	if len(w.buffer) > 0 {
-		return fmt.Errorf("Wal buffer is not empty. Should Flush before rotate")
+		return types.ErrWalBufferNotEmpty
 	}
 
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)

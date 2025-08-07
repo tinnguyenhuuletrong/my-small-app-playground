@@ -102,7 +102,7 @@ func (p *Processor) run() {
 			close(p.reqChan)
 			for req := range p.reqChan {
 				// Respond to each pending request with cancellation
-				resp := DrawResponse{RequestID: req.RequestID, Item: "", Err: fmt.Errorf("request cancelled: processor shutting down")}
+				resp := DrawResponse{RequestID: req.RequestID, Item: "", Err: types.ErrShutingDown}
 				if req.Callback != nil {
 					req.Callback(resp)
 				}

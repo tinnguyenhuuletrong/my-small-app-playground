@@ -2,7 +2,6 @@ package rewardpool
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
@@ -34,7 +33,7 @@ func (p *Pool) Load(config types.ConfigPool) error {
 
 func (p *Pool) SaveSnapshot(path string) error {
 	if len(p.pendingDraws) > 0 {
-		return fmt.Errorf("PendingDraws remaining. Please CommitDraw or RevertDraw before")
+		return types.ErrPendingDrawsNotEmpty
 	}
 
 	file, err := os.Create(path)
@@ -89,7 +88,7 @@ func (p *Pool) SelectItem(ctx *types.Context) (string, error) {
 		}
 	}
 	if len(available) == 0 {
-		return "", fmt.Errorf("reward pool is empty")
+		return "", types.ErrEmptyRewardPool
 	}
 	idx, err := ctx.Utils.RandomItem(available)
 	if err != nil {
