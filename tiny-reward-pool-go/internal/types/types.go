@@ -22,17 +22,21 @@ type WalLogItem struct {
 // RewardPool interface
 type RewardPool interface {
 	SelectItem(ctx *Context) (*PoolReward, error)
-	CommitDraw(itemID string)
-	RevertDraw(itemID string)
+	CommitDraw()
+	RevertDraw()
 	Load(config ConfigPool) error
 	SaveSnapshot(path string) error
 	LoadSnapshot(path string) error
 }
 
 // WAL interface
+// WAL interface with buffered logging
 type WAL interface {
+	// LogDraw appends a log entry to the buffer (does not write to disk immediately)
 	LogDraw(item WalLogItem) error
+	// Flush writes all buffered log entries to disk
 	Flush() error
+	// Close closes the WAL file
 	Close() error
 }
 

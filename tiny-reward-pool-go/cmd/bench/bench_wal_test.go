@@ -38,7 +38,9 @@ func BenchmarkPoolDrawWithBasicWAL(b *testing.B) {
 		Utils: &utils.UtilsImpl{},
 	}
 
-	proc := processing.NewProcessor(ctx, pool)
+	proc := processing.NewProcessor(ctx, pool, &processing.ProcessorOptional{
+		FlushAfterNDraw: 10_000,
+	})
 
 	var wg sync.WaitGroup
 

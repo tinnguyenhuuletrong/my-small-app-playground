@@ -35,7 +35,7 @@ func main() {
 		WAL:   w,
 		Utils: &utils.UtilsImpl{},
 	}
-	proc := processing.NewProcessor(ctx, pool)
+	proc := processing.NewProcessor(ctx, pool, nil)
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)

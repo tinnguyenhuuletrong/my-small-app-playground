@@ -19,20 +19,33 @@ type DrawResponse struct {
 }
 
 type Processor struct {
-	ctx       *types.Context
-	pool      types.RewardPool
-	requestID uint64
-	reqChan   chan DrawRequest
-	stopChan  chan struct{}
-	wg        sync.WaitGroup
+	ctx             *types.Context
+	pool            types.RewardPool
+	requestID       uint64
+	reqChan         chan DrawRequest
+	stopChan        chan struct{}
+	wg              sync.WaitGroup
+	flushAfterNDraw int
+	stagedDraws     int
 }
 
-func NewProcessor(ctx *types.Context, pool types.RewardPool) *Processor {
+type ProcessorOptional struct {
+	FlushAfterNDraw int
+	// Add more optional fields here in future
+}
+
+// NewProcessor creates a new Processor. Optional parameters are set via ProcessorOptional.
+func NewProcessor(ctx *types.Context, pool types.RewardPool, opt *ProcessorOptional) *Processor {
+	n := 10
+	if opt != nil && opt.FlushAfterNDraw > 0 {
+		n = opt.FlushAfterNDraw
+	}
 	p := &Processor{
-		ctx:      ctx,
-		pool:     pool,
-		reqChan:  make(chan DrawRequest, 100),
-		stopChan: make(chan struct{}),
+		ctx:             ctx,
+		pool:            pool,
+		reqChan:         make(chan DrawRequest, 100),
+		stopChan:        make(chan struct{}),
+		flushAfterNDraw: n,
 	}
 	p.wg.Add(1)
 	go p.run()
@@ -49,14 +62,21 @@ func (p *Processor) run() {
 			success := false
 			if item != nil && err == nil {
 				walErr = p.ctx.WAL.LogDraw(types.WalLogItem{RequestID: req.RequestID, ItemID: item.ItemID, Success: true})
-				if walErr == nil {
-					p.pool.CommitDraw(item.ItemID)
-					success = true
-				} else {
-					p.pool.RevertDraw(item.ItemID)
-				}
+				p.stagedDraws++
 			} else {
 				walErr = p.ctx.WAL.LogDraw(types.WalLogItem{RequestID: req.RequestID, ItemID: "", Success: false})
+				p.stagedDraws++
+			}
+			// Batch flush/commit after N draws
+			if p.stagedDraws >= p.flushAfterNDraw {
+				flushErr := p.ctx.WAL.Flush()
+				if walErr == nil && flushErr == nil {
+					p.pool.CommitDraw()
+					success = true
+				} else {
+					p.pool.RevertDraw()
+				}
+				p.stagedDraws = 0
 			}
 			resp := DrawResponse{RequestID: req.RequestID, Item: nil, Err: err}
 			if success {
@@ -68,6 +88,16 @@ func (p *Processor) run() {
 				req.Callback(resp)
 			}
 		case <-p.stopChan:
+			// Final flush/commit on shutdown if any staged draws remain
+			if p.stagedDraws > 0 {
+				flushErr := p.ctx.WAL.Flush()
+				if flushErr == nil {
+					p.pool.CommitDraw()
+				} else {
+					p.pool.RevertDraw()
+				}
+				p.stagedDraws = 0
+			}
 			return
 		}
 	}

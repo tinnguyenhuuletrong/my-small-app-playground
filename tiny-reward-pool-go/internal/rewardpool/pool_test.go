@@ -29,14 +29,14 @@ func TestTransactionalDraw(t *testing.T) {
 		t.Fatalf("Expected gold, got %v", item)
 	}
 	// CommitDraw should decrement quantity
-	pool.CommitDraw("gold")
+	pool.CommitDraw()
 	if pool.Catalog[0].Quantity != 0 {
 		t.Fatalf("Expected quantity 0 after commit, got %d", pool.Catalog[0].Quantity)
 	}
 	// RevertDraw should not change quantity, but should clear pendingDraws
 	pool.Catalog[0].Quantity = 1
 	pool.SelectItem(ctx)
-	pool.RevertDraw("gold")
+	pool.RevertDraw()
 	if pool.PendingDraws["gold"] != 0 {
 		t.Fatalf("Expected PendingDraws 0 after revert, got %d", pool.PendingDraws["gold"])
 	}

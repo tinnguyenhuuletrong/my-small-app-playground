@@ -14,28 +14,29 @@ type mockPool struct {
 	staged    int
 	committed int
 	reverted  int
+	pending   []string // track staged itemIDs for batch commit/revert
 }
 
 func (m *mockPool) SelectItem(ctx *types.Context) (*types.PoolReward, error) {
-	if m.item.Quantity-m.staged > 0 {
-		m.staged++
+	if m.item.Quantity-len(m.pending) > 0 {
 		copyItem := m.item
+		m.pending = append(m.pending, copyItem.ItemID)
 		return &copyItem, nil
 	}
 	return nil, nil
 }
-func (m *mockPool) CommitDraw(itemID string) {
-	if m.staged > 0 && m.item.ItemID == itemID {
+func (m *mockPool) CommitDraw() {
+	// Commit all pending draws
+	for range m.pending {
 		m.committed++
 		m.item.Quantity--
-		m.staged--
 	}
+	m.pending = nil
 }
-func (m *mockPool) RevertDraw(itemID string) {
-	if m.staged > 0 && m.item.ItemID == itemID {
-		m.reverted++
-		m.staged--
-	}
+func (m *mockPool) RevertDraw() {
+	// Revert all pending draws
+	m.reverted += len(m.pending)
+	m.pending = nil
 }
 func (m *mockPool) Load(cfg types.ConfigPool) error { return nil }
 func (m *mockPool) LoadSnapshot(path string) error  { return nil }
@@ -62,7 +63,7 @@ func TestProcessor_TransactionalDraw(t *testing.T) {
 	wal := &mockWAL{}
 	utils := &utils.UtilsImpl{}
 	ctx := &types.Context{WAL: wal, Utils: utils}
-	proc := processing.NewProcessor(ctx, pool)
+	proc := processing.NewProcessor(ctx, pool, &processing.ProcessorOptional{FlushAfterNDraw: 1})
 
 	// Success path
 	done := make(chan struct{})

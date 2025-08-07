@@ -24,7 +24,7 @@ func BenchmarkPoolDrawNoWal(b *testing.B) {
 		Utils: &utils.UtilsImpl{},
 	}
 
-	proc := processing.NewProcessor(ctx, pool)
+	proc := processing.NewProcessor(ctx, pool, nil)
 
 	var wg sync.WaitGroup
 

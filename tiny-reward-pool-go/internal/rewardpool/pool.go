@@ -13,8 +13,7 @@ type Pool struct {
 }
 
 type poolSnapshot struct {
-	Catalog      []types.PoolReward `json:"catalog"`
-	PendingDraws map[string]int     `json:"pending_draws"`
+	Catalog []types.PoolReward `json:"catalog"`
 }
 
 func (p *Pool) Load(config types.ConfigPool) error {
@@ -30,8 +29,7 @@ func (p *Pool) SaveSnapshot(path string) error {
 	}
 	defer file.Close()
 	snap := poolSnapshot{
-		Catalog:      p.Catalog,
-		PendingDraws: p.PendingDraws,
+		Catalog: p.Catalog,
 	}
 	enc := json.NewEncoder(file)
 	return enc.Encode(snap)
@@ -49,7 +47,7 @@ func (p *Pool) LoadSnapshot(path string) error {
 		return err
 	}
 	p.Catalog = snap.Catalog
-	p.PendingDraws = snap.PendingDraws
+	p.PendingDraws = make(map[string]int)
 	return nil
 }
 
@@ -78,23 +76,25 @@ func (p *Pool) SelectItem(ctx *types.Context) (*types.PoolReward, error) {
 }
 
 // CommitDraw finalizes a staged draw
-func (p *Pool) CommitDraw(itemID string) {
-	for i := range p.Catalog {
-		if p.Catalog[i].ItemID == itemID && p.PendingDraws[itemID] > 0 {
-			if p.Catalog[i].Quantity > 0 {
-				p.Catalog[i].Quantity--
+func (p *Pool) CommitDraw() {
+	for itemID, count := range p.PendingDraws {
+		for i := range p.Catalog {
+			if p.Catalog[i].ItemID == itemID {
+				if p.Catalog[i].Quantity >= count {
+					p.Catalog[i].Quantity -= count
+				} else {
+					p.Catalog[i].Quantity = 0
+				}
+				break
 			}
-			p.PendingDraws[itemID]--
-			break
 		}
 	}
+	p.PendingDraws = make(map[string]int)
 }
 
 // RevertDraw cancels a staged draw
-func (p *Pool) RevertDraw(itemID string) {
-	if p.PendingDraws[itemID] > 0 {
-		p.PendingDraws[itemID]--
-	}
+func (p *Pool) RevertDraw() {
+	p.PendingDraws = make(map[string]int)
 }
 
 // applyDrawLog decrements the quantity for a given itemID if available (internal use only)

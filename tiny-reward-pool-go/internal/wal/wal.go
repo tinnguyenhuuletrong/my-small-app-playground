@@ -9,10 +9,30 @@ import (
 )
 
 type WAL struct {
-	file *os.File
+	file   *os.File
+	buffer []types.WalLogItem
 }
 
 func (w *WAL) Flush() error {
+	if len(w.buffer) == 0 {
+		return nil
+	}
+	var allLines []byte
+	for _, item := range w.buffer {
+		var line string
+		if item.Success {
+			line = fmt.Sprintf("DRAW %d %s\n", item.RequestID, item.ItemID)
+		} else {
+			line = fmt.Sprintf("DRAW %d FAILED\n", item.RequestID)
+		}
+		allLines = append(allLines, []byte(line)...)
+	}
+	if len(allLines) > 0 {
+		if _, err := w.file.Write(allLines); err != nil {
+			return err
+		}
+	}
+	w.buffer = w.buffer[:0]
 	return w.file.Sync()
 }
 
@@ -21,18 +41,13 @@ func NewWAL(path string) (*WAL, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &WAL{file: f}, nil
+	// Preallocate buffer for performance (e.g., 4096 entries)
+	return &WAL{file: f, buffer: make([]types.WalLogItem, 0, 4096)}, nil
 }
 
 func (w *WAL) LogDraw(item types.WalLogItem) error {
-	var line string
-	if item.Success {
-		line = fmt.Sprintf("DRAW %d %s\n", item.RequestID, item.ItemID)
-	} else {
-		line = fmt.Sprintf("DRAW %d FAILED\n", item.RequestID)
-	}
-	_, err := w.file.WriteString(line)
-	return err
+	w.buffer = append(w.buffer, item)
+	return nil
 }
 
 func (w *WAL) Close() error {
