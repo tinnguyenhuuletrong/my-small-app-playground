@@ -85,15 +85,7 @@ func (p *Processor) run() {
 			}
 		case <-p.stopChan:
 			// Final flush/commit on shutdown if any staged draws remain
-			if p.stagedDraws > 0 {
-				flushErr := p.ctx.WAL.Flush()
-				if flushErr == nil {
-					p.pool.CommitDraw()
-				} else {
-					p.pool.RevertDraw()
-				}
-				p.stagedDraws = 0
-			}
+			p.Flush()
 			return
 		}
 	}
