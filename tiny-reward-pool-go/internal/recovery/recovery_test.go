@@ -37,14 +37,8 @@ func TestRecoverPool_Basic(t *testing.T) {
 
 	// Check that gold and silver quantities are decremented
 	var gold, silver int
-	for _, item := range recovered.Catalog {
-		if item.ItemID == "gold" {
-			gold = item.Quantity
-		}
-		if item.ItemID == "silver" {
-			silver = item.Quantity
-		}
-	}
+	gold = recovered.GetItemRemaining("gold")
+	silver = recovered.GetItemRemaining("silver")
 	if gold < 0 || silver < 0 {
 		t.Errorf("item quantity should not be negative: gold=%d silver=%d", gold, silver)
 	}

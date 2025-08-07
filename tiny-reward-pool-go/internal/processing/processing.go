@@ -1,6 +1,7 @@
 package processing
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
 
@@ -59,31 +60,26 @@ func (p *Processor) run() {
 		case req := <-p.reqChan:
 			item, err := p.pool.SelectItem(p.ctx)
 			var walErr error
-			success := false
 			if item != nil && err == nil {
 				walErr = p.ctx.WAL.LogDraw(types.WalLogItem{RequestID: req.RequestID, ItemID: item.ItemID, Success: true})
-				p.stagedDraws++
 			} else {
 				walErr = p.ctx.WAL.LogDraw(types.WalLogItem{RequestID: req.RequestID, ItemID: "", Success: false})
-				p.stagedDraws++
 			}
+			p.stagedDraws++
+
 			// Batch flush/commit after N draws
 			if p.stagedDraws >= p.flushAfterNDraw {
-				flushErr := p.ctx.WAL.Flush()
-				if walErr == nil && flushErr == nil {
-					p.pool.CommitDraw()
-					success = true
-				} else {
-					p.pool.RevertDraw()
-				}
-				p.stagedDraws = 0
+				p.Flush()
 			}
+
+			// Construct the response
 			resp := DrawResponse{RequestID: req.RequestID, Item: nil, Err: err}
-			if success {
+			if walErr == nil {
 				resp.Item = item
-			} else if walErr != nil {
+			} else {
 				resp.Err = walErr
 			}
+
 			if req.Callback != nil {
 				req.Callback(resp)
 			}
@@ -101,6 +97,28 @@ func (p *Processor) run() {
 			return
 		}
 	}
+}
+
+func (p *Processor) Flush() error {
+	if p.stagedDraws < 0 {
+		return nil
+	}
+
+	flushErr := p.ctx.WAL.Flush()
+	if flushErr == nil {
+		p.pool.CommitDraw()
+		if p.ctx.Logger != nil {
+			p.ctx.Logger.Debug(fmt.Sprintf("[Processor] WAL Flush and Commit - %d", p.stagedDraws))
+		}
+	} else {
+		p.pool.RevertDraw()
+		if p.ctx.Logger != nil {
+			p.ctx.Logger.Debug(fmt.Sprintf("[Processor] WAL Flush and Revert - %d", p.stagedDraws))
+		}
+
+	}
+	p.stagedDraws = 0
+	return flushErr
 }
 
 func (p *Processor) Draw(callback func(DrawResponse)) uint64 {

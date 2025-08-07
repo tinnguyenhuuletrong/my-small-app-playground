@@ -6,7 +6,7 @@ This document provides context for the Gemini Code Assistant to understand and e
 
 This project is a high-performance, in-memory Reward Pool Service written in Go. It's designed for rapid and reliable reward distribution, featuring a robust logging and snapshotting mechanism to ensure data integrity and fast recovery.
 
-The core of the service is a single-threaded processing model that ensures low-latency and high-throughput for reward distribution. A Write-Ahead Log (WAL) is implemented for deterministic recovery, and the system supports snapshots for quick state restoration.
+The core of the service is a single-threaded, transactional processing model that ensures low-latency and high-throughput for reward distribution. A Write-Ahead Log (WAL) is implemented for deterministic recovery, with support for in-memory buffering and batch flushing to optimize I/O performance. The system supports snapshots for quick state restoration.
 
 The project is structured into several internal modules, including `config`, `processing`, `recovery`, `rewardpool`, `types`, `utils`, and `wal`. A command-line interface (CLI) demo is provided in the `cmd/cli` directory, which showcases the usage of all modules, including graceful shutdown, periodic snapshotting, and WAL rotation.
 
@@ -37,7 +37,10 @@ The project uses a `Makefile` for common development tasks.
 *   **Interfaces:** Interfaces are used to define contracts between different modules, promoting testability and loose coupling.
 *   **Testing:** Unit tests are provided for all key modules, and the project includes benchmark tests for performance-critical components like the WAL.
 *   **Dependency Injection:** The `Context` struct is used for dependency injection, making it easy to provide mock implementations for testing.
-*   **Concurrency:** A single-threaded processing model with a dedicated goroutine and buffered channels is used to handle state changes, ensuring thread safety and predictable execution.
+*   **Concurrency and Transactional Integrity:** A single-threaded processing model with a dedicated goroutine and buffered channels is used to handle state changes. To ensure data integrity and adhere to the WAL-first principle, the system uses a two-phase commit process:
+    1.  **Stage:** An operation is first staged in memory (`SelectItem`).
+    2.  **Log:** The operation is written to the Write-Ahead Log. The WAL uses an in-memory buffer that is flushed to disk in batches.
+    3.  **Commit/Revert:** If the WAL write is successful, the staged operation is committed to the main state (`CommitDraw`). If it fails, the operation is reverted (`RevertDraw`).
 *   **Error Handling:** Errors are handled explicitly, and the CLI demo includes error handling for recovery and WAL operations.
 *   **Logging:** The CLI demo includes basic logging to the console to provide visibility into the system's state and operations.
 

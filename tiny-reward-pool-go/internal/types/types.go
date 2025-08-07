@@ -1,5 +1,7 @@
 package types
 
+import "log/slog"
+
 // ConfigPool represents the configuration for the reward pool
 type ConfigPool struct {
 	Catalog []PoolReward `json:"catalog"`
@@ -49,6 +51,9 @@ type Config interface {
 type Context struct {
 	WAL   WAL
 	Utils Utils
+
+	// Optional. for logger
+	Logger *slog.Logger
 }
 
 // Utils interface for random selection

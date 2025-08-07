@@ -54,6 +54,19 @@ func (w *WAL) Close() error {
 	return w.file.Close()
 }
 
+func (w *WAL) Rotate(path string) error {
+	if len(w.buffer) > 0 {
+		return fmt.Errorf("Wal buffer is not empty. Should Flush before rotate")
+	}
+
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	w.file = f
+	return nil
+}
+
 // ParseWAL reads the WAL log file and returns a slice of WalLogItem
 func ParseWAL(path string) ([]types.WalLogItem, error) {
 	f, err := os.Open(path)

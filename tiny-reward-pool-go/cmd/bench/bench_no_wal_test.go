@@ -13,12 +13,11 @@ import (
 )
 
 func BenchmarkPoolDrawNoWal(b *testing.B) {
-	pool := &rewardpool.Pool{
-		Catalog: []types.PoolReward{
+	pool := rewardpool.NewPool(
+		[]types.PoolReward{
 			{ItemID: "gold", Quantity: 1000000, Probability: 1.0},
 		},
-		PendingDraws: make(map[string]int),
-	}
+	)
 	ctx := &types.Context{
 		WAL:   &mockWAL{},
 		Utils: &utils.UtilsImpl{},

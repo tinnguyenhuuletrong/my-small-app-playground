@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -32,10 +33,13 @@ func main() {
 	defer w.Close()
 
 	ctx := &types.Context{
-		WAL:   w,
-		Utils: &utils.UtilsImpl{},
+		WAL:    w,
+		Utils:  &utils.UtilsImpl{},
+		Logger: slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	}
-	proc := processing.NewProcessor(ctx, pool, nil)
+	proc := processing.NewProcessor(ctx, pool, &processing.ProcessorOptional{
+		FlushAfterNDraw: 5,
+	})
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -52,23 +56,23 @@ func main() {
 			<-drawLock // Wait for unlock
 			reqID := proc.Draw(func(resp processing.DrawResponse) {
 				if resp.Item != nil {
-					fmt.Printf("[Request %d] Drew %s, remaining: %d\n", resp.RequestID, resp.Item.ItemID, resp.Item.Quantity)
+					fmt.Printf("[Request %d] Drew %s Remaining %d\n", resp.RequestID, resp.Item.ItemID, pool.GetItemRemaining(resp.Item.ItemID))
 				} else {
 					fmt.Printf("[Request %d] Draw failed: pool empty\n", resp.RequestID)
 				}
 			})
 			fmt.Printf("Draw requested, requestID: %d\n", reqID)
-			time.Sleep(2 * time.Second)
+			time.Sleep(1 * time.Second)
 			drawLock <- struct{}{} // Unlock for next draw
 		}
 	}()
 
 	go func() {
 		for {
-			time.Sleep(5 * time.Second)
+			time.Sleep(12 * time.Second)
 			// Lock draw requests
 			<-drawLock
-			w.Flush()
+			proc.Flush()
 			fmt.Println("[Pool state] ", pool)
 			fmt.Println("Saving pool snapshot...")
 			if err := pool.SaveSnapshot(snapshotPath); err != nil {
@@ -79,12 +83,11 @@ func main() {
 			fmt.Println("Rotating WAL file...")
 			w.Close()
 			os.Remove(walPath)
-			w, err = wal.NewWAL(walPath)
+			w.Rotate(walPath)
 			if err != nil {
 				fmt.Println("Error creating new WAL:", err)
 				os.Exit(1)
 			}
-			ctx.WAL = w
 			fmt.Println("WAL rotated.")
 			drawLock <- struct{}{} // Unlock draw requests
 		}
@@ -93,7 +96,6 @@ func main() {
 	<-sigChan
 	fmt.Println("Shutting down gracefully...")
 	proc.Stop()
-	w.Flush()
 	w.Close()
 	fmt.Println("Shutdown complete.")
 }
