@@ -89,7 +89,7 @@ func (p *Pool) SelectItem(ctx *types.Context) (string, error) {
 		}
 	}
 	if len(available) == 0 {
-		return "", nil
+		return "", fmt.Errorf("reward pool is empty")
 	}
 	idx, err := ctx.Utils.RandomItem(available)
 	if err != nil {

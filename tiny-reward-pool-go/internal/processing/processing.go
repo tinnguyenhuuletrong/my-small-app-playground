@@ -70,7 +70,7 @@ func (p *Processor) run() {
 		case req := <-p.reqChan:
 			item, err := p.pool.SelectItem(p.ctx)
 			var walErr error
-			if item != "" && err == nil {
+			if err == nil {
 				walErr = p.ctx.WAL.LogDraw(types.WalLogItem{RequestID: req.RequestID, ItemID: item, Success: true})
 			} else {
 				walErr = p.ctx.WAL.LogDraw(types.WalLogItem{RequestID: req.RequestID, ItemID: "", Success: false})
