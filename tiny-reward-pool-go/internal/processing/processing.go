@@ -24,11 +24,12 @@ type Processor struct {
 	ctx             *types.Context
 	pool            types.RewardPool
 	requestID       uint64
-	reqChan         chan DrawRequest
+	reqChan         chan *DrawRequest
 	stopChan        chan struct{}
 	wg              sync.WaitGroup
 	flushAfterNDraw int
 	stagedDraws     int
+	drawRequestPool sync.Pool
 }
 
 type ProcessorOptional struct {
@@ -55,9 +56,16 @@ func NewProcessor(ctx *types.Context, pool types.RewardPool, opt *ProcessorOptio
 	p := &Processor{
 		ctx:             ctx,
 		pool:            pool,
-		reqChan:         make(chan DrawRequest, bufSize),
+		reqChan:         make(chan *DrawRequest, bufSize),
 		stopChan:        make(chan struct{}),
 		flushAfterNDraw: n,
+		drawRequestPool: sync.Pool{
+			New: func() interface{} {
+				return &DrawRequest{
+					ResponseChan: make(chan DrawResponse, 1),
+				}
+			},
+		},
 	}
 	p.wg.Add(1)
 	go p.run()
@@ -93,7 +101,7 @@ func (p *Processor) run() {
 
 			if req.ResponseChan != nil {
 				req.ResponseChan <- resp
-				close(req.ResponseChan)
+				p.drawRequestPool.Put(req)
 			} else if req.Callback != nil {
 				req.Callback(resp)
 			}
@@ -108,7 +116,7 @@ func (p *Processor) run() {
 				resp := DrawResponse{RequestID: req.RequestID, Item: "", Err: types.ErrShutingDown}
 				if req.ResponseChan != nil {
 					req.ResponseChan <- resp
-					close(req.ResponseChan)
+					p.drawRequestPool.Put(req)
 				} else if req.Callback != nil {
 					req.Callback(resp)
 				}
@@ -143,15 +151,15 @@ func (p *Processor) Flush() error {
 }
 
 func (p *Processor) Draw() <-chan DrawResponse {
-	respChan := make(chan DrawResponse, 1)
-	reqID := atomic.AddUint64(&p.requestID, 1)
-	p.reqChan <- DrawRequest{RequestID: reqID, ResponseChan: respChan}
-	return respChan
+	req := p.drawRequestPool.Get().(*DrawRequest)
+	req.RequestID = atomic.AddUint64(&p.requestID, 1)
+	p.reqChan <- req
+	return req.ResponseChan
 }
 
 func (p *Processor) DrawWithCallback(callback func(DrawResponse)) uint64 {
 	reqID := atomic.AddUint64(&p.requestID, 1)
-	p.reqChan <- DrawRequest{RequestID: reqID, Callback: callback}
+	p.reqChan <- &DrawRequest{RequestID: reqID, Callback: callback}
 	return reqID
 }
 

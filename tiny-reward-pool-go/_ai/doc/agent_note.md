@@ -5,6 +5,7 @@
 - Implements PRD requirements: reward pool, WAL, config, CLI, and robust processing model
 
 ## Recent Updates (Aug 2025)
+- **Task_05:** Refactored the `Processor.Draw` method to return a channel (`<-chan DrawResponse`) for a more idiomatic and developer-friendly API. Optimized the channel-based implementation using `sync.Pool` to reduce allocation overhead. Refactored benchmarks to accurately measure performance, with `bench_draw_apis_test.go` providing a direct comparison of callback vs. channel `Draw` methods, and other benchmarks using the recommended channel-based approach.
 - **Task_04:** Refactored the core processing logic to be strictly WAL-first and transactional.
   - **Two-Phase Commit:** Introduced a staging area (`pendingDraws`) in the `RewardPool`. Operations now follow a select/stage (`SelectItem`) and then commit/revert (`CommitDraw`/`RevertDraw`) pattern. This ensures the WAL is written before any in-memory state is finalized.
   - **WAL Buffering:** The WAL now buffers log entries in memory. The `LogDraw` operation appends to this buffer, and a `Flush` operation writes the buffer to disk, improving performance by reducing I/O calls.

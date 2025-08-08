@@ -8,7 +8,6 @@ import (
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/rewardpool"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/utils"
-	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal"
 )
 
 func BenchmarkDrawWithCallback(b *testing.B) {
@@ -18,7 +17,7 @@ func BenchmarkDrawWithCallback(b *testing.B) {
 			{ItemID: "gold", Quantity: b.N, Probability: 1.0},
 		},
 	)
-	w, _ := wal.NewWAL("/tmp/bench_draw_apis_test.go")
+	w := &apiTestmockWAL{}
 	ctx.WAL = w
 
 	opt := &processing.ProcessorOptional{RequestBufferSize: b.N}
@@ -45,23 +44,27 @@ func BenchmarkDrawChannel(b *testing.B) {
 			{ItemID: "gold", Quantity: b.N, Probability: 1.0},
 		},
 	)
-	w, _ := wal.NewWAL("/tmp/bench_draw_apis_test.go")
+	w := &apiTestmockWAL{}
 	ctx.WAL = w
 
 	opt := &processing.ProcessorOptional{RequestBufferSize: b.N}
 	p := processing.NewProcessor(ctx, pool, opt)
 
-	var wg sync.WaitGroup
-	wg.Add(b.N)
-
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		go func() {
-			<-p.Draw()
-			wg.Done()
-		}()
+		<-p.Draw()
 	}
-	wg.Wait()
+
 	p.Stop()
 }
+
+type apiTestmockWAL struct {
+}
+
+func (m *apiTestmockWAL) LogDraw(item types.WalLogItem) error {
+	return nil
+}
+func (m *apiTestmockWAL) Close() error                { return nil }
+func (m *apiTestmockWAL) Flush() error                { return nil }
+func (m *apiTestmockWAL) SetSnapshotPath(path string) {}

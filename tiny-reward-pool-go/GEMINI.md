@@ -37,7 +37,7 @@ The project uses a `Makefile` for common development tasks.
 *   **Interfaces:** Interfaces are used to define contracts between different modules, promoting testability and loose coupling.
 *   **Testing:** Unit tests are provided for all key modules, and the project includes benchmark tests for performance-critical components like the WAL.
 *   **Dependency Injection:** The `Context` struct is used for dependency injection, making it easy to provide mock implementations for testing.
-*   **Concurrency and Transactional Integrity:** A single-threaded processing model with a dedicated goroutine and buffered channels is used to handle state changes. To ensure data integrity and adhere to the WAL-first principle, the system uses a two-phase commit process:
+*   **Concurrency and Transactional Integrity:** A single-threaded processing model with a dedicated goroutine and buffered channels is used to handle state changes. The `Processor.Draw` method now returns a channel (`<-chan DrawResponse`) for a more idiomatic and developer-friendly API. To ensure data integrity and adhere to the WAL-first principle, the system uses a two-phase commit process:
     1.  **Stage:** An operation is first staged in memory (`SelectItem`).
     2.  **Log:** The operation is written to the Write-Ahead Log. The WAL uses an in-memory buffer that is flushed to disk in batches.
     3.  **Commit/Revert:** If the WAL write is successful, the staged operation is committed to the main state (`CommitDraw`). If it fails, the operation is reverted (`RevertDraw`).

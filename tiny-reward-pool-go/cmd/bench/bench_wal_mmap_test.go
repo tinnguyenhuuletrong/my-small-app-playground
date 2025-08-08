@@ -17,7 +17,7 @@ import (
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/utils"
 )
 
-func BenchmarkPoolDrawWithMmapWAL(b *testing.B) {
+func BenchmarkPoolDrawWithMmapWALCallback(b *testing.B) {
 	tmpDir := filepath.Join("_tmp")
 	walPath := filepath.Join(tmpDir, "wal_mmap.log")
 	_ = os.Remove(walPath)
@@ -52,11 +52,9 @@ func BenchmarkPoolDrawWithMmapWAL(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		wg.Add(1)
-		go func() {
-			<-proc.Draw()
-			// Only wait for draw completion, WAL logging is handled inside Processor
+		proc.DrawWithCallback(func(resp processing.DrawResponse) {
 			wg.Done()
-		}()
+		})
 	}
 
 	wg.Wait()

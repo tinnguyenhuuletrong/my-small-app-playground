@@ -15,7 +15,7 @@ import (
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal"
 )
 
-func BenchmarkPoolDrawWithBasicWAL(b *testing.B) {
+func BenchmarkPoolDrawWithBasicWALCallback(b *testing.B) {
 	tmpDir := filepath.Join("_tmp")
 	_ = os.MkdirAll(tmpDir, 0755)
 	walPath := filepath.Join(tmpDir, "wal.log")
@@ -51,10 +51,9 @@ func BenchmarkPoolDrawWithBasicWAL(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		wg.Add(1)
-		go func() {
-			<-proc.Draw()
+		proc.DrawWithCallback(func(resp processing.DrawResponse) {
 			wg.Done()
-		}()
+		})
 	}
 
 	wg.Wait()
