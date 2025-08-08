@@ -81,7 +81,7 @@ func (fts *FenwickTreeSelector) Select(ctx *types.Context) (string, error) {
 }
 
 // Update adjusts the quantity of a specific item in the selector.
-func (fts *FenwickTreeSelector) Update(itemID string, quantity int64) {
+func (fts *FenwickTreeSelector) Update(itemID string, delta int64) {
 	idx, ok := fts.itemIndex[itemID]
 	if !ok {
 		// Item not found in the selector, perhaps a new item or an error.
@@ -89,8 +89,8 @@ func (fts *FenwickTreeSelector) Update(itemID string, quantity int64) {
 		return
 	}
 
-	fts.tree.Add(idx, quantity)
-	fts.totalAvailable += quantity
+	fts.tree.Add(idx, delta)
+	fts.totalAvailable += delta
 }
 
 // TotalAvailable returns the total count of all items currently available for selection.

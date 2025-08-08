@@ -69,7 +69,7 @@ type ItemSelector interface {
 
 	// Update adjusts the quantity of a specific item in the selector.
 	// A positive value increases availability, a negative value decreases it.
-	Update(itemID string, quantity int64)
+	Update(itemID string, delta int64)
 
 	// Reset clears the selector's state and re-initializes it with a new catalog.
 	Reset(catalog []PoolReward)

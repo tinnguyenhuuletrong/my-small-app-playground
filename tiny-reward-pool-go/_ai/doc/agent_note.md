@@ -21,6 +21,7 @@
 - `internal/wal/wal.go`: WAL logging. Now implements in-memory buffering with a `Flush` mechanism.
 - `internal/config/config.go`: Config loading, implements Config interface
 - `internal/utils/utils.go`: Random selection logic, implements Utils interface
+- `internal/selector/`: Contains `ItemSelector` implementations, including `FenwickTreeSelector` and `PrefixSumSelector`.
 - `internal/processing/processing.go`: Single-threaded processing model. Orchestrates the new transactional and batch-processing flow.
 - `internal/recovery/recovery.go`: WAL recovery logic, replays WAL log after snapshot, writes new snapshot, rotates WAL log
 - `cmd/cli/main.go`: CLI demo, shows usage of all modules, supports graceful shutdown, snapshot, WAL rotation, and now uses recovery module for startup
