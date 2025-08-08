@@ -25,32 +25,31 @@ go test -bench=. ./cmd/bench/
 
 Based on the latest benchmark results and analysis, here are key areas for future improvements:
 
-- **Optimize WAL Format and Efficiency:** Continue to reduce the size of each WAL entry and explore more efficient serialization methods to minimize `bytes/draw` and overall WAL file size. This is crucial for both basic and mmap WAL performance.
-- **Refine Mmap WAL Tuning:** Further experiment with different mmap region sizes, flush intervals, and OS sync strategies to maximize the performance of the memory-mapped WAL, aiming to further close the gap with in-memory operations while maintaining durability.
-- **Enhance Snapshotting and WAL Rotation:** Implement robust mechanisms for periodic snapshotting and automated WAL rotation (based on size or time) to keep WAL file sizes manageable and improve recovery speed.
-- **Explore Advanced Recovery Strategies:** Investigate techniques like parallel WAL replay and incremental snapshotting to achieve even faster recovery times and minimize downtime.
-- **Benchmark Channel-based API with WAL:** Introduce specific benchmarks to measure the performance of the channel-based `Draw` API when integrated with both Mmap WAL and Basic WAL, to understand the combined overhead and identify further optimization opportunities for the idiomatic API.
-- **Consider Callback-based WAL Integration (if extreme performance is critical):** While channels are preferred for idiomatic Go, if extreme performance is absolutely critical for specific use cases, explore the integration of callback-based `Draw` methods directly with WAL mechanisms to assess potential performance gains.
+1.  **Implement and Benchmark Channel-based API with WAL:** The current benchmarks for WAL performance use the faster, callback-based API. A key next step is to create benchmarks for the idiomatic, channel-based `Draw` API when integrated with both Mmap and Basic WAL. This will provide a complete picture of the performance trade-offs for the preferred API style.
+2.  **Enhance Snapshotting and WAL Rotation:** Implement robust mechanisms for periodic snapshotting and automated WAL rotation (based on size or time) to keep WAL file sizes manageable and improve recovery speed.
+3.  **Optimize WAL Format and Efficiency:** Continue to reduce the size of each WAL entry and explore more efficient serialization methods to minimize `bytes/draw` and overall WAL file size. This is crucial for both basic and mmap WAL performance.
+4.  **Refine Mmap WAL Tuning:** Further experiment with different mmap region sizes, flush intervals, and OS sync strategies to maximize the performance of the memory-mapped WAL.
+5.  **Introduce Configuration-Driven Strategies:** Allow users to select different underlying strategies via configuration (e.g., `ItemSelector` implementation, WAL type). This would enable tuning the service for specific use cases, balancing performance, memory usage, and durability requirements.
+6.  **Explore Advanced Recovery Strategies:** Investigate techniques like parallel WAL replay and incremental snapshotting to achieve even faster recovery times and minimize downtime.
 
-These improvements aim to further enhance the performance, durability, and recoverability of the Reward Pool Service, balancing speed with idiomatic Go practices and robust data integrity.
 
 # Latest Benchmark Results (08 Aug 2025)
 
-The following results were captured after the completion of `task_05`.
+The following results were captured after the completion of `task_06`.
 
 ```
 goos: darwin
 goarch: amd64
 pkg: github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/cmd/bench
 cpu: Intel(R) Core(TM) i5-1038NG7 CPU @ 2.00GHz
-BenchmarkDrawWithCallback-8                3833493       324.8 ns/op
-BenchmarkDrawChannel-8                     1455230       818.5 ns/op
-BenchmarkPoolDrawNoWalChannel-8            1462812       768.1 ns/op        40.92 bytes/draw   1301855 draws/sec        16.00 gc_count
-BenchmarkPoolDrawNoWalCallback-8           5723901       197.1 ns/op        54.03 bytes/draw   5072724 draws/sec        84.00 gc_count
-BenchmarkPoolDrawWithMmapWALCallback-8     2120552       591.0 ns/op        94.32 bytes/draw   1692132 draws/sec        55.00 gc_count
-BenchmarkPoolDrawWithBasicWALCallback-8     406106      3155 ns/op       187.6 bytes/draw    316920 draws/sec        34.00 gc_count        16.47 wal_bytes/draw   6688895 wal_file_size
+BenchmarkDrawWithCallback-8                4561142       255.4 ns/op
+BenchmarkDrawChannel-8                     1585156       722.8 ns/op
+BenchmarkPoolDrawNoWalChannel-8            1647768       684.5 ns/op        17.43 bytes/draw   1460843 draws/sec         7.000 gc_count
+BenchmarkPoolDrawNoWalCallback-8           6027871       182.8 ns/op        48.25 bytes/draw   5469517 draws/sec        79.00 gc_count
+BenchmarkPoolDrawWithMmapWALCallback-8     2232194       543.1 ns/op        78.86 bytes/draw   1841200 draws/sec        48.00 gc_count
+BenchmarkPoolDrawWithBasicWALCallback-8     375370      3139 ns/op       155.7 bytes/draw    318617 draws/sec        25.00 gc_count        16.46 wal_bytes/draw   6178895 wal_file_size
 PASS
-ok  github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/cmd/bench11.750s
+ok  github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/cmd/bench11.225s
 ```
 
 ### Summary Tables
@@ -58,30 +57,30 @@ ok  github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/c
 **API Style Comparison (Direct `Draw` method)**
 | Benchmark                   | ns/op |
 |-----------------------------|-------|
-| `BenchmarkDrawWithCallback` | 324.8 |
-| `BenchmarkDrawChannel`      | 818.5 |
+| `BenchmarkDrawWithCallback` | 255.4 |
+| `BenchmarkDrawChannel`      | 722.8 |
 
 **Pool Draw Performance (No WAL)**
 | Benchmark                        | ns/op | draws/sec | bytes/draw | gc_count |
 |----------------------------------|-------|-------------|------------|----------|
-| `BenchmarkPoolDrawNoWalCallback` | 197.1 | 5,072,724   | 54.03      | 84.00    |
-| `BenchmarkPoolDrawNoWalChannel`  | 768.1 | 1,301,855   | 40.92      | 16.00    |
+| `BenchmarkPoolDrawNoWalCallback` | 182.8 | 5,469,517   | 48.25      | 79.00    |
+| `BenchmarkPoolDrawNoWalChannel`  | 684.5 | 1,460,843   | 17.43      | 7.000    |
 
 **Pool Draw Performance (With WAL)**
 | Benchmark                           | ns/op | draws/sec | bytes/draw | gc_count | wal_bytes/draw | wal_file_size |
 |-------------------------------------|-------|-----------|------------|----------|----------------|---------------|
-| `BenchmarkPoolDrawWithMmapWALCallback`  | 591.0 | 1,692,132   | 94.32      | 55.00    | -              | -             |
-| `BenchmarkPoolDrawWithBasicWALCallback` | 3155  | 316,920   | 187.6      | 34.00    | 16.47          | 6,688,895     |
+| `BenchmarkPoolDrawWithMmapWALCallback`  | 543.1 | 1,841,200   | 78.86      | 48.00    | -              | -             |
+| `BenchmarkPoolDrawWithBasicWALCallback` | 3139  | 318,617   | 155.7      | 25.00    | 16.46          | 6,178,895     |
 
 
 ## Analysis of Latest Results
 
-- **API Style (Callback vs. Channel):** The direct callback-based `Draw` API (`BenchmarkDrawWithCallback`) is approximately **2.5 times faster** than the channel-based version (`BenchmarkDrawChannel`). This highlights the inherent overhead of channel communication for high-frequency, performance-critical calls.
+- **API Style (Callback vs. Channel):** The direct callback-based `Draw` API (`BenchmarkDrawWithCallback`) is approximately **2.8 times faster** than the channel-based version (`BenchmarkDrawChannel`). This highlights the inherent overhead of channel communication for high-frequency, performance-critical calls.
 
-- **No WAL Performance:** When drawing from the pool without any WAL mechanism, the callback version (`BenchmarkPoolDrawNoWalCallback`) maintains its lead, performing about **3.89 times faster** than the channel version (`BenchmarkPoolDrawNoWalChannel`) and achieving over **5 million draws per second**. The channel version shows more efficient memory usage with lower `bytes/draw` and significantly fewer garbage collection cycles (`gc_count`).
+- **No WAL Performance:** When drawing from the pool without any WAL mechanism, the callback version (`BenchmarkPoolDrawNoWalCallback`) maintains its lead, performing about **3.75 times faster** than the channel version (`BenchmarkPoolDrawNoWalChannel`) and achieving over **5.4 million draws per second**. The channel version shows more efficient memory usage with lower `bytes/draw` and significantly fewer garbage collection cycles (`gc_count`).
 
 - **WAL Performance:**
-  - **Mmap WAL vs. Basic WAL:** The memory-mapped WAL (`BenchmarkPoolDrawWithMmapWALCallback`) is roughly **5.3 times faster** than the basic file-based WAL (`BenchmarkPoolDrawWithBasicWALCallback`). This demonstrates that using mmap is a highly effective optimization for mitigating I/O bottlenecks.
+  - **Mmap WAL vs. Basic WAL:** The memory-mapped WAL (`BenchmarkPoolDrawWithMmapWALCallback`) is roughly **5.8 times faster** than the basic file-based WAL (`BenchmarkPoolDrawWithBasicWALCallback`). This demonstrates that using mmap is a highly effective optimization for mitigating I/O bottlenecks.
   - **Basic WAL:** The standard file-based WAL remains the slowest option due to synchronous disk writes for every operation, resulting in the highest latency (`ns/op`) and lowest throughput (`draws/sec`).
 
 ### Conclusion
@@ -93,6 +92,29 @@ The latest benchmarks provide a clear performance hierarchy. Callback-based APIs
 # Benchmark Evolution
 
 This section contains the analysis from previous benchmark runs, preserving the historical context of performance tuning.
+
+## Task 06 Analysis (08 Aug 2025)
+> task_06.md
+
+### Difference
+
+- **`SelectItem` Performance:** The primary difference in `task_06` is the introduction of the `ItemSelector` interface and the `FenwickTreeSelector` implementation. This change significantly improves the performance of the `SelectItem` operation within the `rewardpool.Pool`.
+- **Overall Performance:** As a result of the more efficient `SelectItem` operation, the overall performance of drawing from the pool has improved, especially in the `NoWal` scenarios. The `BenchmarkPoolDrawNoWalCallback` and `BenchmarkPoolDrawNoWalChannel` benchmarks show a noticeable increase in `draws/sec` and a decrease in `ns/op` compared to the `task_05` results.
+
+### Reason
+
+- **Efficient Data Structure:** The `FenwickTreeSelector` provides a more efficient way to perform weighted random selection compared to the previous implementation. The Fenwick Tree allows for `O(log n)` selection, which is a significant improvement.
+- **Decoupling:** The introduction of the `ItemSelector` interface decouples the `rewardpool.Pool` from the specific implementation of the selection logic. This makes the code more modular and easier to maintain and test.
+
+### Metrics Collection
+
+| Benchmark                        | `task_05` ns/op | `task_06` ns/op | Improvement |
+|----------------------------------|-----------------|-----------------|-------------|
+| `BenchmarkPoolDrawNoWalCallback` | 197.1           | 182.8           | ~7.2%       |
+| `BenchmarkPoolDrawNoWalChannel`  | 768.1           | 684.5           | ~10.9%      |
+
+**Conclusion:**
+The refactoring in `task_06` successfully improved the performance of the reward selection logic. The use of a Fenwick Tree and the `ItemSelector` interface has made the system more efficient and modular.
 
 ## Task 05 Analysis (Iterations 1-3)
 > task_05.md

@@ -5,6 +5,7 @@
 - Implements PRD requirements: reward pool, WAL, config, CLI, and robust processing model
 
 ## Recent Updates (Aug 2025)
+- **Task_06:** Refactored the `rewardpool.Pool` to use a more efficient in-memory data structure for weighted random item selection, improving the performance of the `SelectItem` operation. Introduced an `ItemSelector` interface and implemented `FenwickTreeSelector` using a Fenwick Tree for O(log N) selection. Updated `Pool` to use this abstraction, ensuring `pendingDraws` are correctly accounted for to prevent over-draws. All related tests were updated and passed.
 - **Task_05:** Refactored the `Processor.Draw` method to return a channel (`<-chan DrawResponse`) for a more idiomatic and developer-friendly API. Optimized the channel-based implementation using `sync.Pool` to reduce allocation overhead. Refactored benchmarks to accurately measure performance, with `bench_draw_apis_test.go` providing a direct comparison of callback vs. channel `Draw` methods, and other benchmarks using the recommended channel-based approach.
 - **Task_04:** Refactored the core processing logic to be strictly WAL-first and transactional.
   - **Two-Phase Commit:** Introduced a staging area (`pendingDraws`) in the `RewardPool`. Operations now follow a select/stage (`SelectItem`) and then commit/revert (`CommitDraw`/`RevertDraw`) pattern. This ensures the WAL is written before any in-memory state is finalized.
@@ -39,8 +40,7 @@
 
 
 ## Benchmarks: 
-Compare No WAL, Real WAL, and Mmap WAL for throughput, latency, and GC count. See `_ai/doc/bench.md`
-
+Compare No WAL, Real WAL, and Mmap WAL for throughput, latency, and GC count. See `_ai/doc/bench.md` for detailed results
 ## Testing
 - Unit tests for all modules, including the new transactional and batching logic.
 - All tests passing, including crash/restart recovery scenarios.
