@@ -10,8 +10,8 @@ import (
 func TestRandomItem(t *testing.T) {
 	u := &utils.UtilsImpl{}
 	items := []types.PoolReward{
-		{ItemID: "gold", Probability: 0.5},
-		{ItemID: "silver", Probability: 0.5},
+		{ItemID: "gold", Probability: 50},
+		{ItemID: "silver", Probability: 50},
 	}
 	idx, err := u.RandomItem(items)
 	if err != nil {

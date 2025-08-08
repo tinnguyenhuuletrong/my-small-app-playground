@@ -16,7 +16,7 @@
 - **Documentation:** `_ai/doc/bench.md` updated with new results, metrics table, and analysis. Mmap WAL is a strong middle ground for performance and durability.
 
 ## Modules & Structure
-- `internal/types/types.go`: Centralized type definitions and interfaces (`ConfigPool`, `PoolReward`, `WalLogItem`, `Context`, etc.)
+- `internal/types/types.go`: Centralized type definitions and interfaces (`ConfigPool`, `PoolReward`, `WalLogItem`, `Context`, etc.). Note: `PoolReward.Probability` is now `int64` to align with the selector module's requirements.
 - `internal/rewardpool/pool.go`: Reward pool logic. Now includes a staging area (`PendingDraws`) and uses a two-phase commit model (`SelectItem`, `CommitDraw`, `RevertDraw`).
 - `internal/wal/wal.go`: WAL logging. Now implements in-memory buffering with a `Flush` mechanism.
 - `internal/config/config.go`: Config loading, implements Config interface

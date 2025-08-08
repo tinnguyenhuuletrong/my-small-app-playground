@@ -19,9 +19,9 @@ func TestRecoverPool_Basic(t *testing.T) {
 	_, _ = f.WriteString(`
 {
   "catalog": [
-    { "item_id": "gold", "quantity": 100, "probability": 0.5 },
-    { "item_id": "silver", "quantity": 200, "probability": 0.3 },
-    { "item_id": "bronze", "quantity": 300, "probability": 0.2 }
+    { "item_id": "gold", "quantity": 100, "probability": 50 },
+    { "item_id": "silver", "quantity": 200, "probability": 30 },
+    { "item_id": "bronze", "quantity": 300, "probability": 20 }
   ]
 }
 	`)

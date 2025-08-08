@@ -13,12 +13,12 @@ func (u *UtilsImpl) RandomItem(items []types.PoolReward) (int, error) {
 		return -1, nil
 	}
 	// Simple random selection by probability
-	total := 0.0
+	total := int64(0)
 	for _, item := range items {
 		total += item.Probability
 	}
-	r := rand.Float64() * total
-	acc := 0.0
+	r := rand.Int63n(total)
+	acc := int64(0)
 	for i, item := range items {
 		acc += item.Probability
 		if r <= acc {

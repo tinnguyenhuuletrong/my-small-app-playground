@@ -9,9 +9,9 @@ type ConfigPool struct {
 
 // PoolReward represents a reward item in the pool
 type PoolReward struct {
-	ItemID      string  `json:"item_id"`
-	Quantity    int     `json:"quantity"`
-	Probability float64 `json:"probability"`
+	ItemID      string `json:"item_id"`
+	Quantity    int    `json:"quantity"`
+	Probability int64  `json:"probability"`
 }
 
 // WalLogItem represents a WAL log entry

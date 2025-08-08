@@ -34,7 +34,7 @@ The project uses a `Makefile` for common development tasks.
 ## Development Conventions
 
 *   **Modular Design:** The project follows a modular design, with clear separation of concerns between different packages.
-*   **Interfaces:** Interfaces are used to define contracts between different modules, promoting testability and loose coupling. A key example is the `ItemSelector` interface, which abstracts the underlying data structure for weighted random item selection.
+*   **Interfaces:** Interfaces are used to define contracts between different modules, promoting testability and loose coupling. A key example is the `ItemSelector` interface, which abstracts the underlying data structure for weighted random item selection. The `PoolReward.Probability` field has been updated to `int64` to align with the `ItemSelector` module's requirements.
 *   **Testing:** Unit tests are provided for all key modules, and the project includes benchmark tests for performance-critical components like the WAL.
 *   **Dependency Injection:** The `Context` struct is used for dependency injection, and the `rewardpool.Pool` accepts an `ItemSelector` to allow for different selection strategies.
 *   **Concurrency and Transactional Integrity:** A single-threaded processing model with a dedicated goroutine and buffered channels is used to handle state changes. The `Processor.Draw` method now returns a channel (`<-chan DrawResponse`) for a more idiomatic and developer-friendly API. To ensure data integrity and adhere to the WAL-first principle, the system uses a two-phase commit process:
