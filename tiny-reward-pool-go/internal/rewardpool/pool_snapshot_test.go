@@ -8,21 +8,25 @@ import (
 )
 
 func TestPoolSnapshotSaveLoad(t *testing.T) {
-	pool := &Pool{
-		catalog: []types.PoolReward{
-			{ItemID: "gold", Quantity: 10, Probability: 1.0},
-		},
+	initialCatalog := []types.PoolReward{
+		{ItemID: "gold", Quantity: 10, Probability: 1.0},
 	}
+	pool := NewPool(initialCatalog)
+
 	snapshot := "test_snapshot.json"
 	defer os.Remove(snapshot)
+
 	if err := pool.SaveSnapshot(snapshot); err != nil {
 		t.Fatalf("SaveSnapshot failed: %v", err)
 	}
-	pool.catalog[0].Quantity = 0
-	if err := pool.LoadSnapshot(snapshot); err != nil {
+
+	// Create a new pool to load the snapshot into
+	loadedPool := NewPool([]types.PoolReward{})
+	if err := loadedPool.LoadSnapshot(snapshot); err != nil {
 		t.Fatalf("LoadSnapshot failed: %v", err)
 	}
-	if pool.catalog[0].Quantity != 10 {
-		t.Fatalf("Expected quantity 10, got %d", pool.catalog[0].Quantity)
+
+	if loadedPool.catalog[0].Quantity != 10 {
+		t.Fatalf("Expected quantity 10, got %d", loadedPool.catalog[0].Quantity)
 	}
 }

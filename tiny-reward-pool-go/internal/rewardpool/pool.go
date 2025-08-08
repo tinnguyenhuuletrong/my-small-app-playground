@@ -10,6 +10,7 @@ import (
 type Pool struct {
 	catalog      []types.PoolReward
 	pendingDraws map[string]int
+	selector     ItemSelector
 }
 
 var _ types.RewardPool = (*Pool)(nil)
@@ -19,15 +20,19 @@ type poolSnapshot struct {
 }
 
 func NewPool(Catalog []types.PoolReward) *Pool {
-	return &Pool{
+	pool := &Pool{
 		catalog:      Catalog,
 		pendingDraws: make(map[string]int),
+		selector:     NewFenwickTreeSelector(), // Initialize with FenwickTreeSelector
 	}
+	pool.selector.Reset(Catalog)
+	return pool
 }
 
 func (p *Pool) Load(config types.ConfigPool) error {
 	p.catalog = config.Catalog
 	p.pendingDraws = make(map[string]int)
+	p.selector.Reset(p.catalog)
 	return nil
 }
 
@@ -61,44 +66,26 @@ func (p *Pool) LoadSnapshot(path string) error {
 	}
 	p.catalog = snap.Catalog
 	p.pendingDraws = make(map[string]int)
+	p.selector.Reset(p.catalog)
 	return nil
 }
 
 func (p *Pool) GetItemRemaining(ItemID string) int {
-	for _, itm := range p.catalog {
-		if itm.ItemID == ItemID {
-			Quantity := itm.Quantity
-			if stagValue, ok := p.pendingDraws[ItemID]; ok {
-				return Quantity - stagValue
-			}
-			return Quantity
-		}
-	}
-	return -1
+	return p.selector.GetItemRemaining(ItemID)
 }
 
 // SelectItem stages an item for draw if available
 func (p *Pool) SelectItem(ctx *types.Context) (string, error) {
-	// Build a temporary catalog of available items
-	var available []types.PoolReward
-	for _, item := range p.catalog {
-		staged := p.pendingDraws[item.ItemID]
-		if item.Quantity-staged > 0 {
-			available = append(available, item)
-		}
-	}
-	if len(available) == 0 {
-		return "", types.ErrEmptyRewardPool
-	}
-	idx, err := ctx.Utils.RandomItem(available)
+	selectedItemID, err := p.selector.Select(ctx)
 	if err != nil {
 		return "", err
 	}
-	selected := available[idx]
-	p.pendingDraws[selected.ItemID]++
-	// Return a copy
 
-	return selected.ItemID, nil
+	p.pendingDraws[selectedItemID]++
+	// Immediately decrement the quantity in the selector to prevent over-draws
+	p.selector.Update(selectedItemID, -1)
+
+	return selectedItemID, nil
 }
 
 // CommitDraw finalizes a staged draw
@@ -120,14 +107,18 @@ func (p *Pool) CommitDraw() {
 
 // RevertDraw cancels a staged draw
 func (p *Pool) RevertDraw() {
+	for itemID, count := range p.pendingDraws {
+		p.selector.Update(itemID, int64(count)) // Re-add the quantity to the selector
+	}
 	p.pendingDraws = make(map[string]int)
 }
 
-// applyDrawLog decrements the quantity for a given itemID if available (internal use only)
+// ApplyDrawLog decrements the quantity for a given itemID if available (internal use only)
 func (p *Pool) ApplyDrawLog(itemID string) {
 	for i := range p.catalog {
 		if p.catalog[i].ItemID == itemID && p.catalog[i].Quantity > 0 {
 			p.catalog[i].Quantity--
+			p.selector.Update(itemID, -1) // Decrement in selector as well
 			break
 		}
 	}
@@ -147,8 +138,7 @@ func CreatePoolFromConfigPath(configPath string) (*Pool, error) {
 		return nil, err
 	}
 
-	pool := Pool{}
-	pool.Load(data)
+	pool := NewPool(data.Catalog)
 
-	return &pool, nil
+	return pool, nil
 }

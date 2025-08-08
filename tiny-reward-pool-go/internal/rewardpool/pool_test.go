@@ -8,17 +8,17 @@ import (
 )
 
 func TestTransactionalDraw(t *testing.T) {
-	pool := &Pool{
-		catalog: []types.PoolReward{
-			{ItemID: "gold", Quantity: 1, Probability: 1.0},
-		},
-		// pendingDraws will be initialized by Load
+	// Initial setup for the first part of the test
+	initialCatalog := []types.PoolReward{
+		{ItemID: "gold", Quantity: 1, Probability: 1.0},
 	}
-	pool.Load(types.ConfigPool{Catalog: pool.catalog})
+	pool := NewPool(initialCatalog)
+
 	ctx := &types.Context{
 		WAL:   &mockWAL{},
 		Utils: &utils.UtilsImpl{},
 	}
+
 	// SelectItem should stage the item
 	item, err := pool.SelectItem(ctx)
 	if err != nil {
@@ -27,17 +27,68 @@ func TestTransactionalDraw(t *testing.T) {
 	if item == "" || item != "gold" {
 		t.Fatalf("Expected gold, got %v", item)
 	}
-	// CommitDraw should decrement quantity
+
+	// Verify pendingDraws and selector state after SelectItem
+	if pool.pendingDraws["gold"] != 1 {
+		t.Errorf("Expected pendingDraws[gold] to be 1, got %d", pool.pendingDraws["gold"])
+	}
+	if pool.selector.GetItemRemaining("gold") != 0 {
+		t.Errorf("Expected selector remaining gold to be 0, got %d", pool.selector.GetItemRemaining("gold"))
+	}
+
+	// CommitDraw should decrement quantity in catalog and clear pendingDraws
 	pool.CommitDraw()
 	if pool.catalog[0].Quantity != 0 {
-		t.Fatalf("Expected quantity 0 after commit, got %d", pool.catalog[0].Quantity)
+		t.Fatalf("Expected catalog quantity 0 after commit, got %d", pool.catalog[0].Quantity)
 	}
-	// RevertDraw should not change quantity, but should clear pendingDraws
-	pool.catalog[0].Quantity = 1
-	pool.SelectItem(ctx)
+	if pool.pendingDraws["gold"] != 0 {
+		t.Errorf("Expected pendingDraws[gold] to be 0 after commit, got %d", pool.pendingDraws["gold"])
+	}
+	// Selector state should remain 0 for gold as it was already decremented by SelectItem
+	if pool.selector.GetItemRemaining("gold") != 0 {
+		t.Errorf("Expected selector remaining gold to be 0 after commit, got %d", pool.selector.GetItemRemaining("gold"))
+	}
+
+	// Test RevertDraw
+	// Define a fresh catalog for this test section
+	revertCatalog := []types.PoolReward{
+		{ItemID: "gold", Quantity: 1, Probability: 1.0},
+	}
+	pool = NewPool(revertCatalog) // Reset pool for revert test
+	t.Logf("Revert Test: Pool Total Available before SelectItem: %d", pool.selector.TotalAvailable())
+	t.Logf("Revert Test: Gold Remaining before SelectItem: %d", pool.selector.GetItemRemaining("gold"))
+	item, err = pool.SelectItem(ctx)
+	if err != nil {
+		t.Fatalf("SelectItem failed for revert test: %v", err)
+	}
+	if pool.pendingDraws["gold"] != 1 {
+		t.Errorf("Revert test: Expected pendingDraws[gold] to be 1, got %d", pool.pendingDraws["gold"])
+	}
+	if pool.selector.GetItemRemaining("gold") != 0 {
+		t.Errorf("Revert test: Expected selector remaining gold to be 0, got %d", pool.selector.GetItemRemaining("gold"))
+	}
+
 	pool.RevertDraw()
 	if pool.pendingDraws["gold"] != 0 {
-		t.Fatalf("Expected PendingDraws 0 after revert, got %d", pool.pendingDraws["gold"])
+		t.Fatalf("Expected pendingDraws[gold] 0 after revert, got %d", pool.pendingDraws["gold"])
+	}
+	// Selector state should be back to initial quantity after revert
+	if pool.selector.GetItemRemaining("gold") != 1 {
+		t.Errorf("Expected selector remaining gold to be 1 after revert, got %d", pool.selector.GetItemRemaining("gold"))
+	}
+
+	// Test ApplyDrawLog
+	// Define a fresh catalog for this test section
+	applyDrawLogCatalog := []types.PoolReward{
+		{ItemID: "gold", Quantity: 1, Probability: 1.0},
+	}
+	pool = NewPool(applyDrawLogCatalog) // Reset pool for ApplyDrawLog test
+	pool.ApplyDrawLog("gold")
+	if pool.catalog[0].Quantity != 0 {
+		t.Fatalf("Expected catalog quantity 0 after ApplyDrawLog, got %d", pool.catalog[0].Quantity)
+	}
+	if pool.selector.GetItemRemaining("gold") != 0 {
+		t.Errorf("Expected selector remaining gold to be 0 after ApplyDrawLog, got %d", pool.selector.GetItemRemaining("gold"))
 	}
 }
 

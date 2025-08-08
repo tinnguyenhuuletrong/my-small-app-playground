@@ -6,13 +6,19 @@ import (
 
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/rewardpool"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal"
+	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
 )
 
 // RecoverPool loads the pool from snapshot, replays WAL, writes new snapshot, and rotates WAL.
 func RecoverPool(snapshotPath, walPath, configPath string) (*rewardpool.Pool, error) {
-	pool := &rewardpool.Pool{}
-	// 1. Load snapshot or fallback to config
-	if err := pool.LoadSnapshot(snapshotPath); err != nil {
+	var pool *rewardpool.Pool
+
+	// Try to load from snapshot first
+	initialPool := rewardpool.NewPool([]types.PoolReward{}) // Create a pool with an empty catalog initially
+	if err := initialPool.LoadSnapshot(snapshotPath); err == nil {
+		pool = initialPool
+	} else {
+		// If snapshot fails, load from config
 		loaded, err := rewardpool.CreatePoolFromConfigPath(configPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load config: %w", err)
