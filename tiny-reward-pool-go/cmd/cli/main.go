@@ -54,15 +54,12 @@ func main() {
 	go func() {
 		for {
 			<-drawLock // Wait for unlock
-			respChan := proc.Draw()
-			go func() {
-				resp := <-respChan
-				if resp.Err == nil {
-					fmt.Printf("[Request %d] Drew %s Remaining %d\n", resp.RequestID, resp.Item, pool.GetItemRemaining(resp.Item))
-				} else {
-					fmt.Printf("[Request %d] Draw failed: %s \n", resp.RequestID, resp.Err)
-				}
-			}()
+			resp := <-proc.Draw()
+			if resp.Err == nil {
+				fmt.Printf("[Request %d] Drew %s Remaining %d\n", resp.RequestID, resp.Item, pool.GetItemRemaining(resp.Item))
+			} else {
+				fmt.Printf("[Request %d] Draw failed: %s \n", resp.RequestID, resp.Err)
+			}
 			drawLock <- struct{}{} // Unlock for next draw
 			time.Sleep(1 * time.Second)
 		}
