@@ -35,10 +35,18 @@ func BenchmarkPoolDrawNoWal(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		wg.Add(1)
-		go func() {
-			<-proc.Draw()
+
+		// BenchmarkPoolDrawNoWal-8   	  749970	      1636 ns/op	       479.6 bytes/draw	    611429 draws/sec	         8.000 gc_count
+		// go func() {
+		// 	<-proc.Draw()
+		// 	wg.Done()
+		// }()
+
+		// BenchmarkPoolDrawNoWal-8   	 6065191	       178.9 ns/op	        29.51 bytes/draw	   5590950 draws/sec	        48.00 gc_count
+		proc.DrawWithCallback(func(resp processing.DrawResponse) {
 			wg.Done()
-		}()
+		})
+
 	}
 
 	wg.Wait()
