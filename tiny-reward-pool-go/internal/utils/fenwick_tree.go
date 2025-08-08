@@ -17,6 +17,10 @@ func NewFenwickTree(size int) *FenwickTree {
 	}
 }
 
+func (ft *FenwickTree) Size() int {
+	return ft.size
+}
+
 func (ft *FenwickTree) Add(index int, value int64) {
 	if index < 0 || index >= ft.size {
 		return // Or handle error

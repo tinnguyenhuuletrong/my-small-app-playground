@@ -3,6 +3,7 @@ package selector
 import (
 	"fmt"
 	"math/rand"
+	"time"
 
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/utils"
@@ -21,12 +22,18 @@ type FenwickTreeSelector struct {
 
 	// totalAvailable stores the sum of all quantities in the tree.
 	totalAvailable int64
+
+	// rand is the random number generator for selection.
+	rand *rand.Rand
 }
+
+var _ types.ItemSelector = (*FenwickTreeSelector)(nil)
 
 // NewFenwickTreeSelector creates a new FenwickTreeSelector.
 func NewFenwickTreeSelector() *FenwickTreeSelector {
 	return &FenwickTreeSelector{
 		itemIndex: make(map[string]int),
+		rand:      rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 
@@ -58,7 +65,7 @@ func (fts *FenwickTreeSelector) Select(ctx *types.Context) (string, error) {
 	}
 
 	// Generate a random value within the total available range
-	randVal := rand.Int63n(fts.totalAvailable) + 1 // +1 because FenwickTree.Find expects 1-based cumulative sum
+	randVal := fts.rand.Int63n(fts.totalAvailable) + 1 // +1 because FenwickTree.Find expects 1-based cumulative sum
 
 	// Find the index of the item in Acc sum array. Where A[i] = sum(0...i]
 	idx := fts.tree.Find(randVal)
