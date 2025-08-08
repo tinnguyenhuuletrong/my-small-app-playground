@@ -9,8 +9,9 @@ import (
 )
 
 type DrawRequest struct {
-	RequestID uint64
-	Callback  func(DrawResponse)
+	RequestID    uint64
+	ResponseChan chan DrawResponse
+	Callback     func(DrawResponse)
 }
 
 type DrawResponse struct {
@@ -90,7 +91,10 @@ func (p *Processor) run() {
 				resp.Err = walErr
 			}
 
-			if req.Callback != nil {
+			if req.ResponseChan != nil {
+				req.ResponseChan <- resp
+				close(req.ResponseChan)
+			} else if req.Callback != nil {
 				req.Callback(resp)
 			}
 		case <-p.stopChan:
@@ -101,9 +105,11 @@ func (p *Processor) run() {
 			}
 			close(p.reqChan)
 			for req := range p.reqChan {
-				// Respond to each pending request with cancellation
 				resp := DrawResponse{RequestID: req.RequestID, Item: "", Err: types.ErrShutingDown}
-				if req.Callback != nil {
+				if req.ResponseChan != nil {
+					req.ResponseChan <- resp
+					close(req.ResponseChan)
+				} else if req.Callback != nil {
 					req.Callback(resp)
 				}
 			}
@@ -136,7 +142,14 @@ func (p *Processor) Flush() error {
 	return flushErr
 }
 
-func (p *Processor) Draw(callback func(DrawResponse)) uint64 {
+func (p *Processor) Draw() <-chan DrawResponse {
+	respChan := make(chan DrawResponse, 1)
+	reqID := atomic.AddUint64(&p.requestID, 1)
+	p.reqChan <- DrawRequest{RequestID: reqID, ResponseChan: respChan}
+	return respChan
+}
+
+func (p *Processor) DrawWithCallback(callback func(DrawResponse)) uint64 {
 	reqID := atomic.AddUint64(&p.requestID, 1)
 	p.reqChan <- DrawRequest{RequestID: reqID, Callback: callback}
 	return reqID

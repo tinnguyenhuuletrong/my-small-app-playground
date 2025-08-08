@@ -24,14 +24,17 @@ We will refactor the `Draw` method to use a channel for returning results, which
     *   This method will create a response channel, package it in the `DrawRequest`, send it to the processor's internal request channel, and return the response channel to the caller.
 
 4.  **Create Comparative Benchmark:**
+    *   Make sure all test passed `make test` and existing bench work `make bench`
+
+5.  **Create Comparative Benchmark:**
     *   Create a new benchmark file: `cmd/bench/bench_draw_apis_test.go`.
     *   This file will contain two benchmarks:
         *   `BenchmarkDrawWithCallback`: Measures the performance of the original implementation.
         *   `BenchmarkDrawChannel`: Measures the performance of the new channel-based implementation.
 
-5.  **Analyze and Document:**
+6.  **Analyze and Document:**
     *   Run the new benchmark using `make bench`.
     *   Document the results (ops/sec, allocs/op, B/op) in `_ai/doc/bench.md` to make an informed decision about the trade-offs.
 
-6.  **Update Client and Tests:**
+7.  **Update Client and Tests:**
     *   Refactor the client code in `cmd/cli/main.go` and the unit tests in `internal/processing/processing_test.go` to use the new, more idiomatic `Draw() <-chan DrawResponse` method.

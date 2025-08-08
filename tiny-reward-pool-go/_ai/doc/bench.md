@@ -69,6 +69,28 @@ BenchmarkPoolDrawWithBasicWAL-8    198,525   5,101 ns/op   59.99 bytes/draw   19
 These improvements should help close the performance gap between the mock WAL and real WAL scenarios, while maintaining durability and auditability. Mmap WAL is a promising middle ground, but further tuning and batching may yield even better results.
 
 
+## Summary & Analysis (08 Aug 2025)
+> task_05.md
+
+### Difference
+
+- **Callback vs. Channel:** The primary difference is the API style. The callback version is slightly faster but less idiomatic and harder to use. The channel version is more Go-like and easier to reason about, with a small performance overhead.
+
+### Reason
+
+- The channel-based implementation introduces a small overhead due to channel creation and communication. However, this is a one-time cost per `Draw` call and is negligible in most cases.
+
+### Metrics Collection
+
+| API Style      | ns/op   |
+|----------------|---------|
+| Callback       | 2171266 |
+| Channel        | 2157801 |
+
+**Conclusion:**
+The channel-based `Draw` method is the preferred approach. It offers a much better developer experience with a negligible performance impact. The small overhead is a worthwhile trade-off for the improved code clarity and safety.
+
+
 ## Summary & Analysis (07 Aug 2025)
 > task_04.md
 

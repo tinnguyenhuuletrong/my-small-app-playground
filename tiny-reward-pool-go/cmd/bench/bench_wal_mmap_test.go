@@ -52,10 +52,11 @@ func BenchmarkPoolDrawWithMmapWAL(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		wg.Add(1)
-		proc.Draw(func(resp processing.DrawResponse) {
+		go func() {
+			<-proc.Draw()
 			// Only wait for draw completion, WAL logging is handled inside Processor
 			wg.Done()
-		})
+		}()
 	}
 
 	wg.Wait()

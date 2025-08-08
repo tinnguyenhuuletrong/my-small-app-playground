@@ -51,9 +51,10 @@ func BenchmarkPoolDrawWithBasicWAL(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		wg.Add(1)
-		proc.Draw(func(resp processing.DrawResponse) {
+		go func() {
+			<-proc.Draw()
 			wg.Done()
-		})
+		}()
 	}
 
 	wg.Wait()

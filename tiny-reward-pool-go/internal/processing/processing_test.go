@@ -17,16 +17,8 @@ func TestProcessor_TransactionalDraw(t *testing.T) {
 	proc := processing.NewProcessor(ctx, pool, &processing.ProcessorOptional{FlushAfterNDraw: 1})
 
 	// Success path
-	done := make(chan struct{})
-	var gotResp processing.DrawResponse
-	reqID := proc.Draw(func(resp processing.DrawResponse) {
-		gotResp = resp
-		close(done)
-	})
-	<-done
-	if gotResp.RequestID != reqID {
-		t.Fatalf("Expected requestID %d, got %d", reqID, gotResp.RequestID)
-	}
+	respChan := proc.Draw()
+	gotResp := <-respChan
 	if gotResp.Item == "" || gotResp.Item != "gold" {
 		t.Fatalf("Expected gold, got %v", gotResp.Item)
 	}
@@ -40,13 +32,8 @@ func TestProcessor_TransactionalDraw(t *testing.T) {
 	// WAL failure path
 	pool.item.Quantity = 1
 	wal.fail = true
-	done2 := make(chan struct{})
-	var gotResp2 processing.DrawResponse
-	_ = proc.Draw(func(resp processing.DrawResponse) {
-		gotResp2 = resp
-		close(done2)
-	})
-	<-done2
+	respChan2 := proc.Draw()
+	gotResp2 := <-respChan2
 	if gotResp2.Item != "" {
 		t.Fatalf("Expected nil item on WAL failure, got %v", gotResp2.Item)
 	}
@@ -63,11 +50,7 @@ func TestProcessor_FlushAndFlushAfterNDraw(t *testing.T) {
 
 	// Perform N-1 draws, flush should not be called
 	for i := 0; i < flushN-1; i++ {
-		done := make(chan struct{})
-		proc.Draw(func(resp processing.DrawResponse) {
-			close(done)
-		})
-		<-done
+		<-proc.Draw()
 	}
 	if wal.flushCount != 0 {
 		t.Fatalf("Expected flushCount=0 after %d draws, got %d", flushN-1, wal.flushCount)
@@ -77,11 +60,7 @@ func TestProcessor_FlushAndFlushAfterNDraw(t *testing.T) {
 	}
 
 	// Perform the Nth draw, flush should be called
-	done := make(chan struct{})
-	proc.Draw(func(resp processing.DrawResponse) {
-		close(done)
-	})
-	<-done
+	<-proc.Draw()
 	if wal.flushCount != 1 {
 		t.Fatalf("Expected flushCount=1 after %d draws, got %d", flushN, wal.flushCount)
 	}
@@ -98,11 +77,7 @@ func TestProcessor_FlushAndFlushAfterNDraw(t *testing.T) {
 	ctx = &types.Context{WAL: wal, Utils: utils}
 	proc = processing.NewProcessor(ctx, pool, &processing.ProcessorOptional{FlushAfterNDraw: 1})
 
-	done2 := make(chan struct{})
-	proc.Draw(func(resp processing.DrawResponse) {
-		close(done2)
-	})
-	<-done2
+	<-proc.Draw()
 	if wal.flushCount != 1 {
 		t.Fatalf("Expected flushCount=1 on WAL flush failure, got %d", wal.flushCount)
 	}
@@ -119,11 +94,7 @@ func TestProcessor_FlushAndFlushAfterNDraw(t *testing.T) {
 	ctx = &types.Context{WAL: wal, Utils: utils}
 	proc = processing.NewProcessor(ctx, pool, &processing.ProcessorOptional{FlushAfterNDraw: 100}) // High flushN to prevent auto-flush
 
-	done3 := make(chan struct{})
-	proc.Draw(func(resp processing.DrawResponse) {
-		close(done3)
-	})
-	<-done3
+	<-proc.Draw()
 	if wal.flushCount != 0 { // Should not have flushed yet
 		t.Fatalf("Expected flushCount=0 before stop, got %d", wal.flushCount)
 	}
@@ -144,11 +115,7 @@ func TestProcessor_FlushAndFlushAfterNDraw(t *testing.T) {
 	ctx = &types.Context{WAL: wal, Utils: utils}
 	proc = processing.NewProcessor(ctx, pool, &processing.ProcessorOptional{FlushAfterNDraw: 100})
 
-	done4 := make(chan struct{})
-	proc.Draw(func(resp processing.DrawResponse) {
-		close(done4)
-	})
-	<-done4
+	<-proc.Draw()
 	if wal.flushCount != 0 {
 		t.Fatalf("Expected flushCount=0 before stop, got %d", wal.flushCount)
 	}
