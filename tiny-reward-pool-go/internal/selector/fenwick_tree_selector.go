@@ -60,7 +60,7 @@ func (fts *FenwickTreeSelector) Select(ctx *types.Context) (string, error) {
 	// Generate a random value within the total available range
 	randVal := rand.Int63n(fts.totalAvailable) + 1 // +1 because FenwickTree.Find expects 1-based cumulative sum
 
-	// Find the index of the item
+	// Find the index of the item in Acc sum array. Where A[i] = sum(0...i]
 	idx := fts.tree.Find(randVal)
 
 	// This should ideally not happen if totalAvailable is correct and Find works as expected

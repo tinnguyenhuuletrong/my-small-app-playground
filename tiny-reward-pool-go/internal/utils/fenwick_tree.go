@@ -1,5 +1,10 @@
 package utils
 
+// https://www.geeksforgeeks.org/dsa/binary-indexed-tree-or-fenwick-tree-2/
+// The idea is based on the fact that all positive integers can be represented as the sum of powers of 2
+// Example 12 = 8 + 4
+// -> sum(1..12) = sum(1..8) + sum(9..12)
+
 type FenwickTree struct {
 	size int
 	tree []int64
@@ -20,8 +25,14 @@ func (ft *FenwickTree) Add(index int, value int64) {
 		return
 	}
 	index++ // 1-based index
+
+	// Traverse all ancestors and add 'val'
 	for index <= ft.size {
+
+		// Add 'val' to current node of BI Tree
 		ft.tree[index] += value
+
+		// Update index to that of parent in update View
 		index += index & -index
 	}
 }
@@ -35,8 +46,13 @@ func (ft *FenwickTree) Query(index int) int64 {
 	}
 	index++ // 1-based index
 	var sum int64
+
+	// Traverse ancestors of BITree[index]
 	for index > 0 {
+		// Add current element of BITree to sum
 		sum += ft.tree[index]
+
+		// Move index to parent node in getSum View
 		index -= index & -index
 	}
 	return sum
