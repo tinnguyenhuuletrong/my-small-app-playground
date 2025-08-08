@@ -1,4 +1,4 @@
-package rewardpool
+package selector
 
 import (
 	"fmt"

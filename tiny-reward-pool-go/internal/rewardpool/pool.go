@@ -4,13 +4,14 @@ import (
 	"encoding/json"
 	"os"
 
+	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/selector"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
 )
 
 type Pool struct {
 	catalog      []types.PoolReward
 	pendingDraws map[string]int
-	selector     ItemSelector
+	selector     types.ItemSelector
 }
 
 var _ types.RewardPool = (*Pool)(nil)
@@ -23,7 +24,7 @@ func NewPool(Catalog []types.PoolReward) *Pool {
 	pool := &Pool{
 		catalog:      Catalog,
 		pendingDraws: make(map[string]int),
-		selector:     NewFenwickTreeSelector(), // Initialize with FenwickTreeSelector
+		selector:     selector.NewFenwickTreeSelector(), // Initialize with FenwickTreeSelector
 	}
 	pool.selector.Reset(Catalog)
 	return pool

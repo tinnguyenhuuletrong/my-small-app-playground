@@ -10,7 +10,22 @@ import (
 func TestRecoverPool_Basic(t *testing.T) {
 	snapshot := "../../tmp/test_snapshot.json"
 	wal := "../../tmp/test_wal.log"
-	config := "../../samples/config.json"
+	config := "../../samples/test_config.json"
+
+	f, err := os.Create(config)
+	if err != nil {
+		t.Fatalf("failed to create config: %v", err)
+	}
+	_, _ = f.WriteString(`
+{
+  "catalog": [
+    { "item_id": "gold", "quantity": 100, "probability": 0.5 },
+    { "item_id": "silver", "quantity": 200, "probability": 0.3 },
+    { "item_id": "bronze", "quantity": 300, "probability": 0.2 }
+  ]
+}
+	`)
+	f.Close()
 
 	// Setup: create a snapshot and WAL log
 	var pool *rewardpool.Pool
@@ -22,7 +37,7 @@ func TestRecoverPool_Basic(t *testing.T) {
 
 	pool.SaveSnapshot(snapshot)
 
-	f, err := os.Create(wal)
+	f, err = os.Create(wal)
 	if err != nil {
 		t.Fatalf("failed to create wal log: %v", err)
 	}
@@ -45,4 +60,5 @@ func TestRecoverPool_Basic(t *testing.T) {
 	// Cleanup
 	os.Remove(snapshot)
 	os.Remove(wal)
+	os.Remove(config)
 }
