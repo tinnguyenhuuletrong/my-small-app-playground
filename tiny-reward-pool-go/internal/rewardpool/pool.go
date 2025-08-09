@@ -20,11 +20,26 @@ type poolSnapshot struct {
 	Catalog []types.PoolReward `json:"catalog"`
 }
 
-func NewPool(Catalog []types.PoolReward) *Pool {
+type PoolOptional struct {
+	Selector types.ItemSelector
+}
+
+func NewPool(Catalog []types.PoolReward, ops ...PoolOptional) *Pool {
+	var sel types.ItemSelector
+	for _, o := range ops {
+		if o.Selector != nil {
+			sel = o.Selector
+		}
+	}
+
+	if sel == nil {
+		sel = selector.NewFenwickTreeSelector()
+	}
+
 	pool := &Pool{
 		catalog:      Catalog,
 		pendingDraws: make(map[string]int),
-		selector:     selector.NewFenwickTreeSelector(), // Initialize with FenwickTreeSelector
+		selector:     sel,
 	}
 	pool.selector.Reset(Catalog)
 	return pool

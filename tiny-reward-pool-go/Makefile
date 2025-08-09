@@ -17,3 +17,6 @@ clean:
 
 bench:
 	go test -bench=. ./cmd/bench/
+
+distribution_test:
+	go test -v ./cmd/distribution_test/...

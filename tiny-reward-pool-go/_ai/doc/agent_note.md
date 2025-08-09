@@ -14,10 +14,12 @@
 - **Benchmarking:** Added new benchmark for memory-mapped WAL (mmap WAL) in `cmd/bench/bench_wal_mmap_test.go`.
 - **Metrics Collection:** Benchmarks now compare No WAL, Real WAL, and Mmap WAL. Mmap WAL achieves ~2M draws/sec, much faster than file WAL, but slower than mock WAL.
 - **Documentation:** `_ai/doc/bench.md` updated with new results, metrics table, and analysis. Mmap WAL is a strong middle ground for performance and durability.
+- **Makefile Update:** Added `distribution_test` target to `Makefile` for running distribution tests.
+- **New Tests:** Added `bench_selector_test.go` for benchmarking selector performance and `cmd/distribution_test` for distribution tests.
 
 ## Modules & Structure
 - `internal/types/types.go`: Centralized type definitions and interfaces (`ConfigPool`, `PoolReward`, `WalLogItem`, `Context`, etc.). Note: `PoolReward.Probability` is now `int64` to align with the selector module's requirements.
-- `internal/rewardpool/pool.go`: Reward pool logic. Now includes a staging area (`PendingDraws`) and uses a two-phase commit model (`SelectItem`, `CommitDraw`, `RevertDraw`).
+- `internal/rewardpool/pool.go`: Reward pool logic. Now includes a staging area (`PendingDraws`), uses a two-phase commit model (`SelectItem`, `CommitDraw`, `RevertDraw`), and supports dependency injection for `ItemSelector` in `NewPool`.
 - `internal/wal/wal.go`: WAL logging. Now implements in-memory buffering with a `Flush` mechanism.
 - `internal/config/config.go`: Config loading, implements Config interface
 - `internal/utils/utils.go`: Random selection logic, implements Utils interface
