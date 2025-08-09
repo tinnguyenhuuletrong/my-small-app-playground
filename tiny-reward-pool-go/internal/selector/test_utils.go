@@ -1,20 +1,24 @@
 package selector
 
-// MockRandSource is a mock for rand.Source to control random number generation.
+import "math/rand"
+
+// MockRandSource is a mock implementation of rand.Source for predictable testing.
 type MockRandSource struct {
 	values []int64
-	idx    int
+	index  int
 }
 
 func (m *MockRandSource) Int63() int64 {
-	if m.idx >= len(m.values) {
+	if m.index >= len(m.values) {
 		panic("not enough mock random values")
 	}
-	val := m.values[m.idx]
-	m.idx++
+	val := m.values[m.index]
+	m.index++
 	return val
 }
 
 func (m *MockRandSource) Seed(seed int64) {
-	// Do nothing for mock
+	// No-op for mock
 }
+
+var _ rand.Source = (*MockRandSource)(nil)

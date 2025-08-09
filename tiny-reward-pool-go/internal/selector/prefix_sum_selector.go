@@ -10,8 +10,11 @@ import (
 
 // PrefixSumSelector implements the ItemSelector interface using a prefix sum array.
 type PrefixSumSelector struct {
-	// prefixSums stores the cumulative sums of item quantities.
+	// prefixSums stores the cumulative sums of item probabilities.
 	prefixSums []int64
+
+	// items stores the original reward data.
+	items []types.PoolReward
 
 	// itemIDs maps the index in the prefixSums array back to the actual ItemID.
 	itemIDs []string
@@ -19,8 +22,11 @@ type PrefixSumSelector struct {
 	// itemIndex maps ItemID to its index in the prefixSums and itemIDs slices.
 	itemIndex map[string]int
 
-	// totalAvailable stores the sum of all quantities in the selector.
-	totalAvailable int64
+	// itemInfo tracks the current state (quantity) of each item.
+	itemInfo map[string]*types.PoolReward
+
+	// totalWeight stores the sum of all probabilities in the selector.
+	totalWeight int64
 
 	// rand is the random number generator for selection.
 	rand *rand.Rand
@@ -32,47 +38,54 @@ var _ types.ItemSelector = (*PrefixSumSelector)(nil)
 func NewPrefixSumSelector() *PrefixSumSelector {
 	return &PrefixSumSelector{
 		itemIndex: make(map[string]int),
+		itemInfo:  make(map[string]*types.PoolReward),
 		rand:      rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 
 // Reset initializes or re-initializes the selector with a new catalog.
 func (pss *PrefixSumSelector) Reset(catalog []types.PoolReward) {
-	// Clear existing data
+	pss.items = make([]types.PoolReward, len(catalog))
 	pss.itemIDs = make([]string, len(catalog))
 	pss.itemIndex = make(map[string]int)
+	pss.itemInfo = make(map[string]*types.PoolReward, len(catalog))
 	pss.prefixSums = make([]int64, len(catalog))
-	pss.totalAvailable = 0
+	pss.totalWeight = 0
 
-	// Populate the prefix sums, itemIDs, and itemIndex maps
-	var currentSum int64
+	var currentWeight int64
 	for i, item := range catalog {
-		currentSum += int64(item.Quantity)
-		pss.prefixSums[i] = currentSum
+		itemCopy := item
+		pss.items[i] = itemCopy
 		pss.itemIDs[i] = item.ItemID
 		pss.itemIndex[item.ItemID] = i
+		pss.itemInfo[item.ItemID] = &pss.items[i]
+
+		if item.Quantity > 0 {
+			currentWeight += item.Probability
+		}
+		pss.prefixSums[i] = currentWeight
 	}
-	pss.totalAvailable = currentSum
+	pss.totalWeight = currentWeight
 }
 
 // Select chooses an item based on its availability.
 func (pss *PrefixSumSelector) Select(ctx *types.Context) (string, error) {
-	if pss.totalAvailable <= 0 {
+	if pss.totalWeight <= 0 {
 		return "", types.ErrEmptyRewardPool
 	}
 
-	// Generate a random value within the total available range
-	randVal := pss.rand.Int63n(pss.totalAvailable) + 1 // +1 because we're looking for a value >= 1
+	randVal := pss.rand.Int63n(pss.totalWeight) + 1
 
-	// Find the index of the item using binary search on prefixSums
 	idx := pss.findItemIndex(randVal)
 
-	// This should ideally not happen if totalAvailable is correct and findItemIndex works as expected
 	if idx == -1 || idx >= len(pss.itemIDs) {
-		return "", fmt.Errorf("internal error: failed to find item for random value %d (total available: %d)", randVal, pss.totalAvailable)
+		return "", fmt.Errorf("internal error: failed to find item for random value %d (total weight: %d)", randVal, pss.totalWeight)
 	}
 
 	selectedItemID := pss.itemIDs[idx]
+	if pss.itemInfo[selectedItemID].Quantity <= 0 {
+		return "", fmt.Errorf("internal error: selected item %s has zero quantity", selectedItemID)
+	}
 
 	return selectedItemID, nil
 }
@@ -99,35 +112,38 @@ func (pss *PrefixSumSelector) findItemIndex(value int64) int {
 func (pss *PrefixSumSelector) Update(itemID string, delta int64) {
 	idx, ok := pss.itemIndex[itemID]
 	if !ok {
-		// Item not found in the selector, ignore.
 		return
 	}
 
-	// The 'delta' parameter is the delta to apply.
-	change := delta
+	item := pss.itemInfo[itemID]
+	oldQuantity := item.Quantity
+	newQuantity := oldQuantity + int(delta)
+	item.Quantity = newQuantity
 
-	// Update prefix sums from the current item's index onwards
-	for i := idx; i < len(pss.prefixSums); i++ {
-		pss.prefixSums[i] += change
+	var weightChange int64
+	if oldQuantity > 0 && newQuantity <= 0 {
+		weightChange = -item.Probability
+	} else if oldQuantity <= 0 && newQuantity > 0 {
+		weightChange = item.Probability
 	}
 
-	pss.totalAvailable += change
+	if weightChange != 0 {
+		for i := idx; i < len(pss.prefixSums); i++ {
+			pss.prefixSums[i] += weightChange
+		}
+		pss.totalWeight += weightChange
+	}
 }
 
-// TotalAvailable returns the total count of all items currently available for selection.
+// TotalAvailable returns the total weight of all items currently available for selection.
 func (pss *PrefixSumSelector) TotalAvailable() int64 {
-	return pss.totalAvailable
+	return pss.totalWeight
 }
 
 // GetItemRemaining returns the remaining quantity of a specific item.
 func (pss *PrefixSumSelector) GetItemRemaining(itemID string) int {
-	idx, ok := pss.itemIndex[itemID]
-	if !ok {
-		return -1 // Item not found
+	if item, ok := pss.itemInfo[itemID]; ok {
+		return item.Quantity
 	}
-
-	if idx == 0 {
-		return int(pss.prefixSums[idx])
-	}
-	return int(pss.prefixSums[idx] - pss.prefixSums[idx-1])
+	return -1 // Item not found
 }

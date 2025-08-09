@@ -11,8 +11,11 @@ import (
 
 // FenwickTreeSelector implements the ItemSelector interface using a Fenwick Tree.
 type FenwickTreeSelector struct {
-	// tree stores the cumulative quantities of items.
+	// tree stores the cumulative probabilities of items.
 	tree *utils.FenwickTree
+
+	// items stores the original reward data.
+	items []types.PoolReward
 
 	// itemIDs maps the index in the Fenwick tree back to the actual ItemID.
 	itemIDs []string
@@ -20,8 +23,11 @@ type FenwickTreeSelector struct {
 	// itemIndex maps ItemID to its index in the Fenwick tree and itemIDs slice.
 	itemIndex map[string]int
 
-	// totalAvailable stores the sum of all quantities in the tree.
-	totalAvailable int64
+	// itemInfo tracks the current state (quantity) of each item.
+	itemInfo map[string]*types.PoolReward
+
+	// totalWeight stores the sum of all probabilities in the tree.
+	totalWeight int64
 
 	// rand is the random number generator for selection.
 	rand *rand.Rand
@@ -33,49 +39,54 @@ var _ types.ItemSelector = (*FenwickTreeSelector)(nil)
 func NewFenwickTreeSelector() *FenwickTreeSelector {
 	return &FenwickTreeSelector{
 		itemIndex: make(map[string]int),
+		itemInfo:  make(map[string]*types.PoolReward),
 		rand:      rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 
 // Reset initializes or re-initializes the selector with a new catalog.
 func (fts *FenwickTreeSelector) Reset(catalog []types.PoolReward) {
-	// fmt.Printf("FenwickTreeSelector.Reset called with catalog size: %d\n", len(catalog))
-	// Clear existing data
+	fts.items = make([]types.PoolReward, len(catalog))
 	fts.itemIDs = make([]string, len(catalog))
 	fts.itemIndex = make(map[string]int)
-	fts.totalAvailable = 0
+	fts.itemInfo = make(map[string]*types.PoolReward, len(catalog))
+	fts.totalWeight = 0
 
-	// Initialize Fenwick Tree with the size of the catalog
 	fts.tree = utils.NewFenwickTree(len(catalog))
 
-	// Populate the tree and maps
 	for i, item := range catalog {
+		// Create a copy to avoid modifying the original catalog
+		itemCopy := item
+		fts.items[i] = itemCopy
 		fts.itemIDs[i] = item.ItemID
 		fts.itemIndex[item.ItemID] = i
-		fts.tree.Add(i, int64(item.Quantity))
-		fts.totalAvailable += int64(item.Quantity)
+		fts.itemInfo[item.ItemID] = &fts.items[i]
+
+		if item.Quantity > 0 {
+			fts.tree.Add(i, item.Probability)
+			fts.totalWeight += item.Probability
+		}
 	}
-	// fmt.Printf("FenwickTreeSelector.Reset finished. Total Available: %d\n", fts.totalAvailable)
+	
 }
 
 // Select chooses an item based on its availability.
 func (fts *FenwickTreeSelector) Select(ctx *types.Context) (string, error) {
-	if fts.totalAvailable <= 0 {
+	if fts.totalWeight <= 0 {
 		return "", types.ErrEmptyRewardPool
 	}
 
-	// Generate a random value within the total available range
-	randVal := fts.rand.Int63n(fts.totalAvailable) + 1 // +1 because FenwickTree.Find expects 1-based cumulative sum
-
-	// Find the index of the item in Acc sum array. Where A[i] = sum(0...i]
+	randVal := fts.rand.Int63n(fts.totalWeight) + 1
 	idx := fts.tree.Find(randVal)
 
-	// This should ideally not happen if totalAvailable is correct and Find works as expected
 	if idx == -1 || idx >= len(fts.itemIDs) {
-		return "", fmt.Errorf("internal error: failed to find item for random value %d (total available: %d)", randVal, fts.totalAvailable)
+		return "", fmt.Errorf("internal error: failed to find item for random value %d (total weight: %d)", randVal, fts.totalWeight)
 	}
 
 	selectedItemID := fts.itemIDs[idx]
+	if fts.itemInfo[selectedItemID].Quantity <= 0 {
+		return "", fmt.Errorf("internal error: selected item %s has zero quantity", selectedItemID)
+	}
 
 	return selectedItemID, nil
 }
@@ -84,33 +95,34 @@ func (fts *FenwickTreeSelector) Select(ctx *types.Context) (string, error) {
 func (fts *FenwickTreeSelector) Update(itemID string, delta int64) {
 	idx, ok := fts.itemIndex[itemID]
 	if !ok {
-		// Item not found in the selector, perhaps a new item or an error.
-		// For now, we'll just ignore it as it shouldn't happen with existing items.
 		return
 	}
 
-	fts.tree.Add(idx, delta)
-	fts.totalAvailable += delta
+	item := fts.itemInfo[itemID]
+	oldQuantity := item.Quantity
+	newQuantity := oldQuantity + int(delta)
+	item.Quantity = newQuantity
+
+	// If the item becomes exhausted, remove its probability from the tree.
+	if oldQuantity > 0 && newQuantity <= 0 {
+		fts.tree.Add(idx, -item.Probability)
+		fts.totalWeight -= item.Probability
+	} else if oldQuantity <= 0 && newQuantity > 0 {
+		// If the item becomes available again, add its probability back.
+		fts.tree.Add(idx, item.Probability)
+		fts.totalWeight += item.Probability
+	}
 }
 
-// TotalAvailable returns the total count of all items currently available for selection.
+// TotalAvailable returns the total weight of all items currently available for selection.
 func (fts *FenwickTreeSelector) TotalAvailable() int64 {
-	return fts.totalAvailable
+	return fts.totalWeight
 }
 
 // GetItemRemaining returns the remaining quantity of a specific item.
 func (fts *FenwickTreeSelector) GetItemRemaining(itemID string) int {
-	idx, ok := fts.itemIndex[itemID]
-	if !ok {
-		return -1 // Item not found
+	if item, ok := fts.itemInfo[itemID]; ok {
+		return item.Quantity
 	}
-
-	// Query the current quantity of the item from the Fenwick tree.
-	// This requires querying the prefix sum up to idx, and then subtracting the prefix sum up to idx-1.
-	currentQuantity := fts.tree.Query(idx)
-	if idx > 0 {
-		currentQuantity -= fts.tree.Query(idx - 1)
-	}
-
-	return int(currentQuantity)
+	return -1 // Item not found
 }

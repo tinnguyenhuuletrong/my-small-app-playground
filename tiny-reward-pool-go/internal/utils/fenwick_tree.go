@@ -62,19 +62,27 @@ func (ft *FenwickTree) Query(index int) int64 {
 	return sum
 }
 
-func (ft *FenwickTree) Find(value int64) int {
-	low := 0
-	high := ft.size - 1
-	result := -1
-
-	for low <= high {
-		mid := (low + high) / 2
-		if ft.Query(mid) >= value {
-			result = mid
-			high = mid - 1
-		} else {
-			low = mid + 1
-		}
+func (ft *FenwickTree) Find(k int64) int {
+	currentIndex := 0
+	bitMask := 1
+	for (bitMask << 1) <= ft.size {
+		bitMask <<= 1
 	}
-	return result
+
+	for bitMask > 0 {
+		testIndex := currentIndex + bitMask
+		if testIndex <= ft.size {
+			if k > ft.tree[testIndex] {
+				k -= ft.tree[testIndex]
+				currentIndex = testIndex
+			}
+		}
+		bitMask >>= 1
+	}
+
+	if currentIndex >= ft.size {
+		return -1 // Should not happen if k is valid
+	}
+
+	return currentIndex
 }
