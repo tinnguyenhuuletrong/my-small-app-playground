@@ -20,17 +20,16 @@ func TestRewardDistributionReport(t *testing.T) {
 		{"FenwickTreeSelector", selector.NewFenwickTreeSelector()},
 	}
 
-	rewards := []types.PoolReward{
-		{ItemID: "gold", Quantity: 1000000, Probability: 10},
-		{ItemID: "silver", Quantity: 1000000, Probability: 20},
-		{ItemID: "rock", Quantity: 1000000, Probability: 90},
-	}
-
 	const totalDraws = 1000000
 
 	for _, s := range selectors {
 		t.Run(s.name, func(t *testing.T) {
 			ctx := &types.Context{Utils: &utils.UtilsImpl{}}
+			rewards := []types.PoolReward{
+				{ItemID: "gold", Quantity: 1000000, Probability: 10},
+				{ItemID: "silver", Quantity: 1000000, Probability: 20},
+				{ItemID: "rock", Quantity: 1000000, Probability: 90},
+			}
 			pool := rewardpool.NewPool(
 				rewards,
 				rewardpool.PoolOptional{
