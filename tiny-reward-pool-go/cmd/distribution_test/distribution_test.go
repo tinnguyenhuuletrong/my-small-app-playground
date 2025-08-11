@@ -100,15 +100,38 @@ func TestQuantityExhaustion(t *testing.T) {
 			p := processing.NewProcessor(ctx, pool, opt)
 
 			goldCount := 0
-			for i := 0; i < 100; i++ {
+			counts := make(map[string]int)
+			for i := 0; i < 200; i++ {
 				resp := <-p.Draw()
 				if resp.Err == nil && resp.Item == "gold" {
 					goldCount++
 				}
+				if resp.Err == nil {
+					counts[resp.Item]++
+				}
 			}
-			p.Stop()
 
-			if goldCount > 1 {
+			p.Stop()
+			final_state := pool.State()
+
+			// Make sure pool drained out
+			for _, val := range final_state {
+				if val.Quantity > 0 {
+					t.Errorf("Expected %s to be empty, but got %d", val.ItemID, val.Quantity)
+				}
+
+			}
+
+			// Make sure pool delivery distribution for each item equal the rewards
+			for _, val := range rewards {
+				deliveried_count := counts[val.ItemID]
+				if deliveried_count != val.Quantity {
+					t.Errorf("Expected %s to be delivery %d, but got %d", val.ItemID, val.Quantity, deliveried_count)
+				}
+			}
+
+			// Make sure only one gold
+			if goldCount != 1 {
 				t.Errorf("Expected 'gold' to be drawn at most once, but got %d", goldCount)
 			}
 		})
