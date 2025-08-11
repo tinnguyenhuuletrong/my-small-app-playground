@@ -54,6 +54,24 @@ type RewardPool interface {
 	LoadSnapshot(path string) error
 }
 
+// LogFormatter Interface: To handle serialization and deserialization.
+type LogFormatter interface {
+	// Batched encode. Should call in Flush
+	Encode(items []WalLogDrawItem) ([]byte, error)
+
+	// Batched decode. Should call in Parse
+	Decode(data []byte) ([]WalLogDrawItem, error)
+}
+
+// Storage Interface: To handle the physical writing, reading, and management of the log medium.
+type Storage interface {
+	WriteAll([][]byte) error
+	ReadAll() ([][]byte, error)
+	Flush() error
+	Close() error
+	Rotate(newPath string) error
+}
+
 // WAL interface
 // WAL interface with buffered logging
 type WAL interface {

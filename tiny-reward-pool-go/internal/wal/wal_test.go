@@ -7,6 +7,8 @@ import (
 
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal"
+	walformatter "github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/formatter"
+	walstorage "github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/storage"
 )
 
 func TestParseWAL(t *testing.T) {
@@ -24,7 +26,11 @@ func TestParseWAL(t *testing.T) {
 	_ = encoder.Encode(types.WalLogDrawItem{WalLogItem: types.WalLogItem{Type: types.LogTypeDraw}, RequestID: 4, ItemID: "bronze", Success: true})
 	f.Close()
 
-	items, err := wal.ParseWAL(path)
+	fileStorage, err := walstorage.NewFileStorage(path)
+	if err != nil {
+		t.Fatalf("failed to create file storage: %v", err)
+	}
+	items, err := wal.ParseWAL(path, walformatter.NewJSONFormatter(), fileStorage)
 	if err != nil {
 		t.Fatalf("ParseWAL failed: %v", err)
 	}
@@ -47,7 +53,11 @@ func TestParseWAL(t *testing.T) {
 
 func TestLogDraw(t *testing.T) {
 	path := "test_wal.log"
-	w, err := wal.NewWAL(path)
+	fileStorage, err := walstorage.NewFileStorage(path)
+	if err != nil {
+		t.Fatalf("Failed to create file storage: %v", err)
+	}
+	w, err := wal.NewWAL(path, walformatter.NewJSONFormatter(), fileStorage)
 	if err != nil {
 		t.Fatalf("Failed to create WAL: %v", err)
 	}
@@ -61,7 +71,11 @@ func TestLogDraw(t *testing.T) {
 
 func TestWALFlush(t *testing.T) {
 	path := "test_wal_flush.log"
-	w, err := wal.NewWAL(path)
+	fileStorage, err := walstorage.NewFileStorage(path)
+	if err != nil {
+		t.Fatalf("Failed to create file storage: %v", err)
+	}
+	w, err := wal.NewWAL(path, walformatter.NewJSONFormatter(), fileStorage)
 	if err != nil {
 		t.Fatalf("Failed to create WAL: %v", err)
 	}
@@ -79,7 +93,11 @@ func TestWALFlush(t *testing.T) {
 	}
 
 	// Verify content
-	items, err := wal.ParseWAL(path)
+	fileStorage, err = walstorage.NewFileStorage(path)
+	if err != nil {
+		t.Fatalf("failed to create file storage: %v", err)
+	}
+	items, err := wal.ParseWAL(path, walformatter.NewJSONFormatter(), fileStorage)
 	if err != nil {
 		t.Fatalf("ParseWAL failed after flush: %v", err)
 	}

@@ -131,9 +131,15 @@
 
 ### Result
 
-(To be filled in after implementation)
+- Successfully abstracted the WAL's storage and formatting logic by introducing `LogFormatter` and `Storage` interfaces.
+- Created `JSONFormatter` and `StringLineFormatter` implementations for `LogFormatter`.
+- Created `FileStorage` and `FileMMapStorage` implementations for `Storage`.
+- Refactored the `WAL` struct and its methods in `internal/wal/wal.go` to use the new interfaces.
+- Updated all relevant tests (`internal/recovery/recovery_test.go` and `internal/wal/wal_test.go`) to correctly use and test the new interfaces and implementations. All tests are now passing.
+- Updated the application wiring in `cmd/cli/main.go` to inject the `JSONFormatter` and `FileStorage` into `NewWAL` and `RecoverPool`.
+- Updated the benchmark tests in `cmd/bench/bench_wal_test.go` to use the new `LogFormatter` and `Storage` interfaces.
 
 ### Problem
 
-(To be filled in after implementation)
+- The core WAL implementation is still tied to a file-based system. The next iteration should focus on introducing `Reader` and `Writer` interfaces to abstract the underlying storage mechanism (file, network, etc.).
 

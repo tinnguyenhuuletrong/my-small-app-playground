@@ -152,6 +152,7 @@ func (p *Processor) Flush() error {
 			p.ctx.Utils.GetLogger().Debug(fmt.Sprintf("[Processor] WAL Flush and Commit - %d", p.stagedDraws))
 		}
 	} else {
+		fmt.Println(flushErr)
 		p.pool.RevertDraw()
 		if p.ctx.Utils.GetLogger() != nil {
 			p.ctx.Utils.GetLogger().Debug(fmt.Sprintf("[Processor] WAL Flush and Revert - %d", p.stagedDraws))

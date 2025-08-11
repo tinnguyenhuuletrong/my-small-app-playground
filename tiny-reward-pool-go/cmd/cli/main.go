@@ -12,19 +12,27 @@ import (
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/recovery"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal"
+	walformatter "github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/formatter"
+	walstorage "github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/storage"
 )
 
 func main() {
 	snapshotPath := "./tmp/pool_snapshot.json"
 	walPath := "./tmp/wal.log"
 
-	pool, err := recovery.RecoverPool(snapshotPath, walPath, "./samples/config.json")
+	jsonFormatter := walformatter.NewJSONFormatter()
+	fileStorage, err := walstorage.NewFileStorage(walPath)
+	if err != nil {
+		fmt.Println("Error creating file storage:", err)
+		os.Exit(1)
+	}
+	pool, err := recovery.RecoverPool(snapshotPath, walPath, "./samples/config.json", jsonFormatter, fileStorage)
 	if err != nil {
 		fmt.Println("Recovery failed:", err)
 		os.Exit(1)
 	}
 
-	w, err := wal.NewWAL(walPath)
+	w, err := wal.NewWAL(walPath, jsonFormatter, fileStorage)
 	if err != nil {
 		fmt.Println("Error opening WAL:", err)
 		os.Exit(1)

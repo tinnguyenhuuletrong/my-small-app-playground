@@ -10,7 +10,7 @@ import (
 )
 
 // RecoverPool loads the pool from snapshot, replays WAL, writes new snapshot, and rotates WAL.
-func RecoverPool(snapshotPath, walPath, configPath string) (*rewardpool.Pool, error) {
+func RecoverPool(snapshotPath, walPath, configPath string, formatter types.LogFormatter, storage types.Storage) (*rewardpool.Pool, error) {
 	var pool *rewardpool.Pool
 
 	// Try to load from snapshot first
@@ -27,7 +27,7 @@ func RecoverPool(snapshotPath, walPath, configPath string) (*rewardpool.Pool, er
 	}
 
 	// 2. Replay WAL log for recovery
-	items, err := wal.ParseWAL(walPath)
+	items, err := wal.ParseWAL(walPath, formatter, storage)
 	if err == nil {
 		for _, entry := range items {
 			if entry.Success {

@@ -13,6 +13,8 @@ import (
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/utils"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal"
+	walformatter "github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/formatter"
+	walstorage "github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/storage"
 )
 
 func BenchmarkPoolDrawWithBasicWALCallback(b *testing.B) {
@@ -21,7 +23,12 @@ func BenchmarkPoolDrawWithBasicWALCallback(b *testing.B) {
 	walPath := filepath.Join(tmpDir, "wal.log")
 	_ = os.Remove(walPath)
 
-	w, err := wal.NewWAL(walPath)
+	jsonFormatter := walformatter.NewJSONFormatter()
+	fileStorage, err := walstorage.NewFileStorage(walPath)
+	if err != nil {
+		b.Fatalf("failed to create file storage: %v", err)
+	}
+	w, err := wal.NewWAL(walPath, jsonFormatter, fileStorage)
 	if err != nil {
 		b.Fatalf("failed to create WAL: %v", err)
 	}
