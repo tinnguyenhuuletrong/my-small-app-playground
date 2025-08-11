@@ -21,6 +21,7 @@ A high-performance, in-memory Reward Pool Service written in Go. Designed for ra
 make build   # Build CLI binary
 make run     # Run CLI demo
 make test    # Run all unit tests
+make distribution_test # Run distribution tests to verify reward probabilities
 ```
 
 ### CLI Demo

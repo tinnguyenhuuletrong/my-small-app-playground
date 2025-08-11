@@ -5,6 +5,7 @@
 - Implements PRD requirements: reward pool, WAL, config, CLI, and robust processing model
 
 ## Recent Updates (Aug 2025)
+- **Task_08:** Fixed a critical bug in the reward distribution logic. Refactored the `ItemSelector` implementations (`FenwickTreeSelector` and `PrefixSumSelector`) to correctly use `Probability` for weighted selection and `Quantity` for availability. Delegated all state management from the `rewardpool.Pool` to the `ItemSelector`, making it the single source of truth. Added a `distribution_test` to verify the correctness of the reward distribution.
 - **Task_06:** Refactored the `rewardpool.Pool` to use a more efficient in-memory data structure for weighted random item selection, improving the performance of the `SelectItem` operation. Introduced an `ItemSelector` interface and implemented `FenwickTreeSelector` using a Fenwick Tree for O(log N) selection. Updated `Pool` to use this abstraction, ensuring `pendingDraws` are correctly accounted for to prevent over-draws. All related tests were updated and passed.
 - **Task_05:** Refactored the `Processor.Draw` method to return a channel (`<-chan DrawResponse`) for a more idiomatic and developer-friendly API. Optimized the channel-based implementation using `sync.Pool` to reduce allocation overhead. Refactored benchmarks to accurately measure performance, with `bench_draw_apis_test.go` providing a direct comparison of callback vs. channel `Draw` methods, and other benchmarks using the recommended channel-based approach.
 - **Task_04:** Refactored the core processing logic to be strictly WAL-first and transactional.
@@ -44,10 +45,11 @@
 
 ## Benchmarks: 
 Compare No WAL, Real WAL, and Mmap WAL for throughput, latency, and GC count. See `_ai/doc/bench.md` for detailed results
-## Testing
-- Unit tests for all modules, including the new transactional and batching logic.
-- All tests passing, including crash/restart recovery scenarios.
-- **Benchmark tests** for all WAL variants.
+
+## Testing and Verification
+- **Unit Tests:** Run `make test` to execute all unit tests.
+- **Distribution Test:** Run `make distribution_test` to verify that the reward distribution is correct according to the configured probabilities. This is a critical step to ensure the core logic is working as expected.
+- **Benchmarks:** Run `make bench` to run all benchmark tests.
 
 ## Example Usage
 - See `cmd/cli/main.go` for a demo of the complete system.
