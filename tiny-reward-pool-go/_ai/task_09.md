@@ -80,8 +80,11 @@
     *   **`LogFormatter` Interface:** To handle serialization and deserialization.
         ```go
         type LogFormatter interface {
-            Encode(item types.WalLogDrawItem) ([]byte, error)
-            Decode(data []byte) (types.WalLogDrawItem, error)
+            // Batched encode. Should call in Flush
+            Encode(items []types.WalLogDrawItem) ([]byte, error)
+
+            // Batched decode. Should call in Parse
+            Decode(data []byte) ([]types.WalLogDrawItem, error)
         }
         ```
     *   **`Storage` Interface:** To handle the physical writing, reading, and management of the log medium.
@@ -96,12 +99,12 @@
         ```
 
 3.  **Create Formatter Implementations:**
-    *   **`JSONFormatter`:** Create a struct that implements `LogFormatter`. The `Encode` method will use `json.Marshal` and the `Decode` method will use `json.Unmarshal`. This will encapsulate the logic from Iteration 01.
-    *   **`StringLineFormatter`:** Create a struct that implements `LogFormatter`. This will bring back the original `fmt.Sprintf` and `fmt.Sscanf` logic to represent the old format for benchmarking purposes.
+    *   **`JSONFormatter`:** `internal/wal/formatter/json_formatter` Create a struct that implements `LogFormatter`. The `Encode` method will use `json.Marshal` and the `Decode` method will use `json.Unmarshal`. This will encapsulate the logic from Iteration 01.
+    *   **`StringLineFormatter`:** `internal/wal/formatter/string_line_formatter` Create a struct that implements `LogFormatter`. This will bring back the original `fmt.Sprintf` and `fmt.Sscanf` logic to represent the old format for benchmarking purposes.
 
 4.  **Create Storage Implementation:**
-    *   **`FileStorage`:** Create a struct that implements the `Storage` interface. It will manage the `os.File` handle, reading lines, and writing bytes. This will abstract all the direct file operations from the main `wal.go` file.
-    *   **`FileMMapStorage`:** Create a struct that implements the `Storage` interface. Copied logic as `cmd/bench/bench_wal_mmap_test.go`.
+    *   **`FileStorage`:** `internal/wal/storage/file_storage.go` Create a struct that implements the `Storage` interface. It will manage the `os.File` handle, reading lines, and writing bytes. This will abstract all the direct file operations from the main `wal.go` file.
+    *   **`FileMMapStorage`:** `internal/wal/storage/file_mmap_storage.go` Create a struct that implements the `Storage` interface. Copied logic as `cmd/bench/bench_wal_mmap_test.go`.
 
 5.  **Refactor the `WAL` struct and its methods:**
     *   Modify the `WAL` struct in `internal/wal/wal.go` to be composed of the new interfaces:
@@ -117,11 +120,14 @@
     *   `Flush` will Flush all of it as `WriteAll`.
     *   The global `ParseWAL` function will be adapted to use the new components.
 
-6.  **Update Application Wiring:**
-    *   In `cmd/cli/main.go`, update the WAL initialization to create and inject the desired `JSONFormatter` and `FileStorage` into `NewWAL`.
+6.  **Update Test:**
+    * Make sure `make test` passed
 
-7.  **Update Benchmarks:**
-    *   Modify the benchmarks in `cmd/bench/` to construct `WAL` instances with both the `JSONFormatter` and the `StringLineFormatter` to allow for direct performance comparison between the two formats.
+7.  **Add new Test:**
+    * Add test for storage and formater implement
+
+8.  **Update Application Wiring:**
+    *   In `cmd/cli/main.go`, update the WAL initialization to create and inject the desired `JSONFormatter` and `FileStorage` into `NewWAL`.
 
 ### Result
 
