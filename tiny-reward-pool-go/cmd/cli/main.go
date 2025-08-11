@@ -44,7 +44,7 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	fmt.Println("[Pool state] ", pool)
+	fmt.Println("[Pool state] ", pool.State())
 
 	fmt.Println("Press Ctrl+C or send SIGTERM to exit.")
 
@@ -71,7 +71,7 @@ func main() {
 			// Lock draw requests
 			<-drawLock
 			proc.Flush()
-			fmt.Println("[Pool state] ", pool)
+			fmt.Println("[Pool state] ", pool.State())
 			fmt.Println("Saving pool snapshot...")
 			if err := pool.SaveSnapshot(snapshotPath); err != nil {
 				fmt.Println("Error saving snapshot:", err)
@@ -99,6 +99,6 @@ func main() {
 	proc.Stop()
 	w.Close()
 
-	fmt.Println("[Pool state] ", pool)
+	fmt.Println("[Pool state] ", pool.State())
 	fmt.Println("Shutdown complete.")
 }

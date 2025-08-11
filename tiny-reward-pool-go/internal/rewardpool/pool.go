@@ -9,7 +9,6 @@ import (
 )
 
 type Pool struct {
-	catalog      []types.PoolReward
 	pendingDraws map[string]int
 	selector     types.ItemSelector
 }
@@ -37,18 +36,18 @@ func NewPool(Catalog []types.PoolReward, ops ...PoolOptional) *Pool {
 	}
 
 	pool := &Pool{
-		catalog:      Catalog,
 		pendingDraws: make(map[string]int),
 		selector:     sel,
 	}
-	pool.selector.Reset(Catalog)
+
+	copyCatalog := Catalog
+	pool.selector.Reset(copyCatalog)
 	return pool
 }
 
 func (p *Pool) Load(config types.ConfigPool) error {
-	p.catalog = config.Catalog
 	p.pendingDraws = make(map[string]int)
-	p.selector.Reset(p.catalog)
+	p.selector.Reset(config.Catalog)
 	return nil
 }
 
@@ -62,8 +61,12 @@ func (p *Pool) SaveSnapshot(path string) error {
 		return err
 	}
 	defer file.Close()
+
+	// Reflect item remaining
+	snapshot_catalog := p.selector.SnapshotCatalog()
+
 	snap := poolSnapshot{
-		Catalog: p.catalog,
+		Catalog: snapshot_catalog,
 	}
 	enc := json.NewEncoder(file)
 	return enc.Encode(snap)
@@ -80,9 +83,9 @@ func (p *Pool) LoadSnapshot(path string) error {
 	if err := dec.Decode(&snap); err != nil {
 		return err
 	}
-	p.catalog = snap.Catalog
+
 	p.pendingDraws = make(map[string]int)
-	p.selector.Reset(p.catalog)
+	p.selector.Reset(snap.Catalog)
 	return nil
 }
 
@@ -106,18 +109,6 @@ func (p *Pool) SelectItem(ctx *types.Context) (string, error) {
 
 // CommitDraw finalizes a staged draw
 func (p *Pool) CommitDraw() {
-	for itemID, count := range p.pendingDraws {
-		for i := range p.catalog {
-			if p.catalog[i].ItemID == itemID {
-				if p.catalog[i].Quantity >= count {
-					p.catalog[i].Quantity -= count
-				} else {
-					p.catalog[i].Quantity = 0
-				}
-				break
-			}
-		}
-	}
 	p.pendingDraws = make(map[string]int)
 }
 
@@ -131,13 +122,14 @@ func (p *Pool) RevertDraw() {
 
 // ApplyDrawLog decrements the quantity for a given itemID if available (internal use only)
 func (p *Pool) ApplyDrawLog(itemID string) {
-	for i := range p.catalog {
-		if p.catalog[i].ItemID == itemID && p.catalog[i].Quantity > 0 {
-			p.catalog[i].Quantity--
-			p.selector.Update(itemID, -1) // Decrement in selector as well
-			break
-		}
+	if p.selector.GetItemRemaining((itemID)) > 0 {
+		p.selector.Update(itemID, -1) // Decrement in selector as well
 	}
+}
+
+func (p *Pool) State() []types.PoolReward {
+	catalog := p.selector.SnapshotCatalog()
+	return catalog
 }
 
 func CreatePoolFromConfigPath(configPath string) (*Pool, error) {

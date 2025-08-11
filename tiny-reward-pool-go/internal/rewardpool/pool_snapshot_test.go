@@ -26,7 +26,8 @@ func TestPoolSnapshotSaveLoad(t *testing.T) {
 		t.Fatalf("LoadSnapshot failed: %v", err)
 	}
 
-	if loadedPool.catalog[0].Quantity != 10 {
-		t.Fatalf("Expected quantity 10, got %d", loadedPool.catalog[0].Quantity)
+	val := loadedPool.GetItemRemaining("gold")
+	if val != 10 {
+		t.Fatalf("Expected quantity 10, got %d", val)
 	}
 }

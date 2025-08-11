@@ -38,8 +38,9 @@ func TestTransactionalDraw(t *testing.T) {
 
 	// CommitDraw should decrement quantity in catalog and clear pendingDraws
 	pool.CommitDraw()
-	if pool.catalog[0].Quantity != 0 {
-		t.Fatalf("Expected catalog quantity 0 after commit, got %d", pool.catalog[0].Quantity)
+	val := pool.GetItemRemaining("gold")
+	if val != 0 {
+		t.Fatalf("Expected catalog quantity 0 after commit, got %d", val)
 	}
 	if pool.pendingDraws["gold"] != 0 {
 		t.Errorf("Expected pendingDraws[gold] to be 0 after commit, got %d", pool.pendingDraws["gold"])
@@ -84,8 +85,9 @@ func TestTransactionalDraw(t *testing.T) {
 	}
 	pool = NewPool(applyDrawLogCatalog) // Reset pool for ApplyDrawLog test
 	pool.ApplyDrawLog("gold")
-	if pool.catalog[0].Quantity != 0 {
-		t.Fatalf("Expected catalog quantity 0 after ApplyDrawLog, got %d", pool.catalog[0].Quantity)
+	val = pool.GetItemRemaining("gold")
+	if val != 0 {
+		t.Fatalf("Expected catalog quantity 0 after ApplyDrawLog, got %d", val)
 	}
 	if pool.selector.GetItemRemaining("gold") != 0 {
 		t.Errorf("Expected selector remaining gold to be 0 after ApplyDrawLog, got %d", pool.selector.GetItemRemaining("gold"))

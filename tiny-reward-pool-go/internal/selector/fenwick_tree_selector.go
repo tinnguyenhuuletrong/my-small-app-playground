@@ -67,7 +67,7 @@ func (fts *FenwickTreeSelector) Reset(catalog []types.PoolReward) {
 			fts.totalWeight += item.Probability
 		}
 	}
-	
+
 }
 
 // Select chooses an item based on its availability.
@@ -125,4 +125,17 @@ func (fts *FenwickTreeSelector) GetItemRemaining(itemID string) int {
 		return item.Quantity
 	}
 	return -1 // Item not found
+}
+
+// Return PoolReward[] for Snapshot
+func (fts *FenwickTreeSelector) SnapshotCatalog() []types.PoolReward {
+	snapshot_catalog := make([]types.PoolReward, len(fts.items))
+	for i, val := range fts.items {
+		snapshot_catalog[i] = types.PoolReward{
+			Quantity:    fts.GetItemRemaining(val.ItemID),
+			ItemID:      val.ItemID,
+			Probability: val.Probability,
+		}
+	}
+	return snapshot_catalog
 }

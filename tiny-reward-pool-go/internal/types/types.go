@@ -79,6 +79,9 @@ type ItemSelector interface {
 
 	// GetItemRemaining returns the remaining quantity of a specific item.
 	GetItemRemaining(itemID string) int
+
+	// Return PoolReward[] for Snapshot
+	SnapshotCatalog() []PoolReward
 }
 
 // Error

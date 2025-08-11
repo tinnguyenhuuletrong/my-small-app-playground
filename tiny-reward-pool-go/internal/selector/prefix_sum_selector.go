@@ -147,3 +147,16 @@ func (pss *PrefixSumSelector) GetItemRemaining(itemID string) int {
 	}
 	return -1 // Item not found
 }
+
+// Return PoolReward[] for Snapshot
+func (pss *PrefixSumSelector) SnapshotCatalog() []types.PoolReward {
+	snapshot_catalog := make([]types.PoolReward, len(pss.items))
+	for i, val := range pss.items {
+		snapshot_catalog[i] = types.PoolReward{
+			Quantity:    pss.GetItemRemaining(val.ItemID),
+			ItemID:      val.ItemID,
+			Probability: val.Probability,
+		}
+	}
+	return snapshot_catalog
+}
