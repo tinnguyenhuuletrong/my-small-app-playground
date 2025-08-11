@@ -1,6 +1,7 @@
 package wal_test
 
 import (
+	"encoding/json"
 	"os"
 	"testing"
 
@@ -14,23 +15,34 @@ func TestParseWAL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create wal log: %v", err)
 	}
-	_, _ = f.WriteString("DRAW 1 gold\nDRAW 2 silver\nDRAW 3 FAILED\nDRAW 4 bronze\n")
+
+	// Write test data in JSONL format
+	encoder := json.NewEncoder(f)
+	_ = encoder.Encode(types.WalLogDrawItem{WalLogItem: types.WalLogItem{Type: types.LogTypeDraw}, RequestID: 1, ItemID: "gold", Success: true})
+	_ = encoder.Encode(types.WalLogDrawItem{WalLogItem: types.WalLogItem{Type: types.LogTypeDraw}, RequestID: 2, ItemID: "silver", Success: true})
+	_ = encoder.Encode(types.WalLogDrawItem{WalLogItem: types.WalLogItem{Type: types.LogTypeDraw, Error: types.ErrorPoolEmpty}, RequestID: 3, Success: false})
+	_ = encoder.Encode(types.WalLogDrawItem{WalLogItem: types.WalLogItem{Type: types.LogTypeDraw}, RequestID: 4, ItemID: "bronze", Success: true})
 	f.Close()
 
 	items, err := wal.ParseWAL(path)
 	if err != nil {
 		t.Fatalf("ParseWAL failed: %v", err)
 	}
+	defer os.Remove(path)
+
 	if len(items) != 4 {
-		t.Errorf("expected 4 items, got %d", len(items))
+		t.Fatalf("expected 4 items, got %d", len(items))
 	}
-	if items[0] != (types.WalLogItem{RequestID: 1, ItemID: "gold", Success: true}) {
-		t.Errorf("unexpected item: %+v", items[0])
+
+	expectedItem0 := types.WalLogDrawItem{WalLogItem: types.WalLogItem{Type: types.LogTypeDraw}, RequestID: 1, ItemID: "gold", Success: true}
+	if items[0].Type != expectedItem0.Type || items[0].RequestID != expectedItem0.RequestID || items[0].ItemID != expectedItem0.ItemID || items[0].Success != expectedItem0.Success {
+		t.Errorf("unexpected item 0: got %+v, want %+v", items[0], expectedItem0)
 	}
-	if items[2].Success != false || items[2].ItemID != "" {
-		t.Errorf("expected failed log for item 3, got %+v", items[2])
+
+	expectedItem2 := types.WalLogDrawItem{WalLogItem: types.WalLogItem{Type: types.LogTypeDraw, Error: types.ErrorPoolEmpty}, RequestID: 3, Success: false}
+	if items[2].Type != expectedItem2.Type || items[2].RequestID != expectedItem2.RequestID || items[2].Success != expectedItem2.Success || items[2].Error != expectedItem2.Error {
+		t.Errorf("unexpected item 2: got %+v, want %+v", items[2], expectedItem2)
 	}
-	os.Remove(path)
 }
 
 func TestLogDraw(t *testing.T) {
@@ -41,7 +53,7 @@ func TestLogDraw(t *testing.T) {
 	}
 	defer os.Remove(path)
 	defer w.Close()
-	item := types.WalLogItem{RequestID: 1, ItemID: "gold", Success: true}
+	item := types.WalLogDrawItem{WalLogItem: types.WalLogItem{Type: types.LogTypeDraw}, RequestID: 1, ItemID: "gold", Success: true}
 	if err := w.LogDraw(item); err != nil {
 		t.Fatalf("LogDraw failed: %v", err)
 	}
@@ -55,7 +67,26 @@ func TestWALFlush(t *testing.T) {
 	}
 	defer os.Remove(path)
 	defer w.Close()
+
+	// Log one item to flush
+	item := types.WalLogDrawItem{WalLogItem: types.WalLogItem{Type: types.LogTypeDraw}, RequestID: 1, ItemID: "gold", Success: true}
+	if err := w.LogDraw(item); err != nil {
+		t.Fatalf("LogDraw failed: %v", err)
+	}
+
 	if err := w.Flush(); err != nil {
 		t.Fatalf("Flush failed: %v", err)
+	}
+
+	// Verify content
+	items, err := wal.ParseWAL(path)
+	if err != nil {
+		t.Fatalf("ParseWAL failed after flush: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item after flush, got %d", len(items))
+	}
+	if items[0].ItemID != "gold" {
+		t.Errorf("unexpected item after flush: %+v", items[0])
 	}
 }

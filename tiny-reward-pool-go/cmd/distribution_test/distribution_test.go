@@ -36,7 +36,7 @@ func TestRewardDistributionReport(t *testing.T) {
 					Selector: s.selector,
 				},
 			)
-			w := &selectorTestmockWAL{}
+			w := &utils.MockWAL{}
 			ctx.WAL = w
 
 			opt := &processing.ProcessorOptional{RequestBufferSize: 1000, FlushAfterNDraw: 1000}
@@ -93,7 +93,7 @@ func TestQuantityExhaustion(t *testing.T) {
 					Selector: s.selector,
 				},
 			)
-			w := &selectorTestmockWAL{}
+			w := &utils.MockWAL{}
 			ctx.WAL = w
 
 			opt := &processing.ProcessorOptional{RequestBufferSize: 100, FlushAfterNDraw: 10}
@@ -137,13 +137,3 @@ func TestQuantityExhaustion(t *testing.T) {
 		})
 	}
 }
-
-type selectorTestmockWAL struct {
-}
-
-func (m *selectorTestmockWAL) LogDraw(item types.WalLogItem) error {
-	return nil
-}
-func (m *selectorTestmockWAL) Close() error                { return nil }
-func (m *selectorTestmockWAL) Flush() error                { return nil }
-func (m *selectorTestmockWAL) SetSnapshotPath(path string) {}

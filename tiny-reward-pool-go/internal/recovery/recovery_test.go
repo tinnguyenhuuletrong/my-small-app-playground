@@ -41,7 +41,7 @@ func TestRecoverPool_Basic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create wal log: %v", err)
 	}
-	_, _ = f.WriteString("DRAW 1 gold\nDRAW 2 silver\nDRAW 3 FAILED\n")
+	_, _ = f.WriteString(`{"type":1,"request_id":1,"item_id":"gold","success":true}\n{"type":1,"request_id":2,"item_id":"silver","success":true}\n{"type":1,"request_id":3,"success":false,"error":1}\n`)
 	f.Close()
 
 	recovered, err := RecoverPool(snapshot, wal, config)

@@ -17,7 +17,7 @@ func BenchmarkDrawWithCallback(b *testing.B) {
 			{ItemID: "gold", Quantity: b.N, Probability: 1.0},
 		},
 	)
-	w := &apiTestmockWAL{}
+	w := &utils.MockWAL{}
 	ctx.WAL = w
 
 	opt := &processing.ProcessorOptional{RequestBufferSize: b.N}
@@ -44,7 +44,7 @@ func BenchmarkDrawChannel(b *testing.B) {
 			{ItemID: "gold", Quantity: b.N, Probability: 1.0},
 		},
 	)
-	w := &apiTestmockWAL{}
+	w := &utils.MockWAL{}
 	ctx.WAL = w
 
 	opt := &processing.ProcessorOptional{RequestBufferSize: b.N}
@@ -58,13 +58,3 @@ func BenchmarkDrawChannel(b *testing.B) {
 
 	p.Stop()
 }
-
-type apiTestmockWAL struct {
-}
-
-func (m *apiTestmockWAL) LogDraw(item types.WalLogItem) error {
-	return nil
-}
-func (m *apiTestmockWAL) Close() error                { return nil }
-func (m *apiTestmockWAL) Flush() error                { return nil }
-func (m *apiTestmockWAL) SetSnapshotPath(path string) {}

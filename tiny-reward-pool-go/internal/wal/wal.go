@@ -2,7 +2,7 @@ package wal
 
 import (
 	"bufio"
-	"fmt"
+	"encoding/json"
 	"os"
 
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
@@ -10,7 +10,7 @@ import (
 
 type WAL struct {
 	file   *os.File
-	buffer []types.WalLogItem
+	buffer []types.WalLogDrawItem
 }
 
 var _ types.WAL = (*WAL)(nil)
@@ -19,21 +19,14 @@ func (w *WAL) Flush() error {
 	if len(w.buffer) == 0 {
 		return nil
 	}
-	var allLines []byte
+
+	encoder := json.NewEncoder(w.file)
 	for _, item := range w.buffer {
-		var line string
-		if item.Success {
-			line = fmt.Sprintf("DRAW %d %s\n", item.RequestID, item.ItemID)
-		} else {
-			line = fmt.Sprintf("DRAW %d FAILED\n", item.RequestID)
-		}
-		allLines = append(allLines, []byte(line)...)
-	}
-	if len(allLines) > 0 {
-		if _, err := w.file.Write(allLines); err != nil {
+		if err := encoder.Encode(item); err != nil {
 			return err
 		}
 	}
+
 	w.buffer = w.buffer[:0]
 	return w.file.Sync()
 }
@@ -44,10 +37,10 @@ func NewWAL(path string) (*WAL, error) {
 		return nil, err
 	}
 	// Preallocate buffer for performance (e.g., 4096 entries)
-	return &WAL{file: f, buffer: make([]types.WalLogItem, 0, 4096)}, nil
+	return &WAL{file: f, buffer: make([]types.WalLogDrawItem, 0, 4096)}, nil
 }
 
-func (w *WAL) LogDraw(item types.WalLogItem) error {
+func (w *WAL) LogDraw(item types.WalLogDrawItem) error {
 	w.buffer = append(w.buffer, item)
 	return nil
 }
@@ -69,27 +62,30 @@ func (w *WAL) Rotate(path string) error {
 	return nil
 }
 
-// ParseWAL reads the WAL log file and returns a slice of WalLogItem
-func ParseWAL(path string) ([]types.WalLogItem, error) {
+// ParseWAL reads the WAL log file and returns a slice of WalLogDrawItem
+func ParseWAL(path string) ([]types.WalLogDrawItem, error) {
 	f, err := os.Open(path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil // Return empty slice if WAL file doesn't exist
+		}
 		return nil, err
 	}
 	defer f.Close()
-	var items []types.WalLogItem
+
+	var items []types.WalLogDrawItem
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
-		line := scanner.Text()
-		var reqID uint64
-		var itemID string
-		n, _ := fmt.Sscanf(line, "DRAW %d %s", &reqID, &itemID)
-		if n == 2 {
-			if itemID == "FAILED" {
-				items = append(items, types.WalLogItem{RequestID: reqID, ItemID: "", Success: false})
-			} else {
-				items = append(items, types.WalLogItem{RequestID: reqID, ItemID: itemID, Success: true})
-			}
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
 		}
+		var item types.WalLogDrawItem
+		if err := json.Unmarshal(line, &item); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
 	}
+
 	return items, scanner.Err()
 }

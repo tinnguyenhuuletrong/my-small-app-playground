@@ -1,6 +1,10 @@
 package utils
 
-import "math/rand"
+import (
+	"math/rand"
+
+	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
+)
 
 // MockRandSource is a mock implementation of rand.Source for predictable testing.
 type MockRandSource struct {
@@ -22,3 +26,11 @@ func (m *MockRandSource) Seed(seed int64) {
 }
 
 var _ rand.Source = (*MockRandSource)(nil)
+
+type MockWAL struct{}
+
+func (m *MockWAL) LogDraw(item types.WalLogDrawItem) error { return nil }
+func (m *MockWAL) Close() error                            { return nil }
+func (m *MockWAL) Flush() error                            { return nil }
+func (m *MockWAL) SetSnapshotPath(path string)             {}
+func (m *MockWAL) Rotate(path string) error                { return nil }

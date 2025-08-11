@@ -19,7 +19,7 @@ func BenchmarkPoolDrawNoWalChannel(b *testing.B) {
 		},
 	)
 	ctx := &types.Context{
-		WAL:   &mockWAL{},
+		WAL:   &utils.MockWAL{},
 		Utils: &utils.UtilsImpl{},
 	}
 
@@ -53,7 +53,7 @@ func BenchmarkPoolDrawNoWalCallback(b *testing.B) {
 		},
 	)
 	ctx := &types.Context{
-		WAL:   &mockWAL{},
+		WAL:   &utils.MockWAL{},
 		Utils: &utils.UtilsImpl{},
 	}
 
@@ -87,13 +87,3 @@ func BenchmarkPoolDrawNoWalCallback(b *testing.B) {
 	b.ReportMetric(float64(memStatsEnd.TotalAlloc-memStatsStart.TotalAlloc)/float64(b.N), "bytes/draw")
 	b.ReportMetric(float64(memStatsEnd.NumGC-memStatsStart.NumGC), "gc_count")
 }
-
-type mockWAL struct {
-}
-
-func (m *mockWAL) LogDraw(item types.WalLogItem) error {
-	return nil
-}
-func (m *mockWAL) Close() error                { return nil }
-func (m *mockWAL) Flush() error                { return nil }
-func (m *mockWAL) SetSnapshotPath(path string) {}

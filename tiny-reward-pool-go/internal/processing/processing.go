@@ -79,11 +79,23 @@ func (p *Processor) run() {
 		case req := <-p.reqChan:
 			item, err := p.pool.SelectItem(p.ctx)
 			var walErr error
-			if err == nil {
-				walErr = p.ctx.WAL.LogDraw(types.WalLogItem{RequestID: req.RequestID, ItemID: item, Success: true})
-			} else {
-				walErr = p.ctx.WAL.LogDraw(types.WalLogItem{RequestID: req.RequestID, ItemID: "", Success: false})
+			logItem := types.WalLogDrawItem{
+				WalLogItem: types.WalLogItem{
+					Type: types.LogTypeDraw,
+				},
+				RequestID: req.RequestID,
+				Success:   err == nil,
 			}
+
+			if logItem.Success {
+				logItem.ItemID = item
+			} else {
+				if err == types.ErrEmptyRewardPool {
+					logItem.Error = types.ErrorPoolEmpty
+				}
+				// NOTE: We can map more error types here in the future
+			}
+			walErr = p.ctx.WAL.LogDraw(logItem)
 			p.stagedDraws++
 
 			// Batch flush/commit after N draws

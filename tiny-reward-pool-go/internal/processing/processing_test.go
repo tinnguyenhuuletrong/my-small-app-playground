@@ -165,20 +165,21 @@ func (m *mockPool) LoadSnapshot(path string) error  { return nil }
 func (m *mockPool) SaveSnapshot(path string) error  { return nil }
 
 type mockWAL struct {
-	logged     []types.WalLogItem
+	logged     []types.WalLogDrawItem
 	fail       bool
 	flushCount int
 	flushFail  bool
 }
 
-func (m *mockWAL) LogDraw(item types.WalLogItem) error {
+func (m *mockWAL) LogDraw(item types.WalLogDrawItem) error {
 	m.logged = append(m.logged, item)
 	if m.fail {
 		return errors.New("simulated WAL error")
 	}
 	return nil
 }
-func (m *mockWAL) Close() error { return nil }
+func (m *mockWAL) Close() error        { return nil }
+func (m *mockWAL) Rotate(string) error { return nil }
 func (m *mockWAL) Flush() error {
 	m.flushCount++
 	if m.flushFail {

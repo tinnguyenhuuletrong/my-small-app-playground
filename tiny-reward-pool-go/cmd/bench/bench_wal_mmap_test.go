@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -99,19 +100,22 @@ func NewMmapWAL(path string) (*MmapWAL, error) {
 	return &MmapWAL{file: f, mmap: mm, size: walSize}, nil
 }
 
-func (w *MmapWAL) LogDraw(item types.WalLogItem) error {
-	var line string
-	if item.Success {
-		line = fmt.Sprintf("DRAW %d %s\n", item.RequestID, item.ItemID)
-	} else {
-		line = fmt.Sprintf("DRAW %d FAILED\n", item.RequestID)
+func (w *MmapWAL) LogDraw(item types.WalLogDrawItem) error {
+	lineBytes, err := json.Marshal(item)
+	if err != nil {
+		return err
 	}
-	lineBytes := []byte(line)
+	lineBytes = append(lineBytes, '\n') // Append newline for JSONL format
+
 	if w.offset+int64(len(lineBytes)) > w.size {
 		return fmt.Errorf("WAL mmap full")
 	}
 	copy(w.mmap[w.offset:], lineBytes)
 	w.offset += int64(len(lineBytes))
+	return nil
+}
+
+func (w *MmapWAL) Rotate(string) error {
 	return nil
 }
 

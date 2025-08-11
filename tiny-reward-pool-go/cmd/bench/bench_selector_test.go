@@ -25,7 +25,7 @@ func BenchmarkDrawChannel_PrefixSumSelector(b *testing.B) {
 			Selector: selector.NewPrefixSumSelector(),
 		},
 	)
-	w := &selectorTestmockWAL{}
+	w := &utils.MockWAL{}
 	ctx.WAL = w
 
 	opt := &processing.ProcessorOptional{RequestBufferSize: b.N, FlushAfterNDraw: 1000}
@@ -60,7 +60,7 @@ func BenchmarkDrawChannel_FenwickTreeSelector(b *testing.B) {
 			Selector: selector.NewFenwickTreeSelector(),
 		},
 	)
-	w := &selectorTestmockWAL{}
+	w := &utils.MockWAL{}
 	ctx.WAL = w
 
 	opt := &processing.ProcessorOptional{RequestBufferSize: b.N, FlushAfterNDraw: 1000}
@@ -80,13 +80,3 @@ func BenchmarkDrawChannel_FenwickTreeSelector(b *testing.B) {
 	b.ReportMetric(float64(memStatsEnd.TotalAlloc-memStatsStart.TotalAlloc)/float64(b.N), "bytes/draw")
 	b.ReportMetric(float64(memStatsEnd.NumGC-memStatsStart.NumGC), "gc_count")
 }
-
-type selectorTestmockWAL struct {
-}
-
-func (m *selectorTestmockWAL) LogDraw(item types.WalLogItem) error {
-	return nil
-}
-func (m *selectorTestmockWAL) Close() error                { return nil }
-func (m *selectorTestmockWAL) Flush() error                { return nil }
-func (m *selectorTestmockWAL) SetSnapshotPath(path string) {}

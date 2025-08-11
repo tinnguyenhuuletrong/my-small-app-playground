@@ -2,6 +2,22 @@ package types
 
 import "log/slog"
 
+// LogType defines the type of a WAL log entry.
+type LogType byte
+
+const (
+	LogTypeDraw LogType = iota + 1
+)
+
+// LogError defines the type of a WAL log error.
+type LogError byte
+
+const (
+	ErrorNone LogError = iota
+	ErrorPoolEmpty
+	ErrorItemNotFound
+)
+
 // ConfigPool represents the configuration for the reward pool
 type ConfigPool struct {
 	Catalog []PoolReward `json:"catalog"`
@@ -16,9 +32,16 @@ type PoolReward struct {
 
 // WalLogItem represents a WAL log entry
 type WalLogItem struct {
-	RequestID uint64
-	ItemID    string
-	Success   bool
+	Type  LogType  `json:"type"`
+	Error LogError `json:"error,omitempty"`
+}
+
+// WalLogDrawItem represents a WAL log entry for a draw operation
+type WalLogDrawItem struct {
+	WalLogItem
+	RequestID uint64 `json:"request_id"`
+	ItemID    string `json:"item_id,omitempty"`
+	Success   bool   `json:"success"`
 }
 
 // RewardPool interface
@@ -35,11 +58,13 @@ type RewardPool interface {
 // WAL interface with buffered logging
 type WAL interface {
 	// LogDraw appends a log entry to the buffer (does not write to disk immediately)
-	LogDraw(item WalLogItem) error
+	LogDraw(item WalLogDrawItem) error
 	// Flush writes all buffered log entries to disk
 	Flush() error
 	// Close closes the WAL file
 	Close() error
+	// Rotate file
+	Rotate(path string) error
 }
 
 // Config interface

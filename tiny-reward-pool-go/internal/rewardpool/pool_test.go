@@ -15,7 +15,7 @@ func TestTransactionalDraw(t *testing.T) {
 	pool := NewPool(initialCatalog)
 
 	ctx := &types.Context{
-		WAL:   &mockWAL{},
+		WAL:   &utils.MockWAL{},
 		Utils: &utils.UtilsImpl{},
 	}
 
@@ -93,10 +93,3 @@ func TestTransactionalDraw(t *testing.T) {
 		t.Errorf("Expected selector remaining gold to be 0 after ApplyDrawLog, got %d", pool.selector.GetItemRemaining("gold"))
 	}
 }
-
-type mockWAL struct{}
-
-func (m *mockWAL) LogDraw(item types.WalLogItem) error { return nil }
-func (m *mockWAL) Close() error                        { return nil }
-func (m *mockWAL) Flush() error                        { return nil }
-func (m *mockWAL) SetSnapshotPath(path string)         {}
