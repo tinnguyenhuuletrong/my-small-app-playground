@@ -1,18 +1,18 @@
-package selector
+package utils
 
 import "math/rand"
 
 // MockRandSource is a mock implementation of rand.Source for predictable testing.
 type MockRandSource struct {
-	values []int64
+	Values []int64
 	index  int
 }
 
 func (m *MockRandSource) Int63() int64 {
-	if m.index >= len(m.values) {
+	if m.index >= len(m.Values) {
 		panic("not enough mock random values")
 	}
-	val := m.values[m.index]
+	val := m.Values[m.index]
 	m.index++
 	return val
 }

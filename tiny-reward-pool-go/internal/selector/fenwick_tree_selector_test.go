@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
+	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/utils"
 )
 
 func TestNewFenwickTreeSelector(t *testing.T) {
@@ -69,7 +70,7 @@ func TestFenwickTreeSelector_Select(t *testing.T) {
 
 	// Mock rand source for predictable selections
 	// Cumulative probabilities: A: 10, B: 30, C: 60
-	mockSource := &MockRandSource{values: []int64{
+	mockSource := &utils.MockRandSource{Values: []int64{
 		0,  // randVal=1 -> selects itemA
 		10, // randVal=11 -> selects itemB
 		30, // randVal=31 -> selects itemC
@@ -144,7 +145,7 @@ func TestFenwickTreeSelector_IntegrationWithDraw(t *testing.T) {
 	assert.Equal(t, int64(200), fts.TotalAvailable())
 
 	// Draw itemA
-	fts.rand = rand.New(&MockRandSource{values: []int64{0}}) // Selects itemA
+	fts.rand = rand.New(&utils.MockRandSource{Values: []int64{0}}) // Selects itemA
 	selected, err := fts.Select(ctx)
 	assert.NoError(t, err)
 	assert.Equal(t, "itemA", selected)
@@ -155,7 +156,7 @@ func TestFenwickTreeSelector_IntegrationWithDraw(t *testing.T) {
 	assert.Equal(t, 1, fts.GetItemRemaining("itemB"))
 
 	// Next draw must be itemB
-	fts.rand = rand.New(&MockRandSource{values: []int64{0}}) // Only one item left, any value works
+	fts.rand = rand.New(&utils.MockRandSource{Values: []int64{0}}) // Only one item left, any value works
 	selected, err = fts.Select(ctx)
 	assert.NoError(t, err)
 	assert.Equal(t, "itemB", selected)

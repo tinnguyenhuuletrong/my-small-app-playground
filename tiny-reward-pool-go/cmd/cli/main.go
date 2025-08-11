@@ -11,7 +11,6 @@ import (
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/processing"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/recovery"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
-	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/utils"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal"
 )
 
@@ -33,9 +32,8 @@ func main() {
 	defer w.Close()
 
 	ctx := &types.Context{
-		WAL:    w,
-		Utils:  &utils.UtilsImpl{},
-		Logger: slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		WAL:   w,
+		Utils: new_cli_utils(),
 	}
 	proc := processing.NewProcessor(ctx, pool, &processing.ProcessorOptional{
 		FlushAfterNDraw: 5,
@@ -101,4 +99,21 @@ func main() {
 
 	fmt.Println("[Pool state] ", pool.State())
 	fmt.Println("Shutdown complete.")
+}
+
+type cli_utils struct {
+	logger *slog.Logger
+}
+
+var _ types.Utils = (*cli_utils)(nil)
+
+func new_cli_utils() types.Utils {
+	return &cli_utils{
+		logger: slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})),
+	}
+}
+
+// GetLogger implements types.Utils.
+func (u *cli_utils) GetLogger() *slog.Logger {
+	return u.logger
 }

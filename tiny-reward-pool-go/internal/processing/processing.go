@@ -108,8 +108,8 @@ func (p *Processor) run() {
 		case <-p.stopChan:
 			// Graceful shutdown: stop receiving requests, cancel pending, then flush
 			// Drain reqChan and cancel all pending requests
-			if p.ctx.Logger != nil {
-				p.ctx.Logger.Debug("[Processor] Shutdown")
+			if p.ctx.Utils.GetLogger() != nil {
+				p.ctx.Utils.GetLogger().Debug("[Processor] Shutdown")
 			}
 			close(p.reqChan)
 			for req := range p.reqChan {
@@ -136,13 +136,13 @@ func (p *Processor) Flush() error {
 	flushErr := p.ctx.WAL.Flush()
 	if flushErr == nil {
 		p.pool.CommitDraw()
-		if p.ctx.Logger != nil {
-			p.ctx.Logger.Debug(fmt.Sprintf("[Processor] WAL Flush and Commit - %d", p.stagedDraws))
+		if p.ctx.Utils.GetLogger() != nil {
+			p.ctx.Utils.GetLogger().Debug(fmt.Sprintf("[Processor] WAL Flush and Commit - %d", p.stagedDraws))
 		}
 	} else {
 		p.pool.RevertDraw()
-		if p.ctx.Logger != nil {
-			p.ctx.Logger.Debug(fmt.Sprintf("[Processor] WAL Flush and Revert - %d", p.stagedDraws))
+		if p.ctx.Utils.GetLogger() != nil {
+			p.ctx.Utils.GetLogger().Debug(fmt.Sprintf("[Processor] WAL Flush and Revert - %d", p.stagedDraws))
 		}
 
 	}

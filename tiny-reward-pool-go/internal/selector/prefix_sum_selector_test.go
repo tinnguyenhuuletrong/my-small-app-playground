@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
+	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/utils"
 )
 
 func TestNewPrefixSumSelector(t *testing.T) {
@@ -70,7 +71,7 @@ func TestPrefixSumSelector_Select(t *testing.T) {
 
 	// Mock rand source
 	// Cumulative probabilities: A: 10, B: 30, C: 60
-	mockSource := &MockRandSource{values: []int64{
+	mockSource := &utils.MockRandSource{Values: []int64{
 		0,  // randVal=1 -> selects itemA
 		10, // randVal=11 -> selects itemB
 		30, // randVal=31 -> selects itemC
@@ -142,7 +143,7 @@ func TestPrefixSumSelector_IntegrationWithDraw(t *testing.T) {
 	assert.Equal(t, int64(200), pss.TotalAvailable())
 
 	// Draw itemA
-	pss.rand = rand.New(&MockRandSource{values: []int64{0}}) // Selects itemA
+	pss.rand = rand.New(&utils.MockRandSource{Values: []int64{0}}) // Selects itemA
 	selected, err := pss.Select(ctx)
 	assert.NoError(t, err)
 	assert.Equal(t, "itemA", selected)
@@ -153,7 +154,7 @@ func TestPrefixSumSelector_IntegrationWithDraw(t *testing.T) {
 	assert.Equal(t, 1, pss.GetItemRemaining("itemB"))
 
 	// Next draw must be itemB
-	pss.rand = rand.New(&MockRandSource{values: []int64{0}}) // Only one item left, any value works
+	pss.rand = rand.New(&utils.MockRandSource{Values: []int64{0}}) // Only one item left, any value works
 	selected, err = pss.Select(ctx)
 	assert.NoError(t, err)
 	assert.Equal(t, "itemB", selected)

@@ -51,14 +51,11 @@ type Config interface {
 type Context struct {
 	WAL   WAL
 	Utils Utils
-
-	// Optional. for logger
-	Logger *slog.Logger
 }
 
 // Utils interface for random selection
 type Utils interface {
-	RandomItem(items []PoolReward) (int, error)
+	GetLogger() *slog.Logger
 }
 
 // ItemSelector defines the contract for selecting items from a reward pool.
