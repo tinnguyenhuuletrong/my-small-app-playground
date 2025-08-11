@@ -70,4 +70,63 @@
 - The `ParseWAL` function in `wal.go` is also specific to `WalLogDrawItem`. It needs to be refactored to handle different log types polymorphically.
 - The core WAL implementation is still tied to a file-based system. The next iteration should focus on introducing `Reader` and `Writer` interfaces to abstract the underlying storage mechanism (file, network, etc.).
 
-```
+## Iter 02
+
+### Plan
+
+1.  **Goal:** Abstract the WAL's storage and formatting logic to allow for interchangeable backends (e.g., JSONL vs. String Line) and prepare for future storage mediums (e.g., network streams).
+
+2.  **Define Core Interfaces:** In a new file `internal/wal/storage.go`, define the core abstractions:
+    *   **`LogFormatter` Interface:** To handle serialization and deserialization.
+        ```go
+        type LogFormatter interface {
+            Encode(item types.WalLogDrawItem) ([]byte, error)
+            Decode(data []byte) (types.WalLogDrawItem, error)
+        }
+        ```
+    *   **`Storage` Interface:** To handle the physical writing, reading, and management of the log medium.
+        ```go
+        type Storage interface {
+            WriteAll([][]byte) error
+            ReadAll() ([][]byte, error)
+            Flush() error
+            Close() error
+            Rotate(newPath string) error
+        }
+        ```
+
+3.  **Create Formatter Implementations:**
+    *   **`JSONFormatter`:** Create a struct that implements `LogFormatter`. The `Encode` method will use `json.Marshal` and the `Decode` method will use `json.Unmarshal`. This will encapsulate the logic from Iteration 01.
+    *   **`StringLineFormatter`:** Create a struct that implements `LogFormatter`. This will bring back the original `fmt.Sprintf` and `fmt.Sscanf` logic to represent the old format for benchmarking purposes.
+
+4.  **Create Storage Implementation:**
+    *   **`FileStorage`:** Create a struct that implements the `Storage` interface. It will manage the `os.File` handle, reading lines, and writing bytes. This will abstract all the direct file operations from the main `wal.go` file.
+
+5.  **Refactor the `WAL` struct and its methods:**
+    *   Modify the `WAL` struct in `internal/wal/wal.go` to be composed of the new interfaces:
+        ```go
+        type WAL struct {
+            formatter LogFormatter
+            storage   Storage
+            buffer    [][]byte // Now stores pre-encoded data
+        }
+        ```
+    *   Update `NewWAL` to accept `LogFormatter` and `Storage` interfaces as optional arguments (see `PoolOptional`. Let pick default LogFormatter=Json, Storage=File), allowing for dependency injection. 
+    *   `LogDraw` will now use the `formatter` to encode the item and store the resulting `[]byte` in the buffer.
+    *   `Flush` will iterate through the byte buffer and pass each entry to `storage.Write()`.
+    *   The global `ParseWAL` function will be adapted to use the new components.
+
+6.  **Update Application Wiring:**
+    *   In `cmd/cli/main.go`, update the WAL initialization to create and inject the desired `JSONFormatter` and `FileStorage` into `NewWAL`.
+
+7.  **Update Benchmarks:**
+    *   Modify the benchmarks in `cmd/bench/` to construct `WAL` instances with both the `JSONFormatter` and the `StringLineFormatter` to allow for direct performance comparison between the two formats.
+
+### Result
+
+(To be filled in after implementation)
+
+### Problem
+
+(To be filled in after implementation)
+
