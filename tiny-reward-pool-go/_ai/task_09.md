@@ -76,7 +76,7 @@
 
 1.  **Goal:** Abstract the WAL's storage and formatting logic to allow for interchangeable backends (e.g., JSONL vs. String Line) and prepare for future storage mediums (e.g., network streams).
 
-2.  **Define Core Interfaces:** In a new file `internal/wal/storage.go`, define the core abstractions:
+2.  **Define Core Interfaces:** In a new file `internal/types/types.go`, define the core abstractions:
     *   **`LogFormatter` Interface:** To handle serialization and deserialization.
         ```go
         type LogFormatter interface {
@@ -101,6 +101,7 @@
 
 4.  **Create Storage Implementation:**
     *   **`FileStorage`:** Create a struct that implements the `Storage` interface. It will manage the `os.File` handle, reading lines, and writing bytes. This will abstract all the direct file operations from the main `wal.go` file.
+    *   **`FileMMapStorage`:** Create a struct that implements the `Storage` interface. Copied logic as `cmd/bench/bench_wal_mmap_test.go`.
 
 5.  **Refactor the `WAL` struct and its methods:**
     *   Modify the `WAL` struct in `internal/wal/wal.go` to be composed of the new interfaces:
@@ -111,9 +112,9 @@
             buffer    [][]byte // Now stores pre-encoded data
         }
         ```
-    *   Update `NewWAL` to accept `LogFormatter` and `Storage` interfaces as optional arguments (see `PoolOptional`. Let pick default LogFormatter=Json, Storage=File), allowing for dependency injection. 
+    *   Update `NewWAL` to accept `LogFormatter` and `Storage` interfaces as optional arguments (see `PoolOptional` as example. Let pick default LogFormatter=Json, Storage=File), allowing for configurable. 
     *   `LogDraw` will now use the `formatter` to encode the item and store the resulting `[]byte` in the buffer.
-    *   `Flush` will iterate through the byte buffer and pass each entry to `storage.Write()`.
+    *   `Flush` will Flush all of it as `WriteAll`.
     *   The global `ParseWAL` function will be adapted to use the new components.
 
 6.  **Update Application Wiring:**
