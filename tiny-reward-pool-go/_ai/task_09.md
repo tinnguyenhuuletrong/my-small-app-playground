@@ -200,11 +200,25 @@
     2.  **Implement `CanWrite`**:
         *   **`FileStorage`**: In `internal/wal/storage/file_storage.go`, the `CanWrite` method will always return `true`, as a standard file can grow indefinitely.
         *   **`FileMMapStorage`**: In `internal/wal/storage/file_mmap_storage.go`, the `CanWrite` method will return `true` only if `current_offset + size <= mmap_buffer_size`.
-    3.  **Update `WAL` Logic**:
-        *   In `internal/wal/wal.go`, modify the `Flush` method. Before calling `storage.Write()`, it will first check `storage.CanWrite()`.
-        *   If `CanWrite` returns `false`, the `WAL` will automatically call `storage.Rotate()` to create a new log file before writing the buffered data. A new path for the rotated file will need to be generated (e.g., by appending a timestamp to the original path).
-    4.  **Update `Processor` Logic**:
-        *   The `processing` module currently handles WAL rotation, but this logic should be centralized within the `WAL` itself. The periodic rotation in `cmd/cli/main.go` will be removed in favor of this new, size-based rotation.
+    3.  **Update `WAL` Logic for Rotation**:
+        *   In `internal/wal/wal.go`, modify the `Flush` method. Before calling `storage.Write()`, it will first check `storage.CanWrite(len(encodedData))`.
+        *   If `CanWrite` returns `false`, the `Flush` method will not attempt to write. Instead, it will return a new, specific error (e.g., `ErrWALFull`) to signal to the caller (the `Processor`) that a rotation is required. This delegates the control of file rotation and path management to the `Processor`.
+    4.  **Update `Processor` Logic to Centralize Control**: The `Processor` will become the central authority for managing the lifecycle of WAL files and snapshots. This makes the system more modular, configurable, and removes scattered logic from `cmd/cli`.
+        *   **Introduce `Processor` Options**: Enhance `processing.ProcessorOpts` with new configuration fields to give users control over lifecycle policies:
+            *   `SnapshotInterval`: A `time.Duration` to trigger periodic snapshots.
+            *   `SnapshotThreshold`: An `int` defining the number of WAL entries that trigger a snapshot. A snapshot is taken if either the interval or threshold is met. (Default is 1. Snapshot for every Wall rotated)
+            *   `WALFilePath`: The base path for the initial WAL file.
+            *   `NewRotatedWALPathFunc`: A function of type `func() string` that generates a new path for a rotated WAL file, allowing flexible naming schemes (e.g., timestamp-based, sequence-based). (default new wal have fixed name, old wal prefixed by number 3 digits)
+            Note: It should optional with default value fallback -> so existing code still compatible
+        *   **Refactor `Processor.run()`**:
+            *   The `run()` method will be the single place where snapshot and rotation policies are executed. It will maintain a counter for operations since the last snapshot.
+            *   It will use a `time.Ticker` to check the `SnapshotInterval` and the operation counter to check the `SnapshotThreshold`.
+            *   When `wal.Flush()` returns a specific `ErrWALFull` error (indicating the mmap buffer is full), the `Processor` will orchestrate the rotation by generating a new path and calling `wal.Rotate()`.
+        *   **Streamline `cmd/cli`**:
+            *   Remove all snapshot and rotation timer logic from `cmd/cli/main.go`. The main function will now simply be responsible for creating the `Processor` with the desired configuration options.
+        *   **Enable Future Extensibility**: This refactoring lays the groundwork for future plugins. By centralizing lifecycle events in the `Processor`, we can easily add hooks for advanced features:
+            *   **Replication**: A plugin could listen for `Flush` events to stream WAL entries to a replica.
+            *   **Archiving**: A plugin could listen for `Rotate` and `Snapshot` events to archive old WAL files and snapshots to a persistent store like S3 or a database.
     5.  **Update Tests**:
-        *   Create a new test in `internal/wal/wal_test.go` to specifically verify the auto-rotation behavior when the mmap buffer is full. This test will involve writing data that exceeds the default mmap size and asserting that a new WAL file is created.
+        *   Create a new test in `internal/wal/processing_test.go` to specifically verify the auto-rotation behavior when the mmap buffer is full. This test will involve writing data that exceeds the default mmap size and asserting that a new WAL file is created.
         *   Run `make test` and `make check` to ensure all changes are correct and no regressions have been introduced.
