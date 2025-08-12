@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"bytes"
 	"log/slog"
 	"os"
 
@@ -18,5 +19,11 @@ func (u *UtilsImpl) GetLogger() *slog.Logger {
 }
 
 func ReadFileContent(path string) ([]byte, error) {
-	return os.ReadFile(path)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	// MMap remaining buffer
+	return bytes.TrimRight(data, "\x00"), nil
 }

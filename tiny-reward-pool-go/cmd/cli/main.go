@@ -17,22 +17,25 @@ import (
 )
 
 func main() {
+	defaultConfigPath := "./samples/config.json"
 	snapshotPath := "./tmp/pool_snapshot.json"
 	walPath := "./tmp/wal.log"
 
-	jsonFormatter := walformatter.NewJSONFormatter()
-	pool, err := recovery.RecoverPool(snapshotPath, walPath, "./samples/config.json", jsonFormatter)
+	// walFormatter := walformatter.NewJSONFormatter()
+	walFormatter := walformatter.NewStringLineFormatter()
+	pool, err := recovery.RecoverPool(snapshotPath, walPath, defaultConfigPath, walFormatter)
 	if err != nil {
 		fmt.Println("Recovery failed:", err)
 		os.Exit(1)
 	}
 
+	// fileStorage, err := walstorage.NewFileMMapStorage(walPath)
 	fileStorage, err := walstorage.NewFileStorage(walPath)
 	if err != nil {
 		fmt.Println("Error creating file storage:", err)
 		os.Exit(1)
 	}
-	w, err := wal.NewWAL(walPath, jsonFormatter, fileStorage)
+	w, err := wal.NewWAL(walPath, walFormatter, fileStorage)
 	if err != nil {
 		fmt.Println("Error opening WAL:", err)
 		os.Exit(1)
@@ -84,9 +87,8 @@ func main() {
 				fmt.Println("Snapshot saved.")
 			}
 			fmt.Println("Rotating WAL file...")
-			w.Close()
 			os.Remove(walPath)
-			w.Rotate(walPath)
+			err = w.Rotate(walPath)
 			if err != nil {
 				fmt.Println("Error creating new WAL:", err)
 				os.Exit(1)

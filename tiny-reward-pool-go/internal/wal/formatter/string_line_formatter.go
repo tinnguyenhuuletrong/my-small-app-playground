@@ -11,6 +11,8 @@ import (
 
 type StringLineFormatter struct{}
 
+var _ types.LogFormatter = (*StringLineFormatter)(nil)
+
 func NewStringLineFormatter() *StringLineFormatter {
 	return &StringLineFormatter{}
 }

@@ -8,6 +8,8 @@ import (
 
 type JSONFormatter struct{}
 
+var _ types.LogFormatter = (*JSONFormatter)(nil)
+
 func NewJSONFormatter() *JSONFormatter {
 	return &JSONFormatter{}
 }

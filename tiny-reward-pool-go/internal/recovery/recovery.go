@@ -26,21 +26,29 @@ func RecoverPool(snapshotPath, walPath, configPath string, formatter types.LogFo
 		pool = loaded
 	}
 
+	// Check wal file exists
+	_, err := os.Stat(walPath)
+	if os.IsNotExist(err) {
+		return pool, nil
+	}
+
 	// 2. Replay WAL log for recovery
 	items, err := wal.ParseWAL(walPath, formatter)
-	if err == nil {
-		for _, entry := range items {
-			if entry.Success {
-				pool.ApplyDrawLog(entry.ItemID)
-			}
+	if err != nil {
+		return nil, err
+	}
+
+	for _, entry := range items {
+		if entry.Success {
+			pool.ApplyDrawLog(entry.ItemID)
 		}
-		// 3. Write new snapshot after recovery
-		if err := pool.SaveSnapshot(snapshotPath); err != nil {
-			return nil, fmt.Errorf("failed to save recovered snapshot: %w", err)
-		}
-		// 4. Rotate WAL log
-		os.Remove(walPath)
-	} // else: no WAL log found for recovery
+	}
+	// 3. Write new snapshot after recovery
+	if err := pool.SaveSnapshot(snapshotPath); err != nil {
+		return nil, fmt.Errorf("failed to save recovered snapshot: %w", err)
+	}
+	// 4. Rotate WAL log
+	os.Remove(walPath)
 
 	return pool, nil
 }

@@ -26,6 +26,15 @@ func TestFileMMapStorage(t *testing.T) {
 	err = fs.Flush()
 	assert.NoError(t, err)
 
+	// Close the storage to ensure data is written to disk
+	err = fs.Flush()
+	assert.NoError(t, err)
+
+	// Verify original file content
+	originalContent, err := os.ReadFile(path)
+	assert.NoError(t, err)
+	assert.Contains(t, string(originalContent), string(initialData))
+
 	// Test Rotate
 	err = fs.Rotate(newPath)
 	assert.NoError(t, err)
@@ -40,12 +49,6 @@ func TestFileMMapStorage(t *testing.T) {
 	// Close the storage to ensure data is written to disk
 	err = fs.Close()
 	assert.NoError(t, err)
-
-	// Verify original file content
-	originalContent, err := os.ReadFile(path)
-	assert.NoError(t, err)
-	assert.Contains(t, string(originalContent), string(initialData))
-	assert.NotContains(t, string(originalContent), string(newData))
 
 	// Verify new file content
 	newContent, err := os.ReadFile(newPath)

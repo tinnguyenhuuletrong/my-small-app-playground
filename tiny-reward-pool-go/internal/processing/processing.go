@@ -135,6 +135,9 @@ func (p *Processor) run() {
 			}
 			// Final flush/commit on shutdown
 			p.Flush()
+
+			// Close wall
+			p.ctx.WAL.Close()
 			return
 		}
 	}
