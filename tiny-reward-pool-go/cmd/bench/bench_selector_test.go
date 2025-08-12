@@ -35,8 +35,13 @@ func BenchmarkDrawChannel_PrefixSumSelector(b *testing.B) {
 	b.ResetTimer()
 	runtime.ReadMemStats(&memStatsStart)
 
+	resChans := make([]<-chan processing.DrawResponse, b.N)
 	for i := 0; i < b.N; i++ {
-		<-p.Draw()
+		resChans[i] = p.Draw()
+	}
+
+	for _, ch := range resChans {
+		<-ch
 	}
 
 	runtime.ReadMemStats(&memStatsEnd)
@@ -70,8 +75,13 @@ func BenchmarkDrawChannel_FenwickTreeSelector(b *testing.B) {
 	b.ResetTimer()
 	runtime.ReadMemStats(&memStatsStart)
 
+	resChans := make([]<-chan processing.DrawResponse, b.N)
 	for i := 0; i < b.N; i++ {
-		<-p.Draw()
+		resChans[i] = p.Draw()
+	}
+
+	for _, ch := range resChans {
+		<-ch
 	}
 
 	runtime.ReadMemStats(&memStatsEnd)

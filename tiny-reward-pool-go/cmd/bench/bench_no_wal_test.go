@@ -23,7 +23,8 @@ func BenchmarkPoolDrawNoWalChannel(b *testing.B) {
 		Utils: &utils.UtilsImpl{},
 	}
 
-	proc := processing.NewProcessor(ctx, pool, nil)
+	opt := &processing.ProcessorOptional{RequestBufferSize: b.N}
+	proc := processing.NewProcessor(ctx, pool, opt)
 
 	b.ResetTimer()
 	start := time.Now()
@@ -31,8 +32,13 @@ func BenchmarkPoolDrawNoWalChannel(b *testing.B) {
 
 	runtime.ReadMemStats(&memStatsStart)
 
+	resChans := make([]<-chan processing.DrawResponse, b.N)
 	for i := 0; i < b.N; i++ {
-		<-proc.Draw()
+		resChans[i] = proc.Draw()
+	}
+
+	for _, ch := range resChans {
+		<-ch
 	}
 
 	runtime.ReadMemStats(&memStatsEnd)
@@ -57,7 +63,8 @@ func BenchmarkPoolDrawNoWalCallback(b *testing.B) {
 		Utils: &utils.UtilsImpl{},
 	}
 
-	proc := processing.NewProcessor(ctx, pool, nil)
+	opt := &processing.ProcessorOptional{RequestBufferSize: b.N}
+	proc := processing.NewProcessor(ctx, pool, opt)
 
 	var wg sync.WaitGroup
 

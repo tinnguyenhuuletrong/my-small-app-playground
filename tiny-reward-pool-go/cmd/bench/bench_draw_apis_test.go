@@ -52,8 +52,13 @@ func BenchmarkDrawChannel(b *testing.B) {
 
 	b.ResetTimer()
 
+	resChans := make([]<-chan processing.DrawResponse, b.N)
 	for i := 0; i < b.N; i++ {
-		<-p.Draw()
+		resChans[i] = p.Draw()
+	}
+
+	for _, ch := range resChans {
+		<-ch
 	}
 
 	p.Stop()
