@@ -1,8 +1,6 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -10,12 +8,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/edsrzf/mmap-go"
-
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/processing"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/rewardpool"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/utils"
+	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal"
+	walformatter "github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/formatter"
+	walstorage "github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/storage"
 )
 
 func BenchmarkPoolDrawWithMmapWALCallback(b *testing.B) {
@@ -23,7 +22,18 @@ func BenchmarkPoolDrawWithMmapWALCallback(b *testing.B) {
 	walPath := filepath.Join(tmpDir, "wal_mmap.log")
 	_ = os.Remove(walPath)
 
-	w, err := NewMmapWAL(walPath)
+	// Allocate 64MB for WAL file (adjust as needed)
+	const walSize = 64 * 1024 * 1024
+
+	jsonFormatter := walformatter.NewStringLineFormatter()
+	fileStorage, err := walstorage.NewFileMMapStorage(walPath, walstorage.FileMMapStorageOps{
+		MMapFileSizeInMB: walSize,
+	})
+	if err != nil {
+		b.Fatalf("failed to create file storage: %v", err)
+	}
+
+	w, err := wal.NewWAL(walPath, jsonFormatter, fileStorage)
 	if err != nil {
 		b.Fatalf("failed to create mmap WAL: %v", err)
 	}
@@ -72,63 +82,4 @@ func BenchmarkPoolDrawWithMmapWALCallback(b *testing.B) {
 	b.ReportMetric(float64(memStatsEnd.TotalAlloc-memStatsStart.TotalAlloc)/float64(b.N), "bytes/draw")
 	b.ReportMetric(float64(memStatsEnd.NumGC-memStatsStart.NumGC), "gc_count")
 	// b.ReportMetric(walSize, "wal_file_size")
-}
-
-type MmapWAL struct {
-	file   *os.File
-	mmap   mmap.MMap
-	offset int64
-	size   int64
-}
-
-func NewMmapWAL(path string) (*MmapWAL, error) {
-	// Allocate 64MB for WAL file (adjust as needed)
-	const walSize = 64 * 1024 * 1024
-	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0644)
-	if err != nil {
-		return nil, err
-	}
-	if err := f.Truncate(walSize); err != nil {
-		f.Close()
-		return nil, err
-	}
-	mm, err := mmap.Map(f, mmap.RDWR, 0)
-	if err != nil {
-		f.Close()
-		return nil, err
-	}
-	return &MmapWAL{file: f, mmap: mm, size: walSize}, nil
-}
-
-func (w *MmapWAL) LogDraw(item types.WalLogDrawItem) error {
-	lineBytes, err := json.Marshal(item)
-	if err != nil {
-		return err
-	}
-	lineBytes = append(lineBytes, '\n') // Append newline for JSONL format
-
-	if w.offset+int64(len(lineBytes)) > w.size {
-		return fmt.Errorf("WAL mmap full")
-	}
-	copy(w.mmap[w.offset:], lineBytes)
-	w.offset += int64(len(lineBytes))
-	return nil
-}
-
-func (w *MmapWAL) Rotate(string) error {
-	return nil
-}
-
-func (w *MmapWAL) Flush() error {
-	return w.mmap.Flush()
-}
-
-func (w *MmapWAL) Close() error {
-	if err := w.mmap.Flush(); err != nil {
-		return err
-	}
-	if err := w.mmap.Unmap(); err != nil {
-		return err
-	}
-	return w.file.Close()
 }

@@ -23,7 +23,7 @@ func BenchmarkPoolDrawWithBasicWALCallback(b *testing.B) {
 	walPath := filepath.Join(tmpDir, "wal.log")
 	_ = os.Remove(walPath)
 
-	jsonFormatter := walformatter.NewJSONFormatter()
+	jsonFormatter := walformatter.NewStringLineFormatter()
 	fileStorage, err := walstorage.NewFileStorage(walPath)
 	if err != nil {
 		b.Fatalf("failed to create file storage: %v", err)
