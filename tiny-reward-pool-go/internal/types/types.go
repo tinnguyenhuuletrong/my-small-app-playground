@@ -65,8 +65,7 @@ type LogFormatter interface {
 
 // Storage Interface: To handle the physical writing, reading, and management of the log medium.
 type Storage interface {
-	WriteAll([][]byte) error
-	ReadAll() ([][]byte, error)
+	Write([]byte) error
 	Flush() error
 	Close() error
 	Rotate(newPath string) error

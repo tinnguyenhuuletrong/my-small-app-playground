@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/edsrzf/mmap-go"
+	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
 )
 
 const ( // Constants for mmap file operations
@@ -17,6 +18,8 @@ type FileMMapStorage struct {
 	path   string
 	offset int64
 }
+
+var _ types.Storage = (*FileMMapStorage)(nil)
 
 func NewFileMMapStorage(path string) (*FileMMapStorage, error) {
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0644)
@@ -54,41 +57,15 @@ func NewFileMMapStorage(path string) (*FileMMapStorage, error) {
 	}, nil
 }
 
-func (s *FileMMapStorage) WriteAll(data [][]byte) error {
-	for _, d := range data {
-		// Ensure enough space in mmap
-		if s.offset+int64(len(d)) > int64(len(s.mmap)) {
-			// Re-mmap with larger size or handle error
-			return fmt.Errorf("mmap buffer full, cannot write %d bytes", len(d))
-		}
-		copy(s.mmap[s.offset:], d)
-		s.offset += int64(len(d))
+func (s *FileMMapStorage) Write(data []byte) error {
+	// Ensure enough space in mmap
+	if s.offset+int64(len(data)) > int64(len(s.mmap)) {
+		// Re-mmap with larger size or handle error
+		return fmt.Errorf("mmap buffer full, cannot write %d bytes", len(data))
 	}
+	copy(s.mmap[s.offset:], data)
+	s.offset += int64(len(data))
 	return nil
-}
-
-func (s *FileMMapStorage) ReadAll() ([][]byte, error) {
-	// For mmap, ReadAll means reading from the beginning up to the current offset
-	// This assumes each log entry is newline-separated.
-	var lines [][]byte
-	currentData := s.mmap[:s.offset]
-
-	// Split currentData by newline to get individual log entries
-	// This is a simplified approach; a more robust solution might involve
-	// a custom scanner for mmap'd regions.
-	start := 0
-	for i, b := range currentData {
-		if b == '\n' {
-			lines = append(lines, currentData[start:i+1]) // Include newline
-			start = i + 1
-		}
-	}
-	// Add any remaining data after the last newline
-	if start < len(currentData) {
-		lines = append(lines, currentData[start:])
-	}
-
-	return lines, nil
 }
 
 func (s *FileMMapStorage) Flush() error {

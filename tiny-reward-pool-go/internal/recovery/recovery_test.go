@@ -6,7 +6,6 @@ import (
 
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/rewardpool"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/formatter"
-	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/storage"
 )
 
 func TestRecoverPool_Basic(t *testing.T) {
@@ -47,11 +46,7 @@ func TestRecoverPool_Basic(t *testing.T) {
 	f.Close()
 
 	jsonFormatter := formatter.NewJSONFormatter()
-	fileStorage, err := storage.NewFileStorage(wal)
-	if err != nil {
-		t.Fatalf("failed to create file storage: %v", err)
-	}
-	recovered, err := RecoverPool(snapshot, wal, config, jsonFormatter, fileStorage)
+	recovered, err := RecoverPool(snapshot, wal, config, jsonFormatter)
 	if err != nil {
 		t.Fatalf("recovery failed: %v", err)
 	}

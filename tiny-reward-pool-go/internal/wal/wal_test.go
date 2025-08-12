@@ -26,11 +26,7 @@ func TestParseWAL(t *testing.T) {
 	_ = encoder.Encode(types.WalLogDrawItem{WalLogItem: types.WalLogItem{Type: types.LogTypeDraw}, RequestID: 4, ItemID: "bronze", Success: true})
 	f.Close()
 
-	fileStorage, err := walstorage.NewFileStorage(path)
-	if err != nil {
-		t.Fatalf("failed to create file storage: %v", err)
-	}
-	items, err := wal.ParseWAL(path, walformatter.NewJSONFormatter(), fileStorage)
+	items, err := wal.ParseWAL(path, walformatter.NewJSONFormatter())
 	if err != nil {
 		t.Fatalf("ParseWAL failed: %v", err)
 	}
@@ -93,11 +89,7 @@ func TestWALFlush(t *testing.T) {
 	}
 
 	// Verify content
-	fileStorage, err = walstorage.NewFileStorage(path)
-	if err != nil {
-		t.Fatalf("failed to create file storage: %v", err)
-	}
-	items, err := wal.ParseWAL(path, walformatter.NewJSONFormatter(), fileStorage)
+	items, err := wal.ParseWAL(path, walformatter.NewJSONFormatter())
 	if err != nil {
 		t.Fatalf("ParseWAL failed after flush: %v", err)
 	}

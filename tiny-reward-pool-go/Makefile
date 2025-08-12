@@ -9,6 +9,9 @@ run:
 build:
 	go build -o $(BIN) $(CLI)
 
+check:
+	go vet ./...
+
 test:
 	go test ./internal/...
 

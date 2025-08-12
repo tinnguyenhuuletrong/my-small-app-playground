@@ -16,6 +16,11 @@ The project uses Go modules for dependency management, with `github.com/edsrzf/m
 
 The project uses a `Makefile` for common development tasks.
 
+*   **Check compile errors / warnining:**
+    ```sh
+    make check
+    ```
+
 *   **Build the CLI binary:**
     ```sh
     make build
@@ -73,6 +78,7 @@ The development process is broken down into tasks, which are documented in files
 **3. Core Principles:**
 
 *   **Iterative Refinement:** The agent works in small, incremental steps. Problems found in one iteration are addressed in the plan for the next.
+*   **Compile-Driven:** Use `make check` after finish an implementation. Make sure fix all compile errors / warning before do a test `make test`
 *   **Test-Driven:** Every functional component or module must be accompanied by unit tests.
 *   **Documentation is a Priority:** The agent is responsible for keeping the `_ai` directory updated. This includes filling out the `Plan`, `Result`, and `Problem` sections for each iteration and updating benchmark documents when relevant.
 *   **Performance-Aware:** When working on performance-sensitive areas, the agent should create and run benchmarks, analyze the results, and use the data to guide implementation choices.

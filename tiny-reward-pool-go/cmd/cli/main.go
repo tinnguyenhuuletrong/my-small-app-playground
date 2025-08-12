@@ -21,23 +21,22 @@ func main() {
 	walPath := "./tmp/wal.log"
 
 	jsonFormatter := walformatter.NewJSONFormatter()
-	fileStorage, err := walstorage.NewFileStorage(walPath)
-	if err != nil {
-		fmt.Println("Error creating file storage:", err)
-		os.Exit(1)
-	}
-	pool, err := recovery.RecoverPool(snapshotPath, walPath, "./samples/config.json", jsonFormatter, fileStorage)
+	pool, err := recovery.RecoverPool(snapshotPath, walPath, "./samples/config.json", jsonFormatter)
 	if err != nil {
 		fmt.Println("Recovery failed:", err)
 		os.Exit(1)
 	}
 
+	fileStorage, err := walstorage.NewFileStorage(walPath)
+	if err != nil {
+		fmt.Println("Error creating file storage:", err)
+		os.Exit(1)
+	}
 	w, err := wal.NewWAL(walPath, jsonFormatter, fileStorage)
 	if err != nil {
 		fmt.Println("Error opening WAL:", err)
 		os.Exit(1)
 	}
-	defer w.Close()
 
 	ctx := &types.Context{
 		WAL:   w,
@@ -103,7 +102,6 @@ func main() {
 	<-drawLock
 
 	proc.Stop()
-	w.Close()
 
 	fmt.Println("[Pool state] ", pool.State())
 	fmt.Println("Shutdown complete.")

@@ -5,12 +5,12 @@ import (
 	"os"
 
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/rewardpool"
-	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
+	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal"
 )
 
 // RecoverPool loads the pool from snapshot, replays WAL, writes new snapshot, and rotates WAL.
-func RecoverPool(snapshotPath, walPath, configPath string, formatter types.LogFormatter, storage types.Storage) (*rewardpool.Pool, error) {
+func RecoverPool(snapshotPath, walPath, configPath string, formatter types.LogFormatter) (*rewardpool.Pool, error) {
 	var pool *rewardpool.Pool
 
 	// Try to load from snapshot first
@@ -27,7 +27,7 @@ func RecoverPool(snapshotPath, walPath, configPath string, formatter types.LogFo
 	}
 
 	// 2. Replay WAL log for recovery
-	items, err := wal.ParseWAL(walPath, formatter, storage)
+	items, err := wal.ParseWAL(walPath, formatter)
 	if err == nil {
 		for _, entry := range items {
 			if entry.Success {

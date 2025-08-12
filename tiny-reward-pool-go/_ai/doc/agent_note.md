@@ -47,6 +47,7 @@
 Compare No WAL, Real WAL, and Mmap WAL for throughput, latency, and GC count. See `_ai/doc/bench.md` for detailed results
 
 ## Testing and Verification
+- **Check syntax:** Run `make check` to check source and report compile errors / warining.
 - **Unit Tests:** Run `make test` to execute all unit tests.
 - **Distribution Test:** Run `make distribution_test` to verify that the reward distribution is correct according to the configured probabilities. This is a critical step to ensure the core logic is working as expected.
 - **Benchmarks:** Run `make bench` to run all benchmark tests.

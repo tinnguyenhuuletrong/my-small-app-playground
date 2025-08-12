@@ -143,3 +143,37 @@
 
 - The core WAL implementation is still tied to a file-based system. The next iteration should focus on introducing `Reader` and `Writer` interfaces to abstract the underlying storage mechanism (file, network, etc.).
 
+## Iter 03
+
+### Plan
+
+1.  **Target**: Refine the `Storage` interface to be more practical and less abstract, avoiding over-engineering.
+
+2.  **Problem Analysis**: The current `Storage` interface is too generic for its primary use case.
+    *   `WriteAll([][]byte) error` is unnecessarily complex. The `LogFormatter` already encodes a batch of log items into a single `[]byte`. The storage layer should simply write this byte slice.
+    *   `ReadAll() ([][]byte, error)` is only used by the `ParseWAL` function to read a WAL file from disk. This is a specific utility for WAL recovery, not a generic storage operation. It's better to move this into a dedicated utility function.
+
+3.  **Refactoring Plan**:
+    1.  **Simplify `Storage` Interface**: In `internal/types/types.go`, update the `Storage` interface:
+        *   Change `WriteAll([][]byte) error` to `Write([]byte) error`.
+        *   Remove `ReadAll() ([][]byte, error)`.
+    2.  **Create WAL Reading Utility**: In `internal/utils/utils.go`, create a new utility function `ReadFileContent(path string) ([]byte, error)` to handle reading the entire content of a file. This will be used by the WAL parser.
+    3.  **Update `Storage` Implementations**:
+        *   In `internal/wal/storage/file_storage.go` and `internal/wal/storage/file_mmap_storage.go`, update the structs to implement the new `Storage` interface by replacing `WriteAll` with `Write` and removing `ReadAll`.
+    4.  **Update `WAL` Logic**:
+        *   In `internal/wal/wal.go`, modify the `Flush` method to pass the single `[]byte` from the formatter directly to `storage.Write()`.
+        *   Update the `ParseWAL` function to use the new `utils.ReadFileContent()` to read the WAL file before decoding.
+    5.  **Update Tests**:
+        *   Adjust tests in `internal/wal/wal_test.go` and the storage implementation tests to reflect the interface changes.
+    6.  **Verify and Fix**:
+        *   Run `make test` to ensure all changes are correct and no regressions have been introduced.
+        *   Run `make check` to find any compile errors or warnings and fix them.
+
+### Result
+
+- Successfully simplified the `Storage` interface by changing `WriteAll([][]byte) error` to `Write([]byte) error` and removing the `ReadAll` method.
+- Moved the file reading logic to a new `ReadFileContent` function in the `internal/utils` package.
+- Refactored `FileStorage` and `FileMMapStorage` to implement the new `Storage` interface.
+- Updated the `WAL` implementation and its tests to work with the new interface.
+- Fixed all compilation errors in `recovery` and `cmd/cli` that arose from the interface changes.
+- All checks and tests are passing.
