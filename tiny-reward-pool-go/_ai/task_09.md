@@ -177,3 +177,34 @@
 - Updated the `WAL` implementation and its tests to work with the new interface.
 - Fixed all compilation errors in `recovery` and `cmd/cli` that arose from the interface changes.
 - All checks and tests are passing.
+
+## Iter 04
+
+### Plan
+
+1.  **Target**: Prevent write failures in `FileMMapStorage` by proactively rotating the WAL file when the buffer is close to full.
+
+2.  **Problem Analysis**: The `FileMMapStorage` is initialized with a fixed-size memory map. If the accumulated write operations exceed this size, any subsequent write will fail, potentially leading to data loss. The current `WAL` implementation has no mechanism to check if the underlying storage has sufficient space before attempting a write.
+
+3.  **Refactoring Plan**:
+    1.  **Update `Storage` Interface**: In `internal/types/types.go`, add a new method to the `Storage` interface:
+        ```go
+        type Storage interface {
+            Write([]byte) error
+            CanWrite(size int) bool // New method
+            Flush() error
+            Close() error
+            Rotate(newPath string) error
+        }
+        ```
+    2.  **Implement `CanWrite`**:
+        *   **`FileStorage`**: In `internal/wal/storage/file_storage.go`, the `CanWrite` method will always return `true`, as a standard file can grow indefinitely.
+        *   **`FileMMapStorage`**: In `internal/wal/storage/file_mmap_storage.go`, the `CanWrite` method will return `true` only if `current_offset + size <= mmap_buffer_size`.
+    3.  **Update `WAL` Logic**:
+        *   In `internal/wal/wal.go`, modify the `Flush` method. Before calling `storage.Write()`, it will first check `storage.CanWrite()`.
+        *   If `CanWrite` returns `false`, the `WAL` will automatically call `storage.Rotate()` to create a new log file before writing the buffered data. A new path for the rotated file will need to be generated (e.g., by appending a timestamp to the original path).
+    4.  **Update `Processor` Logic**:
+        *   The `processing` module currently handles WAL rotation, but this logic should be centralized within the `WAL` itself. The periodic rotation in `cmd/cli/main.go` will be removed in favor of this new, size-based rotation.
+    5.  **Update Tests**:
+        *   Create a new test in `internal/wal/wal_test.go` to specifically verify the auto-rotation behavior when the mmap buffer is full. This test will involve writing data that exceeds the default mmap size and asserting that a new WAL file is created.
+        *   Run `make test` and `make check` to ensure all changes are correct and no regressions have been introduced.
