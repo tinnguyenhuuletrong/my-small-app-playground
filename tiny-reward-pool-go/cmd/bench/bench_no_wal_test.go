@@ -20,7 +20,7 @@ func BenchmarkPoolDrawNoWalChannel(b *testing.B) {
 	)
 	ctx := &types.Context{
 		WAL:   &utils.MockWAL{},
-		Utils: &utils.UtilsImpl{},
+		Utils: &utils.MockUtils{},
 	}
 
 	opt := &processing.ProcessorOptional{RequestBufferSize: b.N}
@@ -60,7 +60,7 @@ func BenchmarkPoolDrawNoWalCallback(b *testing.B) {
 	)
 	ctx := &types.Context{
 		WAL:   &utils.MockWAL{},
-		Utils: &utils.UtilsImpl{},
+		Utils: &utils.MockUtils{},
 	}
 
 	opt := &processing.ProcessorOptional{RequestBufferSize: b.N}

@@ -16,7 +16,7 @@ func TestTransactionalDraw(t *testing.T) {
 
 	ctx := &types.Context{
 		WAL:   &utils.MockWAL{},
-		Utils: &utils.UtilsImpl{},
+		Utils: &utils.MockUtils{},
 	}
 
 	// SelectItem should stage the item

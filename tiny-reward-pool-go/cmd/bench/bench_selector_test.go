@@ -12,7 +12,7 @@ import (
 )
 
 func BenchmarkDrawChannel_PrefixSumSelector(b *testing.B) {
-	ctx := &types.Context{Utils: &utils.UtilsImpl{}}
+	ctx := &types.Context{Utils: &utils.MockUtils{}}
 	pool := rewardpool.NewPool(
 		[]types.PoolReward{
 			{ItemID: "gold", Quantity: b.N, Probability: 10},
@@ -52,7 +52,7 @@ func BenchmarkDrawChannel_PrefixSumSelector(b *testing.B) {
 }
 
 func BenchmarkDrawChannel_FenwickTreeSelector(b *testing.B) {
-	ctx := &types.Context{Utils: &utils.UtilsImpl{}}
+	ctx := &types.Context{Utils: &utils.MockUtils{}}
 	pool := rewardpool.NewPool(
 		[]types.PoolReward{
 			{ItemID: "gold", Quantity: b.N, Probability: 10},

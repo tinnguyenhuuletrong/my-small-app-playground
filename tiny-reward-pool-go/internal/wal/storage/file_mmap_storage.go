@@ -18,20 +18,20 @@ type FileMMapStorage struct {
 	path   string
 	offset int64
 
-	sizeMapInMB int64
+	sizeMapInBytes int64
 }
 
 var _ types.Storage = (*FileMMapStorage)(nil)
 
 type FileMMapStorageOps struct {
-	MMapFileSizeInMB int64
+	MMapFileSizeInBytes int64
 }
 
 func NewFileMMapStorage(path string, opts ...FileMMapStorageOps) (*FileMMapStorage, error) {
-	sizeMapInMB := defaultMmapFileSize
+	sizeMapInBytes := defaultMmapFileSize
 	for _, val := range opts {
-		if val.MMapFileSizeInMB > 0 {
-			sizeMapInMB = val.MMapFileSizeInMB
+		if val.MMapFileSizeInBytes > 0 {
+			sizeMapInBytes = val.MMapFileSizeInBytes
 		}
 	}
 
@@ -49,7 +49,7 @@ func NewFileMMapStorage(path string, opts ...FileMMapStorageOps) (*FileMMapStora
 	offset := info.Size()
 
 	if offset == 0 {
-		if err := f.Truncate(sizeMapInMB); err != nil {
+		if err := f.Truncate(sizeMapInBytes); err != nil {
 			f.Close()
 			return nil, fmt.Errorf("failed to truncate file: %w", err)
 		}
@@ -63,17 +63,17 @@ func NewFileMMapStorage(path string, opts ...FileMMapStorageOps) (*FileMMapStora
 	}
 
 	return &FileMMapStorage{
-		file:        f,
-		mmap:        m,
-		path:        path,
-		offset:      offset,
-		sizeMapInMB: sizeMapInMB,
+		file:           f,
+		mmap:           m,
+		path:           path,
+		offset:         offset,
+		sizeMapInBytes: sizeMapInBytes,
 	}, nil
 }
 
 func (s *FileMMapStorage) Write(data []byte) error {
 	// Ensure enough space in mmap
-	if s.offset+int64(len(data)) > int64(len(s.mmap)) {
+	if !s.CanWrite(len(data)) {
 		// Re-mmap with larger size or handle error
 		return fmt.Errorf("mmap buffer full, cannot write %d bytes", len(data))
 	}
@@ -82,12 +82,8 @@ func (s *FileMMapStorage) Write(data []byte) error {
 	return nil
 }
 
-func (s *FileMMapStorage) CanWrite(num int64) error {
-	// Re-mmap with larger size or handle error
-	if s.offset+num > int64(len(s.mmap)) {
-		return fmt.Errorf("mmap buffer full, cannot write %d bytes", num)
-	}
-	return nil
+func (s *FileMMapStorage) CanWrite(size int) bool {
+	return s.offset+int64(size) <= int64(len(s.mmap))
 }
 
 func (s *FileMMapStorage) Flush() error {
@@ -99,6 +95,7 @@ func (s *FileMMapStorage) Close() error {
 		if err := s.mmap.Unmap(); err != nil {
 			return err
 		}
+		s.mmap = nil
 	}
 	if s.file != nil {
 		return s.file.Close()
@@ -106,46 +103,25 @@ func (s *FileMMapStorage) Close() error {
 	return nil
 }
 
-func (s *FileMMapStorage) Rotate(newPath string) error {
+func (s *FileMMapStorage) Rotate(archivePath string) error {
 	// Unmap and close current file
 	if err := s.Close(); err != nil {
 		return err
 	}
 
-	// Rename old file (optional, depending on desired rotation behavior)
-	// For simplicity, we'll just open a new file at newPath
-
-	// Open new file and mmap it
-	f, err := os.OpenFile(newPath, os.O_RDWR|os.O_CREATE, 0644)
-	if err != nil {
+	// Rename old file to the new archive path
+	if err := os.Rename(s.path, archivePath); err != nil {
 		return err
 	}
 
-	// Truncate new file if it's empty
-	info, err := f.Stat()
+	// Re-initialize the storage at the original path
+	newStorage, err := NewFileMMapStorage(s.path, FileMMapStorageOps{MMapFileSizeInBytes: s.sizeMapInBytes})
 	if err != nil {
-		f.Close()
-		return err
+		return fmt.Errorf("failed to re-initialize mmap storage after rotate: %w", err)
 	}
 
-	offset := info.Size()
-	if offset == 0 {
-		if err := f.Truncate(s.sizeMapInMB); err != nil {
-			f.Close()
-			return fmt.Errorf("failed to truncate new file: %w", err)
-		}
-	}
-
-	m, err := mmap.Map(f, mmap.RDWR, 0)
-	if err != nil {
-		f.Close()
-		return fmt.Errorf("failed to mmap new file: %w", err)
-	}
-
-	s.file = f
-	s.mmap = m
-	s.path = newPath
-	s.offset = 0 // Reset offset for the new file
+	// Update the current storage instance with the new one
+	*s = *newStorage
 
 	return nil
 }

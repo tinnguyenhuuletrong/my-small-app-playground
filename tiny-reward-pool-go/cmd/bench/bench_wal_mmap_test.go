@@ -27,7 +27,7 @@ func BenchmarkPoolDrawWithMmapWALCallback(b *testing.B) {
 
 	jsonFormatter := walformatter.NewStringLineFormatter()
 	fileStorage, err := walstorage.NewFileMMapStorage(walPath, walstorage.FileMMapStorageOps{
-		MMapFileSizeInMB: walSize,
+		MMapFileSizeInBytes: walSize,
 	})
 	if err != nil {
 		b.Fatalf("failed to create file storage: %v", err)
@@ -46,7 +46,7 @@ func BenchmarkPoolDrawWithMmapWALCallback(b *testing.B) {
 	)
 	ctx := &types.Context{
 		WAL:   w,
-		Utils: &utils.UtilsImpl{},
+		Utils: &utils.MockUtils{},
 	}
 
 	proc := processing.NewProcessor(ctx, pool, &processing.ProcessorOptional{

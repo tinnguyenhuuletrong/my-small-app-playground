@@ -25,6 +25,10 @@ func (w *WAL) Flush() error {
 		return err
 	}
 
+	if !w.storage.CanWrite(len(data)) {
+		return types.ErrWALFull
+	}
+
 	err = w.storage.Write(data)
 	if err != nil {
 		return err
@@ -60,10 +64,6 @@ func (w *WAL) Close() error {
 }
 
 func (w *WAL) Rotate(path string) error {
-	if len(w.buffer) > 0 {
-		return types.ErrWalBufferNotEmpty
-	}
-
 	return w.storage.Rotate(path)
 }
 

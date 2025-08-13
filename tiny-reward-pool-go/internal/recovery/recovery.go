@@ -10,7 +10,7 @@ import (
 )
 
 // RecoverPool loads the pool from snapshot, replays WAL, writes new snapshot, and rotates WAL.
-func RecoverPool(snapshotPath, walPath, configPath string, formatter types.LogFormatter) (*rewardpool.Pool, error) {
+func RecoverPool(snapshotPath, walPath, configPath string, formatter types.LogFormatter, utils types.Utils) (*rewardpool.Pool, error) {
 	var pool *rewardpool.Pool
 
 	// Try to load from snapshot first
@@ -47,7 +47,17 @@ func RecoverPool(snapshotPath, walPath, configPath string, formatter types.LogFo
 	if err := pool.SaveSnapshot(snapshotPath); err != nil {
 		return nil, fmt.Errorf("failed to save recovered snapshot: %w", err)
 	}
+
 	// 4. Rotate WAL log
+	archiveWalPath := utils.GenRotatedWALPath()
+	if archiveWalPath != nil {
+		// Rename the old file to the new path (archive it).
+		if err := os.Rename(walPath, *archiveWalPath); err != nil {
+			return nil, err
+		}
+	}
+
+	// 4. Remove wal
 	os.Remove(walPath)
 
 	return pool, nil

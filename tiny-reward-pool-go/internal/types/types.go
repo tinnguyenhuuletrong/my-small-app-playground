@@ -66,9 +66,13 @@ type LogFormatter interface {
 // Storage Interface: To handle the physical writing, reading, and management of the log medium.
 type Storage interface {
 	Write([]byte) error
+	CanWrite(size int) bool
 	Flush() error
 	Close() error
-	Rotate(newPath string) error
+
+	// Finalize current file and move to archivePath.
+	// Then reset and continue to use the current one
+	Rotate(archivePath string) error
 }
 
 // WAL interface
@@ -95,9 +99,11 @@ type Context struct {
 	Utils Utils
 }
 
-// Utils interface for random selection
+// Utils provides an interface for environment-specific operations like logging and path generation.
 type Utils interface {
 	GetLogger() *slog.Logger
+	GenRotatedWALPath() *string // Path for the archived WAL. nil means skip archiving.
+	GenSnapshotPath() *string   // Path for the new snapshot. nil means skip snapshotting.
 }
 
 // ItemSelector defines the contract for selecting items from a reward pool.
@@ -131,6 +137,7 @@ func (e errString) Error() string {
 }
 
 const ErrWalBufferNotEmpty = errString("Wal buffer is not empty. Should Flush before rotate")
+const ErrWALFull = errString("WAL is full, rotation is required")
 const ErrEmptyRewardPool = errString("reward pool is empty")
 const ErrPendingDrawsNotEmpty = errString("PendingDraws remaining. Please CommitDraw or RevertDraw before")
 const ErrShutingDown = errString("request cancelled: processor shutting down")

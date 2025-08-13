@@ -144,26 +144,86 @@ func (p *Processor) run() {
 }
 
 func (p *Processor) Flush() error {
-	if p.stagedDraws < 0 {
+	if p.stagedDraws <= 0 {
 		return nil
 	}
 
 	flushErr := p.ctx.WAL.Flush()
-	if flushErr == nil {
-		p.pool.CommitDraw()
-		if p.ctx.Utils.GetLogger() != nil {
-			p.ctx.Utils.GetLogger().Debug(fmt.Sprintf("[Processor] WAL Flush and Commit - %d", p.stagedDraws))
-		}
-	} else {
-		fmt.Println(flushErr)
-		p.pool.RevertDraw()
-		if p.ctx.Utils.GetLogger() != nil {
-			p.ctx.Utils.GetLogger().Debug(fmt.Sprintf("[Processor] WAL Flush and Revert - %d", p.stagedDraws))
+	shouldCreateSnapshot := false
+	if flushErr == types.ErrWALFull {
+		// WAL is full, let's rotate it.
+		if logger := p.ctx.Utils.GetLogger(); logger != nil {
+			logger.Info("WAL is full, starting rotation and snapshot process.")
 		}
 
+		// 1. Rotate the WAL file.
+		rotatedPath := p.ctx.Utils.GenRotatedWALPath()
+		if rotatedPath != nil {
+			if err := p.ctx.WAL.Rotate(*rotatedPath); err != nil {
+				if logger := p.ctx.Utils.GetLogger(); logger != nil {
+					logger.Error("Failed to rotate WAL. Reverting draws.", "error", err)
+				}
+				p.pool.RevertDraw()
+				p.stagedDraws = 0
+				return err // This is a critical failure.
+			}
+		}
+
+		// 2. The buffer is still holding the data that failed to write.
+		//    Let's try flushing it again to the new, empty WAL.
+		flushErr = p.ctx.WAL.Flush()
+		if flushErr != nil {
+			if logger := p.ctx.Utils.GetLogger(); logger != nil {
+				logger.Error("Failed 2nd flush.", "error", flushErr)
+			}
+		}
+
+		// After a rotation, we create a snapshot.
+		if flushErr == nil {
+			shouldCreateSnapshot = true
+		}
 	}
+
+	// Final commit/revert logic based on the outcome.
+	if flushErr == nil {
+		p.pool.CommitDraw()
+		if logger := p.ctx.Utils.GetLogger(); logger != nil {
+			logger.Debug(fmt.Sprintf("[Processor] WAL Flush and Commit - %d", p.stagedDraws))
+		}
+	} else {
+		p.pool.RevertDraw()
+		if logger := p.ctx.Utils.GetLogger(); logger != nil {
+			logger.Error("[Processor] WAL Flush failed, reverting draws.", "error", flushErr)
+		}
+	}
+
+	// Create snapshot
+	if shouldCreateSnapshot {
+		p.snapshot()
+	}
+
 	p.stagedDraws = 0
 	return flushErr
+}
+
+func (p *Processor) snapshot() error {
+	snapshotPath := p.ctx.Utils.GenSnapshotPath()
+	if snapshotPath != nil {
+		if logger := p.ctx.Utils.GetLogger(); logger != nil {
+			logger.Info("Creating snapshot.", "path", *snapshotPath)
+		}
+		// The snapshot should represent the state of the pool *before* the draws that are now in the new WAL.
+		// This is the correct state, as it represents the end of the previous (now archived) WAL.
+		if err := p.pool.SaveSnapshot(*snapshotPath); err != nil {
+			// Log snapshot error but don't fail the whole operation,
+			// as the draws have been successfully logged to the new WAL.
+			if logger := p.ctx.Utils.GetLogger(); logger != nil {
+				logger.Error("Failed to create snapshot after WAL rotation.", "error", err)
+			}
+			return err
+		}
+	}
+	return nil
 }
 
 func (p *Processor) Draw() <-chan DrawResponse {

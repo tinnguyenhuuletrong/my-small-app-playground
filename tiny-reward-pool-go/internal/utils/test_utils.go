@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"log/slog"
 	"math/rand"
 
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
@@ -34,3 +35,20 @@ func (m *MockWAL) Close() error                            { return nil }
 func (m *MockWAL) Flush() error                            { return nil }
 func (m *MockWAL) SetSnapshotPath(path string)             {}
 func (m *MockWAL) Rotate(path string) error                { return nil }
+
+// MockUtils is a mock implementation of the types.Utils interface for testing.
+type MockUtils struct{}
+
+var _ types.Utils = (*MockUtils)(nil)
+
+func (m *MockUtils) GetLogger() *slog.Logger {
+	return nil // No logging in tests
+}
+
+func (m *MockUtils) GenRotatedWALPath() *string {
+	return nil // Not used in this test
+}
+
+func (m *MockUtils) GenSnapshotPath() *string {
+	return nil // Not used in this test
+}

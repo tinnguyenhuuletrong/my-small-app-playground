@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/rewardpool"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
+	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/utils"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/formatter"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/storage"
@@ -51,7 +52,7 @@ func TestRecoverPool_Basic(t *testing.T) {
 	f.Close()
 
 	jsonFormatter := formatter.NewJSONFormatter()
-	recovered, err := RecoverPool(snapshot, walPath, config, jsonFormatter)
+	recovered, err := RecoverPool(snapshot, walPath, config, jsonFormatter, &utils.MockUtils{})
 	assert.NoError(t, err)
 
 	// Check that gold and silver quantities are decremented
@@ -112,7 +113,7 @@ func TestRecoverPool_MMap(t *testing.T) {
 	err = w.Close()
 	assert.NoError(t, err)
 
-	recovered, err := RecoverPool(snapshot, walPath, config, jsonFormatter)
+	recovered, err := RecoverPool(snapshot, walPath, config, jsonFormatter, &utils.MockUtils{})
 	assert.NoError(t, err)
 
 	// Check that gold and silver quantities are decremented

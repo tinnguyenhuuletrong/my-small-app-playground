@@ -32,20 +32,25 @@ func TestFileStorage(t *testing.T) {
 	assert.Equal(t, data, content)
 
 	// Test Rotate
-	newPath := "test_new.log"
-	defer os.Remove(newPath)
-	err = fs.Rotate(newPath)
+	achivedPath := "test_achived.log"
+	defer os.Remove(achivedPath)
+	err = fs.Rotate(achivedPath)
 	assert.NoError(t, err)
 
-	// Write to new file
+	// Verify content of the old, rotated file
+	archivedContent, err := os.ReadFile(achivedPath)
+	assert.NoError(t, err)
+	assert.Equal(t, data, archivedContent)
+
+	// Write to the new file at the original path
 	newData := []byte("hello new world")
 	err = fs.Write(newData)
 	assert.NoError(t, err)
 	err = fs.Flush()
 	assert.NoError(t, err)
 
-	// Verify new file content
-	newContent, err := os.ReadFile(newPath)
+	// Verify new file content at the original path
+	newContent, err := os.ReadFile(path)
 	assert.NoError(t, err)
 	assert.Equal(t, newData, newContent)
 

@@ -24,7 +24,7 @@ func TestRewardDistributionReport(t *testing.T) {
 
 	for _, s := range selectors {
 		t.Run(s.name, func(t *testing.T) {
-			ctx := &types.Context{Utils: &utils.UtilsImpl{}}
+			ctx := &types.Context{Utils: &utils.MockUtils{}}
 			rewards := []types.PoolReward{
 				{ItemID: "gold", Quantity: 1000000, Probability: 10},
 				{ItemID: "silver", Quantity: 1000000, Probability: 20},
@@ -86,7 +86,7 @@ func TestQuantityExhaustion(t *testing.T) {
 				{ItemID: "silver", Quantity: 100, Probability: 10},
 			}
 
-			ctx := &types.Context{Utils: &utils.UtilsImpl{}}
+			ctx := &types.Context{Utils: &utils.MockUtils{}}
 			pool := rewardpool.NewPool(
 				rewards,
 				rewardpool.PoolOptional{

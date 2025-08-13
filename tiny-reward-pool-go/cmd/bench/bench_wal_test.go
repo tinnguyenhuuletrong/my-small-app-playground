@@ -41,7 +41,7 @@ func BenchmarkPoolDrawWithBasicWALCallback(b *testing.B) {
 	)
 	ctx := &types.Context{
 		WAL:   w,
-		Utils: &utils.UtilsImpl{},
+		Utils: &utils.MockUtils{},
 	}
 
 	proc := processing.NewProcessor(ctx, pool, &processing.ProcessorOptional{

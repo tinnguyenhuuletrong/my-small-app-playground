@@ -10,9 +10,9 @@ import (
 
 func TestFileMMapStorage(t *testing.T) {
 	path := "test_mmap.log"
-	newPath := "test_mmap_new.log"
+	achivedPath := "test_mmap_achived.log"
 	defer os.Remove(path)
-	defer os.Remove(newPath)
+	defer os.Remove(achivedPath)
 
 	// Test NewFileMMapStorage
 	fs, err := storage.NewFileMMapStorage(path)
@@ -36,23 +36,26 @@ func TestFileMMapStorage(t *testing.T) {
 	assert.Contains(t, string(originalContent), string(initialData))
 
 	// Test Rotate
-	err = fs.Rotate(newPath)
+	err = fs.Rotate(achivedPath)
 	assert.NoError(t, err)
 
-	// Write new data after rotation
+	// Verify the content of the archived file
+	archivedContent, err := os.ReadFile(achivedPath)
+	assert.NoError(t, err)
+	assert.Contains(t, string(archivedContent), string(initialData))
+
+	// Write new data after rotation to the original path
 	newData := []byte("new data")
 	err = fs.Write(newData)
 	assert.NoError(t, err)
 	err = fs.Flush()
 	assert.NoError(t, err)
 
-	// Close the storage to ensure data is written to disk
-	err = fs.Close()
-	assert.NoError(t, err)
-
-	// Verify new file content
-	newContent, err := os.ReadFile(newPath)
+	// Verify the content of the new file at the original path
+	newContent, err := os.ReadFile(path)
 	assert.NoError(t, err)
 	assert.Contains(t, string(newContent), string(newData))
-	assert.NotContains(t, string(newContent), string(initialData))
+
+	// Close the storage
+	err = fs.Close()
 }

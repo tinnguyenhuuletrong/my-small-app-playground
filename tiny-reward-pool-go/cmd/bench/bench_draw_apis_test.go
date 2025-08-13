@@ -11,7 +11,7 @@ import (
 )
 
 func BenchmarkDrawWithCallback(b *testing.B) {
-	ctx := &types.Context{Utils: &utils.UtilsImpl{}}
+	ctx := &types.Context{Utils: &utils.MockUtils{}}
 	pool := rewardpool.NewPool(
 		[]types.PoolReward{
 			{ItemID: "gold", Quantity: b.N, Probability: 1.0},
@@ -38,7 +38,7 @@ func BenchmarkDrawWithCallback(b *testing.B) {
 }
 
 func BenchmarkDrawChannel(b *testing.B) {
-	ctx := &types.Context{Utils: &utils.UtilsImpl{}}
+	ctx := &types.Context{Utils: &utils.MockUtils{}}
 	pool := rewardpool.NewPool(
 		[]types.PoolReward{
 			{ItemID: "gold", Quantity: b.N, Probability: 1.0},
