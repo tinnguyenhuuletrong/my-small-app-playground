@@ -167,6 +167,11 @@ func (p *Processor) Flush() error {
 				p.stagedDraws = 0
 				return err // This is a critical failure.
 			}
+		} else {
+			if logger := p.ctx.Utils.GetLogger(); logger != nil {
+				logger.Error("Wall is full, rotatedPath not set. Noting to do. Stop here")
+			}
+			panic(1)
 		}
 
 		// 2. The buffer is still holding the data that failed to write.

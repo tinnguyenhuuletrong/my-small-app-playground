@@ -72,11 +72,6 @@ func NewFileMMapStorage(path string, opts ...FileMMapStorageOps) (*FileMMapStora
 }
 
 func (s *FileMMapStorage) Write(data []byte) error {
-	// Ensure enough space in mmap
-	if !s.CanWrite(len(data)) {
-		// Re-mmap with larger size or handle error
-		return fmt.Errorf("mmap buffer full, cannot write %d bytes", len(data))
-	}
 	copy(s.mmap[s.offset:], data)
 	s.offset += int64(len(data))
 	return nil
