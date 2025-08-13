@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"os/signal"
 	"syscall"
@@ -35,10 +36,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	// fileStorage, err := walstorage.NewFileMMapStorage(walPath)
+	// fileStorage, err := walstorage.NewFileMMapStorage(walPath, walstorage.FileMMapStorageOps{
+	// 	MMapFileSizeInBytes: 1024 * 0.5, // 0.5 Kb
+	// })
 	fileStorage, err := walstorage.NewFileStorage(walPath, walstorage.FileStorageOpt{
 		// SizeFileInBytes: 1024 * 1024 * 0.5, // 0.5 MB
-		SizeFileInBytes: 1024 * 0.5, // 0.5 Kb
+		SizeFileInBytes: int(math.Round(1024 * 0.2)), // 0.5 Kb
 	})
 	if err != nil {
 		fmt.Println("Error creating file storage:", err)

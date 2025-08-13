@@ -63,6 +63,10 @@ func (w *WAL) Close() error {
 	return w.storage.Close()
 }
 
+func (w *WAL) Reset() {
+	w.buffer = w.buffer[:0]
+}
+
 func (w *WAL) Rotate(path string) error {
 	return w.storage.Rotate(path)
 }

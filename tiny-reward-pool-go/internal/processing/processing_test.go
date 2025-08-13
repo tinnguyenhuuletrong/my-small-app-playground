@@ -188,6 +188,7 @@ func (m *mockWAL) LogDraw(item types.WalLogDrawItem) error {
 	return nil
 }
 func (m *mockWAL) Close() error        { return nil }
+func (m *mockWAL) Reset()              {}
 func (m *mockWAL) Rotate(string) error { return nil }
 func (m *mockWAL) Flush() error {
 	m.flushCount++

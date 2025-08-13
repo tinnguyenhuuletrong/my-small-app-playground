@@ -109,7 +109,8 @@ func (p *Pool) SelectItem(ctx *types.Context) (string, error) {
 
 // CommitDraw finalizes a staged draw
 func (p *Pool) CommitDraw() {
-	p.pendingDraws = make(map[string]int)
+	// p.pendingDraws = make(map[string]int)
+	clear(p.pendingDraws)
 }
 
 // RevertDraw cancels a staged draw
@@ -117,7 +118,8 @@ func (p *Pool) RevertDraw() {
 	for itemID, count := range p.pendingDraws {
 		p.selector.Update(itemID, int64(count)) // Re-add the quantity to the selector
 	}
-	p.pendingDraws = make(map[string]int)
+	// p.pendingDraws = make(map[string]int)
+	clear(p.pendingDraws)
 }
 
 // ApplyDrawLog decrements the quantity for a given itemID if available (internal use only)

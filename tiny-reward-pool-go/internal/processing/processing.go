@@ -175,18 +175,15 @@ func (p *Processor) Flush() error {
 		}
 
 		// 2. The buffer is still holding the data that failed to write.
-		//    Let's try flushing it again to the new, empty WAL.
-		flushErr = p.ctx.WAL.Flush()
-		if flushErr != nil {
-			if logger := p.ctx.Utils.GetLogger(); logger != nil {
-				logger.Error("Failed 2nd flush.", "error", flushErr)
-			}
-		}
+		// But it is going to snapshot right away. So safe to discard
+		// B/c now snapshot reflect all wal log
+		p.ctx.WAL.Reset()
 
 		// After a rotation, we create a snapshot.
-		if flushErr == nil {
-			shouldCreateSnapshot = true
-		}
+		shouldCreateSnapshot = true
+
+		// reset error
+		flushErr = nil
 	}
 
 	// Final commit/revert logic based on the outcome.

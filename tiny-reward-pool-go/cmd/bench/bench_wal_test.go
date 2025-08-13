@@ -45,7 +45,8 @@ func BenchmarkPoolDrawWithBasicWALCallback(b *testing.B) {
 	}
 
 	proc := processing.NewProcessor(ctx, pool, &processing.ProcessorOptional{
-		FlushAfterNDraw: 10_000,
+		RequestBufferSize: b.N,
+		FlushAfterNDraw:   10_000,
 	})
 
 	var wg sync.WaitGroup

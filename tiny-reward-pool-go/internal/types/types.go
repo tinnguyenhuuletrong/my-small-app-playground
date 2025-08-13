@@ -86,6 +86,8 @@ type WAL interface {
 	Close() error
 	// Rotate file
 	Rotate(path string) error
+	// Reset buffer
+	Reset()
 }
 
 // Config interface
