@@ -1,4 +1,3 @@
-
 package actor
 
 import "github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"

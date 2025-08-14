@@ -57,7 +57,7 @@ func (a *RewardProcessorActor) handleMessage(msg interface{}) {
 		// This is a read-only operation, so it's safe to do directly.
 		// Note: In a more complex actor, even reads might be message-based
 		// to ensure sequential consistency with writes.
-		// m.ResponseChan <- a.pool.State()
+		m.ResponseChan <- a.pool.State()
 	}
 }
 

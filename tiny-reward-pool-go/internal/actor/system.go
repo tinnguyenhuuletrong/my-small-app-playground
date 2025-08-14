@@ -1,4 +1,3 @@
-
 package actor
 
 import (
@@ -63,8 +62,8 @@ func (s *System) Draw() <-chan DrawResponse {
 // Stop gracefully shuts down the actor system.
 func (s *System) Stop() {
 	s.stopOnce.Do(func() {
-		s.cancel() // Signal the actor to stop
-		s.wg.Wait()  // Wait for the actor's goroutine to finish
+		s.cancel()  // Signal the actor to stop
+		s.wg.Wait() // Wait for the actor's goroutine to finish
 	})
 }
 

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/processing"
+	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/actor"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/rewardpool"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/selector"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
@@ -39,17 +39,17 @@ func TestRewardDistributionReport(t *testing.T) {
 			w := &utils.MockWAL{}
 			ctx.WAL = w
 
-			opt := &processing.ProcessorOptional{RequestBufferSize: 1000, FlushAfterNDraw: 1000}
-			p := processing.NewProcessor(ctx, pool, opt)
+			opt := &actor.SystemOptional{RequestBufferSize: 1000, FlushAfterNDraw: 1000}
+			sys := actor.NewSystem(ctx, pool, opt)
 
 			counts := make(map[string]int)
 			for i := 0; i < totalDraws; i++ {
-				resp := <-p.Draw()
+				resp := <-sys.Draw()
 				if resp.Err == nil {
 					counts[resp.Item]++
 				}
 			}
-			p.Stop()
+			sys.Stop()
 
 			fmt.Printf("\n--- Distribution Report for %s ---\n", s.name)
 			fmt.Println("|   Item   |   Count   | Proportion |")
@@ -96,13 +96,13 @@ func TestQuantityExhaustion(t *testing.T) {
 			w := &utils.MockWAL{}
 			ctx.WAL = w
 
-			opt := &processing.ProcessorOptional{RequestBufferSize: 100, FlushAfterNDraw: 10}
-			p := processing.NewProcessor(ctx, pool, opt)
+			opt := &actor.SystemOptional{RequestBufferSize: 100, FlushAfterNDraw: 10}
+			sys := actor.NewSystem(ctx, pool, opt)
 
 			goldCount := 0
 			counts := make(map[string]int)
 			for i := 0; i < 200; i++ {
-				resp := <-p.Draw()
+				resp := <-sys.Draw()
 				if resp.Err == nil && resp.Item == "gold" {
 					goldCount++
 				}
@@ -111,7 +111,7 @@ func TestQuantityExhaustion(t *testing.T) {
 				}
 			}
 
-			p.Stop()
+			sys.Stop()
 			final_state := pool.State()
 
 			// Make sure pool drained out

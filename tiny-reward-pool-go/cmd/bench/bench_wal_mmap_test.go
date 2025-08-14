@@ -4,11 +4,10 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sync"
 	"testing"
 	"time"
 
-	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/processing"
+	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/actor"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/rewardpool"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/utils"
@@ -17,7 +16,7 @@ import (
 	walstorage "github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/storage"
 )
 
-func BenchmarkPoolDrawWithMmapWALCallback(b *testing.B) {
+func BenchmarkPoolDrawWithMmapWALChannel(b *testing.B) {
 	tmpDir := filepath.Join("_tmp")
 	walPath := filepath.Join(tmpDir, "wal_mmap.log")
 	_ = os.Remove(walPath)
@@ -49,12 +48,10 @@ func BenchmarkPoolDrawWithMmapWALCallback(b *testing.B) {
 		Utils: &utils.MockUtils{},
 	}
 
-	proc := processing.NewProcessor(ctx, pool, &processing.ProcessorOptional{
+	sys := actor.NewSystem(ctx, pool, &actor.SystemOptional{
 		RequestBufferSize: b.N,
 		FlushAfterNDraw:   10_000,
 	})
-
-	var wg sync.WaitGroup
 
 	b.ResetTimer()
 	start := time.Now()
@@ -62,14 +59,14 @@ func BenchmarkPoolDrawWithMmapWALCallback(b *testing.B) {
 
 	runtime.ReadMemStats(&memStatsStart)
 
+	resChans := make([]<-chan actor.DrawResponse, b.N)
 	for i := 0; i < b.N; i++ {
-		wg.Add(1)
-		proc.DrawWithCallback(func(resp processing.DrawResponse) {
-			wg.Done()
-		})
+		resChans[i] = sys.Draw()
 	}
 
-	wg.Wait()
+	for _, ch := range resChans {
+		<-ch
+	}
 
 	runtime.ReadMemStats(&memStatsEnd)
 	elapsed := time.Since(start)

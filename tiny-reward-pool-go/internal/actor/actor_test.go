@@ -122,6 +122,9 @@ func (m *mockPool) SelectItem(ctx *types.Context) (string, error) {
 	}
 	return "", types.ErrEmptyRewardPool
 }
+func (m *mockPool) State() []types.PoolReward {
+	return make([]types.PoolReward, 0)
+}
 
 func (m *mockPool) CommitDraw() {
 	m.committed += len(m.pending)

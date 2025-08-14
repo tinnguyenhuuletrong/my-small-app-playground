@@ -4,7 +4,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/processing"
+	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/actor"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/rewardpool"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/selector"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
@@ -28,16 +28,16 @@ func BenchmarkDrawChannel_PrefixSumSelector(b *testing.B) {
 	w := &utils.MockWAL{}
 	ctx.WAL = w
 
-	opt := &processing.ProcessorOptional{RequestBufferSize: b.N, FlushAfterNDraw: 1000}
-	p := processing.NewProcessor(ctx, pool, opt)
+	opt := &actor.SystemOptional{RequestBufferSize: b.N, FlushAfterNDraw: 1000}
+	sys := actor.NewSystem(ctx, pool, opt)
 
 	var memStatsStart, memStatsEnd runtime.MemStats
 	b.ResetTimer()
 	runtime.ReadMemStats(&memStatsStart)
 
-	resChans := make([]<-chan processing.DrawResponse, b.N)
+	resChans := make([]<-chan actor.DrawResponse, b.N)
 	for i := 0; i < b.N; i++ {
-		resChans[i] = p.Draw()
+		resChans[i] = sys.Draw()
 	}
 
 	for _, ch := range resChans {
@@ -45,7 +45,7 @@ func BenchmarkDrawChannel_PrefixSumSelector(b *testing.B) {
 	}
 
 	runtime.ReadMemStats(&memStatsEnd)
-	p.Stop()
+	sys.Stop()
 
 	b.ReportMetric(float64(memStatsEnd.TotalAlloc-memStatsStart.TotalAlloc)/float64(b.N), "bytes/draw")
 	b.ReportMetric(float64(memStatsEnd.NumGC-memStatsStart.NumGC), "gc_count")
@@ -68,16 +68,16 @@ func BenchmarkDrawChannel_FenwickTreeSelector(b *testing.B) {
 	w := &utils.MockWAL{}
 	ctx.WAL = w
 
-	opt := &processing.ProcessorOptional{RequestBufferSize: b.N, FlushAfterNDraw: 1000}
-	p := processing.NewProcessor(ctx, pool, opt)
+	opt := &actor.SystemOptional{RequestBufferSize: b.N, FlushAfterNDraw: 1000}
+	sys := actor.NewSystem(ctx, pool, opt)
 
 	var memStatsStart, memStatsEnd runtime.MemStats
 	b.ResetTimer()
 	runtime.ReadMemStats(&memStatsStart)
 
-	resChans := make([]<-chan processing.DrawResponse, b.N)
+	resChans := make([]<-chan actor.DrawResponse, b.N)
 	for i := 0; i < b.N; i++ {
-		resChans[i] = p.Draw()
+		resChans[i] = sys.Draw()
 	}
 
 	for _, ch := range resChans {
@@ -85,7 +85,7 @@ func BenchmarkDrawChannel_FenwickTreeSelector(b *testing.B) {
 	}
 
 	runtime.ReadMemStats(&memStatsEnd)
-	p.Stop()
+	sys.Stop()
 
 	b.ReportMetric(float64(memStatsEnd.TotalAlloc-memStatsStart.TotalAlloc)/float64(b.N), "bytes/draw")
 	b.ReportMetric(float64(memStatsEnd.NumGC-memStatsStart.NumGC), "gc_count")

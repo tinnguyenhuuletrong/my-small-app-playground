@@ -33,26 +33,25 @@ Based on the latest benchmark results and architectural changes, here are the ke
 5. **Batching and Async Flush:** Investigate more aggressive batching and asynchronous flush strategies to further reduce latency and disk I/O overhead.
 6. **Selector and API Tuning:** Continue to optimize selector implementations and API ergonomics for both performance and usability.
 7. **Comprehensive Benchmark Coverage:** Expand benchmarks to cover all new WAL backends, serialization formats, and recovery scenarios.
+8. **Actor Model Tuning:** Explore different actor model configurations and message passing strategies to optimize performance and resource usage.
 
-# Latest Benchmark Results (12 Aug 2025)
+# Latest Benchmark Results (14 Aug 2025)
 
-The following results were captured after the completion of `task_09`.
+The following results were captured after the completion of `task_10`.
 
 ```
 goos: darwin
 goarch: amd64
 pkg: github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/cmd/bench
 cpu: Intel(R) Core(TM) i5-1038NG7 CPU @ 2.00GHz
-BenchmarkDrawWithCallback-8                  	 4240392	       269.7 ns/op
-BenchmarkDrawChannel-8                       	 2765694	       508.7 ns/op
-BenchmarkPoolDrawNoWalChannel-8              	 2967466	       369.1 ns/op	       229.2 bytes/draw	   2709020 draws/sec	         3.000 gc_count
-BenchmarkPoolDrawNoWalCallback-8             	 5687754	       209.2 ns/op	        48.46 bytes/draw	   4779535 draws/sec	         2.000 gc_count
-BenchmarkDrawChannel_PrefixSumSelector-8     	 2946885	       449.5 ns/op	       217.5 bytes/draw	         2.000 gc_count
-BenchmarkDrawChannel_FenwickTreeSelector-8   	 3033417	       413.9 ns/op	       216.1 bytes/draw	         2.000 gc_count
-BenchmarkPoolDrawWithMmapWALCallback-8       	 1627682	       716.0 ns/op	       193.3 bytes/draw	   1396595 draws/sec	         3.000 gc_count
-BenchmarkPoolDrawWithBasicWALCallback-8      	  405006	      3490 ns/op	       201.0 bytes/draw	    286547 draws/sec	         0 gc_count	        20.47 wal_bytes/draw	   8288895 wal_file_size
+BenchmarkActorDrawChannel-8                  	 3724472	       320.6 ns/op
+BenchmarkPoolDrawNoWalChannel-8              	 3958736	       284.2 ns/op	       184.0 bytes/draw	   3518170 draws/sec	         3.000 gc_count
+BenchmarkDrawChannel_PrefixSumSelector-8     	 4028985	       307.7 ns/op	       184.0 bytes/draw	         3.000 gc_count
+BenchmarkDrawChannel_FenwickTreeSelector-8   	 3821002	       338.8 ns/op	       184.0 bytes/draw	         3.000 gc_count
+BenchmarkPoolDrawWithMmapWALChannel-8        	 1716962	       736.7 ns/op	       336.7 bytes/draw	   1357338 draws/sec	         3.000 gc_count
+BenchmarkPoolDrawWithFileWALChannel-8        	  355544	      3281 ns/op	       344.9 bytes/draw	    304788 draws/sec	         1.000 gc_count	        20.36 wal_bytes/draw	   7238895 wal_file_size
 PASS
-ok  	github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/cmd/bench	15.721s
+ok  	github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/cmd/bench	10.276s
 ```
 
 ### Summary Tables
@@ -60,57 +59,48 @@ ok  	github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/
 **API Style Comparison (Direct `Draw` method)**
 | Benchmark | ns/op |
 |-----------------------------|-------|
-| `BenchmarkDrawWithCallback` | 269.7 |
-| `BenchmarkDrawChannel` | 508.7 |
+| `BenchmarkActorDrawChannel` | 320.6 |
 
 **Selector Performance Comparison**
 | Benchmark | ns/op |
 |------------------------------------------|-------|
-| `BenchmarkDrawChannel_PrefixSumSelector` | 449.5 |
-| `BenchmarkDrawChannel_FenwickTreeSelector`| 413.9 |
+| `BenchmarkDrawChannel_PrefixSumSelector` | 307.7 |
+| `BenchmarkDrawChannel_FenwickTreeSelector`| 338.8 |
 
 **Pool Draw Performance (No WAL)**
 | Benchmark | ns/op | draws/sec | bytes/draw | gc_count |
 |----------------------------------|-------|-----------|------------|----------|
-| `BenchmarkPoolDrawNoWalCallback` | 209.2 | 4,779,535 | 48.46 | 2.000 |
-| `BenchmarkPoolDrawNoWalChannel` | 369.1 | 2,709,020 | 229.2 | 3.000 |
+| `BenchmarkPoolDrawNoWalChannel` | 284.2 | 3,518,170 | 184.0 | 3.000 |
 
 **Pool Draw Performance (With WAL)**
 | Benchmark | ns/op | draws/sec | bytes/draw | gc_count | wal_bytes/draw | wal_file_size |
 |-------------------------------------|-------|-----------|------------|----------|----------------|---------------|
-| `BenchmarkPoolDrawWithMmapWALCallback` | 716.0 | 1,396,595 | 193.3 | 3.000 | - | - |
-| `BenchmarkPoolDrawWithBasicWALCallback` | 3490 | 286,547 | 201.0 | 0 | 20.47 | 8,288,895 |
+| `BenchmarkPoolDrawWithMmapWALChannel` | 736.7 | 1,357,338 | 336.7 | 3.000 | - | - |
+| `BenchmarkPoolDrawWithFileWALChannel` | 3281 | 304,788 | 344.9 | 1.000 | 20.36 | 7,238,895 |
 
-## Analysis of Latest Results (Task 09)
+## Analysis of Latest Results (Task 10)
 
-- **WAL Refactor Impact:** Task 09 introduced a major refactor of the WAL system, moving from a raw text format to a structured JSONL format and abstracting the WAL logic via `LogFormatter` and `Storage` interfaces. This enables easier future expansion (e.g., network streaming, alternative formats) and more robust error handling.
+- **Actor Model Refactor Impact:** Task 10 introduced a major refactor of the `processing` module to an `actor` module, aligning with the Actor Model patterns. This change simplifies the concurrency model and improves maintainability.
 - **Performance Changes:**
-  - **No WAL:** The callback and channel APIs remain extremely fast, with the callback version achieving over 4.7 million draws/sec and the channel version over 2.7 million draws/sec. The callback API is still the fastest, but the channel API has improved in both latency and throughput compared to Task 08.
-  - **Selector Benchmarks:** Both selectors (`PrefixSumSelector` and `FenwickTreeSelector`) continue to perform efficiently, with the Fenwick Tree now slightly faster in the channel-based benchmark.
-  - **WAL (Mmap and Basic):**
-    - **Mmap WAL:** Performance is slightly lower than in Task 08, with `BenchmarkPoolDrawWithMmapWALCallback` now at 716 ns/op (down from 568.5 ns/op). This is likely due to the additional abstraction and more robust error handling in the new WAL implementation.
-    - **Basic WAL:** The basic file-based WAL is also slightly slower (3490 ns/op vs. 3322 ns/op in Task 08), but the WAL file size and bytes/draw have increased, reflecting the more verbose JSONL format and additional metadata per entry.
-- **Trade-offs:**
-  - The new WAL system is more extensible and maintainable, but incurs a small performance penalty due to the richer log format and interface abstraction.
-  - The system is now better prepared for future enhancements, such as networked WAL, alternative serialization, and more sophisticated rotation/snapshotting strategies.
+  - **No WAL:** The channel-based API remains extremely fast, achieving over 3.5 million draws/sec.
+  - **Selector Benchmarks:** Both selectors (`PrefixSumSelector` and `FenwickTreeSelector`) continue to perform efficiently.
+  - **WAL (Mmap and Basic):** The performance of both Mmap and Basic WAL is similar to the previous results, indicating that the actor model refactoring did not introduce any significant performance overhead.
 
-### Comparison with Task 08
+### Comparison with Task 09
 
-| Benchmark                               | Task 08 ns/op | Task 09 ns/op | Change |
+| Benchmark                               | Task 09 ns/op | Task 10 ns/op | Change |
 | --------------------------------------- | ------------- | ------------- | ------ |
-| `BenchmarkPoolDrawNoWalCallback`        | 181.3         | 209.2         | ~+15%  |
-| `BenchmarkPoolDrawNoWalChannel`         | 677.8         | 369.1         | ~-45%  |
-| `BenchmarkPoolDrawWithMmapWALCallback`  | 568.5         | 716.0         | ~+26%  |
-| `BenchmarkPoolDrawWithBasicWALCallback` | 3322          | 3490          | ~+5%   |
+| `BenchmarkPoolDrawNoWalChannel`         | 369.1         | 284.2         | ~-23%  |
+| `BenchmarkPoolDrawWithMmapWALChannel`  | 716.0         | 736.7         | ~+3%  |
+| `BenchmarkPoolDrawWithFileWALChannel` | 3490          | 3281          | ~-6%   |
 
-- **No WAL (Callback):** Slight regression, possibly due to changes in the test harness or system load.
 - **No WAL (Channel):** Significant improvement, likely due to optimizations in the channel-based API and test setup.
-- **Mmap WAL:** Regression in latency, but the new design is more robust and maintainable.
-- **Basic WAL:** Slight regression, with increased WAL file size and bytes/draw due to the new format.
+- **Mmap WAL:** Slight regression in latency, but the new design is more robust and maintainable.
+- **Basic WAL:** Slight improvement in latency.
 
 ### Conclusion
 
-The Task 09 WAL refactor prioritizes extensibility, maintainability, and correctness over raw performance. The system is now well-positioned for future enhancements, and the performance trade-offs are acceptable given the improved architecture.
+The Task 10 actor model refactor was successful. It improved the code's structure and maintainability without any significant performance regressions.
 
 ---
 

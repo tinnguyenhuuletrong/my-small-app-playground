@@ -49,6 +49,7 @@ type RewardPool interface {
 	SelectItem(ctx *Context) (string, error)
 	CommitDraw()
 	RevertDraw()
+	State() []PoolReward
 	Load(config ConfigPool) error
 	SaveSnapshot(path string) error
 	LoadSnapshot(path string) error

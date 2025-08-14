@@ -40,7 +40,7 @@
 - `internal/wal/storage/`: `FileStorage` (append/sync with capacity), `FileMMapStorage` (pre-sized mmap region) implementing `Storage`.
 - `internal/wal/wal.go`: WAL composes `LogFormatter` and `Storage`, buffers `WalLogDrawItem`, `Flush` checks `CanWrite` and writes via storage, `ParseWAL` decodes via formatter.
 - `internal/utils/utils.go`: `DefaultUtils` (logger, path generation for rotated WAL and snapshot). `ReadFileContent` utility (handles mmap zero padding). `test_utils.go` includes `MockUtils` and `MockWAL` for tests.
-- `internal/processing/processing.go`: Single-threaded processor; transactional batching. On `ErrWALFull` from `Flush`, performs WAL rotation and snapshot via `Utils` and resumes.
+- `internal/actor/actor.go`: Single-threaded processor; transactional batching. On `ErrWALFull` from `Flush`, performs WAL rotation and snapshot via `Utils` and resumes.
 - `internal/recovery/recovery.go`: Recovery now accepts `formatter` and `utils`, replays WAL via formatter, saves snapshot, and archives/removes old WAL using `utils.GenRotatedWALPath()`.
 - `internal/rewardpool/pool.go`: Reward pool logic with staging (`pendingDraws`) and selector-driven state; provides snapshot load/save and apply log.
 - `cmd/cli/main.go`: CLI demo wiring for `DefaultUtils`, formatter/storage selection, recovery, processing, and graceful shutdown.

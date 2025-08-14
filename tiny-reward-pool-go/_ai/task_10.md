@@ -37,6 +37,10 @@ Refactor the existing `processing` module to more explicitly align with the Acto
         - **Memory Usage:** Bytes per operation.
         - **Garbage Collection:** Number of GC runs.
 
-### Iter 5: Update document
-- **Plan:**
-    1. Document the results in `_ai/doc/bench.md`. Since the underlying concurrency model is fundamentally the same, we expect performance to be very similar. The main benefit is improved code structure and maintainability.
+## Final Result
+- Successfully refactored the `processing` module to the `actor` module, aligning with the Actor Model patterns for better clarity and maintainability.
+- Removed the `internal/processing` directory and all its files.
+- Refactored all the code that was using `internal/processing` to use `internal/actor` instead.
+- Verified that all tests pass after the refactoring.
+- Updated the documentation in `_ai/doc/agent_note.md` and `GEMINI.md` to reflect the changes.
+- Updated the benchmark results in `_ai/doc/bench.md`.
