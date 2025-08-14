@@ -64,6 +64,7 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
+	fmt.Println("[Pool state] ", pool.State())
 	fmt.Println("Press Ctrl+C or send SIGTERM to exit.")
 
 	drawLock := make(chan struct{}, 1) // Used to lock draw requests
@@ -89,5 +90,6 @@ func main() {
 
 	sys.Stop()
 
+	fmt.Println("[Pool state] ", pool.State())
 	fmt.Println("Shutdown complete.")
 }
