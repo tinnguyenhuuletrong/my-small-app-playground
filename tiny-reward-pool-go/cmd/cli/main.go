@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/processing"
+	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/actor"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/recovery"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/utils"
@@ -57,14 +57,12 @@ func main() {
 		WAL:   w,
 		Utils: utils,
 	}
-	proc := processing.NewProcessor(ctx, pool, &processing.ProcessorOptional{
+	sys := actor.NewSystem(ctx, pool, &actor.SystemOptional{
 		FlushAfterNDraw: 5,
 	})
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
-	fmt.Println("[Pool state] ", pool.State())
 
 	fmt.Println("Press Ctrl+C or send SIGTERM to exit.")
 
@@ -74,9 +72,9 @@ func main() {
 	go func() {
 		for {
 			<-drawLock
-			resp := <-proc.Draw()
+			resp := <-sys.Draw()
 			if resp.Err == nil {
-				fmt.Printf("[Request %d] Drew %s Remaining %d\n", resp.RequestID, resp.Item, pool.GetItemRemaining(resp.Item))
+				fmt.Printf("[Request %d] Drew %s\n", resp.RequestID, resp.Item)
 			} else {
 				fmt.Printf("[Request %d] Draw failed: %s \n", resp.RequestID, resp.Err)
 			}
@@ -89,8 +87,7 @@ func main() {
 	fmt.Println("Shutting down gracefully...")
 	<-drawLock
 
-	proc.Stop()
+	sys.Stop()
 
-	fmt.Println("[Pool state] ", pool.State())
 	fmt.Println("Shutdown complete.")
 }
