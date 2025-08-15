@@ -3,6 +3,8 @@
 ## Target
 Currently, the WAL only logs `WalLogDrawItem`. This task will expand the WAL to include more log types to make the system more robust, covering item updates, snapshots, and WAL rotation.
 
+To make it simple. We have a rule that begin of WAL file must be a `LogTypeSnapshot`
+
 ## Plan
 
 ### Iter 1: Refactor for Polymorphic Log Entries & Recovery Logic
@@ -22,12 +24,12 @@ Currently, the WAL only logs `WalLogDrawItem`. This task will expand the WAL to 
         - Add new methods to apply changes from the WAL: `ApplyUpdateLog(itemID string, quantity int, probability int64)`.
     4. **`internal/recovery/recovery.go`:**
         - Rework the `RecoverPool` function:
-            - It will first parse the entire WAL file.
-            - It will then find the index of the last `LogTypeSnapshot` entry in the WAL.
+            - First line of WAL log must be `LogTypeSnapshot`
             - If a snapshot entry is found, it will load the pool state from the `Path` in that log entry.
-            - If no snapshot entry is found, it will create a new pool from the base `configPath`.
             - Finally, it will replay the WAL entries that occurred *after* the loaded snapshot, using a type switch to call the appropriate `Apply...Log` method on the pool (`ApplyDrawLog`, `ApplyUpdateLog`, etc.).
-    5. **Verification:**
+    5. **`internal/actor/actor.go`:**:  
+        - Make sure the first item in WAL log file is `LogTypeSnapshot`
+    6. **Verification:**
         - After implementation, run `make check` to check for compile errors.
         - Run `make test` to ensure all existing tests pass.
 
@@ -56,9 +58,3 @@ Currently, the WAL only logs `WalLogDrawItem`. This task will expand the WAL to 
     3. **Verification:**
         - After implementation, run `make check` to check for compile errors.
         - Run `make test` to ensure all existing tests pass.
-
-## Final Result
-- The WAL system is successfully enhanced to support multiple log types.
-- The recovery process is now driven by the WAL, making it more robust and reliable.
-- All new log types are correctly handled during recovery.
-- All tests pass, and the system is stable.
