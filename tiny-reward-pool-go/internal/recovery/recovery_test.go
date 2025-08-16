@@ -1,6 +1,7 @@
 package recovery
 
 import (
+	"encoding/json"
 	"os"
 	"testing"
 
@@ -45,11 +46,14 @@ func TestRecoverPool_Basic(t *testing.T) {
 	err = pool.SaveSnapshot(snapshot)
 	assert.NoError(t, err)
 
-	f, err = os.Create(walPath)
+	wf, err := os.Create(walPath)
 	assert.NoError(t, err)
-	_, err = f.WriteString(`{"type":1,"request_id":1,"item_id":"gold","success":true}` + "\n" + `{"type":1,"request_id":2,"item_id":"silver","success":true}` + "\n" + `{"type":1,"request_id":3,"success":false,"error":1}` + "\n")
-	assert.NoError(t, err)
-	f.Close()
+	encoder := json.NewEncoder(wf)
+	encoder.Encode(&types.WalLogSnapshotItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeSnapshot}, Path: snapshot})
+	encoder.Encode(&types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 1, ItemID: "gold", Success: true})
+	encoder.Encode(&types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 2, ItemID: "silver", Success: true})
+	encoder.Encode(&types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw, Error: types.ErrorPoolEmpty}, RequestID: 3, Success: false})
+	wf.Close()
 
 	jsonFormatter := formatter.NewJSONFormatter()
 	recovered, err := RecoverPool(snapshot, walPath, config, jsonFormatter, &utils.MockUtils{})
@@ -59,8 +63,8 @@ func TestRecoverPool_Basic(t *testing.T) {
 	var gold, silver int
 	gold = recovered.GetItemRemaining("gold")
 	silver = recovered.GetItemRemaining("silver")
-	assert.GreaterOrEqual(t, gold, 0)
-	assert.GreaterOrEqual(t, silver, 0)
+	assert.Equal(t, 99, gold)
+	assert.Equal(t, 199, silver)
 }
 
 func TestRecoverPool_MMap(t *testing.T) {
@@ -102,11 +106,13 @@ func TestRecoverPool_MMap(t *testing.T) {
 	w, err := wal.NewWAL(walPath, jsonFormatter, mmapStorage)
 	assert.NoError(t, err)
 
-	err = w.LogDraw(types.WalLogDrawItem{WalLogItem: types.WalLogItem{Type: types.LogTypeDraw}, RequestID: 1, ItemID: "gold", Success: true})
+	err = w.LogSnapshot(types.WalLogSnapshotItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeSnapshot}, Path: snapshot})
 	assert.NoError(t, err)
-	err = w.LogDraw(types.WalLogDrawItem{WalLogItem: types.WalLogItem{Type: types.LogTypeDraw}, RequestID: 2, ItemID: "silver", Success: true})
+	err = w.LogDraw(types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 1, ItemID: "gold", Success: true})
 	assert.NoError(t, err)
-	err = w.LogDraw(types.WalLogDrawItem{WalLogItem: types.WalLogItem{Type: types.LogTypeDraw, Error: types.ErrorPoolEmpty}, RequestID: 3, Success: false})
+	err = w.LogDraw(types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 2, ItemID: "silver", Success: true})
+	assert.NoError(t, err)
+	err = w.LogDraw(types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw, Error: types.ErrorPoolEmpty}, RequestID: 3, Success: false})
 	assert.NoError(t, err)
 	err = w.Flush()
 	assert.NoError(t, err)
@@ -120,6 +126,6 @@ func TestRecoverPool_MMap(t *testing.T) {
 	var gold, silver int
 	gold = recovered.GetItemRemaining("gold")
 	silver = recovered.GetItemRemaining("silver")
-	assert.GreaterOrEqual(t, gold, 0)
-	assert.GreaterOrEqual(t, silver, 0)
+	assert.Equal(t, 99, gold)
+	assert.Equal(t, 199, silver)
 }

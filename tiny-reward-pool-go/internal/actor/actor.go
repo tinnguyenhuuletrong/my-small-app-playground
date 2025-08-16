@@ -66,9 +66,9 @@ func (a *RewardProcessorActor) handleDraw(m DrawMessage) {
 	var walErr error
 
 	logItem := types.WalLogDrawItem{
-		WalLogItem: types.WalLogItem{Type: types.LogTypeDraw},
-		RequestID:  m.RequestID, // Use RequestID from message
-		Success:    err == nil,
+		WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw},
+		RequestID:       m.RequestID, // Use RequestID from message
+		Success:         err == nil,
 	}
 
 	if logItem.Success {
@@ -100,52 +100,59 @@ func (a *RewardProcessorActor) flush() error {
 	}
 
 	flushErr := a.ctx.WAL.Flush()
-	shouldCreateSnapshot := false
-	if flushErr == types.ErrWALFull {
-		if logger := a.ctx.Utils.GetLogger(); logger != nil {
-			logger.Info("WAL is full, starting rotation and snapshot process.")
-		}
 
-		rotatedPath := a.ctx.Utils.GenRotatedWALPath()
-		if rotatedPath != nil {
-			if err := a.ctx.WAL.Rotate(*rotatedPath); err != nil {
-				if logger := a.ctx.Utils.GetLogger(); logger != nil {
-					logger.Error("Failed to rotate WAL. Reverting draws.", "error", err)
+	if flushErr != nil {
+		if flushErr == types.ErrWALFull {
+			// WAL is full. The buffer is not flushed. Revert draws.
+			a.pool.RevertDraw()
+			a.stagedDraws = 0
+			if logger := a.ctx.Utils.GetLogger(); logger != nil {
+				logger.Info("WAL is full. Reverting draws and rotating WAL.")
+			}
+
+			// Now rotate WAL
+			rotatedPath := a.ctx.Utils.GenRotatedWALPath()
+			if rotatedPath != nil {
+				if err := a.ctx.WAL.Rotate(*rotatedPath); err != nil {
+					if logger := a.ctx.Utils.GetLogger(); logger != nil {
+						logger.Error("Failed to rotate WAL.", "error", err)
+					}
+					return err
 				}
-				a.pool.RevertDraw()
-				a.stagedDraws = 0
+			} else {
+				if logger := a.ctx.Utils.GetLogger(); logger != nil {
+					logger.Error("Wall is full, rotatedPath not set. Noting to do. Stop here")
+				}
+				panic(1)
+			}
+			a.ctx.WAL.Reset()
+
+			// Create snapshot and log it to the new WAL
+			if err := a.snapshot(); err != nil {
 				return err
 			}
+			// And flush the snapshot log
+			return a.ctx.WAL.Flush()
+
 		} else {
+			// Another flush error. Revert draws.
+			a.pool.RevertDraw()
+			a.stagedDraws = 0
 			if logger := a.ctx.Utils.GetLogger(); logger != nil {
-				logger.Error("Wall is full, rotatedPath not set. Noting to do. Stop here")
+				logger.Error("[Actor] WAL Flush failed, reverting draws.", "error", flushErr)
 			}
-			panic(1)
-		}
-
-		a.ctx.WAL.Reset()
-		shouldCreateSnapshot = true
-		flushErr = nil
-	}
-
-	if flushErr == nil {
-		a.pool.CommitDraw()
-		if logger := a.ctx.Utils.GetLogger(); logger != nil {
-			logger.Debug(fmt.Sprintf("[Actor] WAL Flush and Commit - %d", a.stagedDraws))
-		}
-	} else {
-		a.pool.RevertDraw()
-		if logger := a.ctx.Utils.GetLogger(); logger != nil {
-			logger.Error("[Actor] WAL Flush failed, reverting draws.", "error", flushErr)
+			return flushErr
 		}
 	}
 
-	if shouldCreateSnapshot {
-		a.snapshot()
-	}
+	// Flush was successful. Commit draws.
+	a.pool.CommitDraw()
 
+	if logger := a.ctx.Utils.GetLogger(); logger != nil {
+		logger.Debug(fmt.Sprintf("[Actor] WAL Flush and Commit - %d", a.stagedDraws))
+	}
 	a.stagedDraws = 0
-	return flushErr
+	return nil
 }
 
 func (a *RewardProcessorActor) snapshot() error {
@@ -157,6 +164,17 @@ func (a *RewardProcessorActor) snapshot() error {
 		if err := a.pool.SaveSnapshot(*snapshotPath); err != nil {
 			if logger := a.ctx.Utils.GetLogger(); logger != nil {
 				logger.Error("Failed to create snapshot after WAL rotation.", "error", err)
+			}
+			return err
+		}
+
+		logItem := types.WalLogSnapshotItem{
+			WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeSnapshot},
+			Path:            *snapshotPath,
+		}
+		if err := a.ctx.WAL.LogSnapshot(logItem); err != nil {
+			if logger := a.ctx.Utils.GetLogger(); logger != nil {
+				logger.Error("Failed to log snapshot to WAL.", "error", err)
 			}
 			return err
 		}

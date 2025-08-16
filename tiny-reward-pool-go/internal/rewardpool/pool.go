@@ -129,6 +129,10 @@ func (p *Pool) ApplyDrawLog(itemID string) {
 	}
 }
 
+func (p *Pool) ApplyUpdateLog(itemID string, quantity int, probability int64) {
+	p.selector.UpdateItem(itemID, quantity, probability)
+}
+
 func (p *Pool) State() []types.PoolReward {
 	catalog := p.selector.SnapshotCatalog()
 	return catalog

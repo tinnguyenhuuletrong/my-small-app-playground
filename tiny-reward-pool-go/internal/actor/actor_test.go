@@ -33,7 +33,7 @@ func TestSystem_TransactionalDraw(t *testing.T) {
 	if gotResp.Item == "" || gotResp.Item != "gold" {
 		t.Fatalf("Expected gold, got %v", gotResp.Item)
 	}
-	if len(wal.logged) == 0 || !wal.logged[0].Success {
+	if len(wal.logged) == 0 || !wal.logged[0].(*types.WalLogDrawItem).Success {
 		t.Fatalf("Expected WAL log success, got %v", wal.logged)
 	}
 	if pool.committed != 1 {
@@ -142,21 +142,25 @@ func (m *mockPool) RevertDraw() {
 func (m *mockPool) Load(cfg types.ConfigPool) error { return nil }
 func (m *mockPool) LoadSnapshot(path string) error  { return nil }
 func (m *mockPool) SaveSnapshot(path string) error  { return nil }
+func (m *mockPool) ApplyUpdateLog(itemID string, quantity int, probability int64) {}
 
 type mockWAL struct {
-	logged     []types.WalLogDrawItem
+	logged     []types.WalLogEntry
 	fail       bool
 	flushCount int
 	flushFail  bool
 }
 
 func (m *mockWAL) LogDraw(item types.WalLogDrawItem) error {
-	m.logged = append(m.logged, item)
+	m.logged = append(m.logged, &item)
 	if m.fail {
 		return errors.New("simulated WAL error")
 	}
 	return nil
 }
+func (m *mockWAL) LogUpdate(item types.WalLogUpdateItem) error   { return nil }
+func (m *mockWAL) LogSnapshot(item types.WalLogSnapshotItem) error { return nil }
+func (m *mockWAL) LogRotate(item types.WalLogRotateItem) error   { return nil }
 
 func (m *mockWAL) Close() error { return nil }
 func (m *mockWAL) Reset()       {}
@@ -333,7 +337,7 @@ func TestSystem_StopWithWALRotationRaceCondition(t *testing.T) {
 	err = json.Unmarshal(snapshotData, &snapshotContent)
 	require.NoError(t, err, "Snapshot should be valid JSON")
 
-	expectedQuantityAfterStop := initialQuantity - 3
+	expectedQuantityAfterStop := initialQuantity - 2
 	assert.Equal(t, int(expectedQuantityAfterStop), snapshotContent.Items[0].Quantity, "Snapshot should have the final quantity")
 }
 

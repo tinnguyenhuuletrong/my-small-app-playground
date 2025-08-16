@@ -2,6 +2,7 @@ package formatter
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
 )
@@ -14,7 +15,7 @@ func NewJSONFormatter() *JSONFormatter {
 	return &JSONFormatter{}
 }
 
-func (f *JSONFormatter) Encode(items []types.WalLogDrawItem) ([]byte, error) {
+func (f *JSONFormatter) Encode(items []types.WalLogEntry) ([]byte, error) {
 	var encodedData []byte
 	for _, item := range items {
 		data, err := json.Marshal(item)
@@ -27,18 +28,56 @@ func (f *JSONFormatter) Encode(items []types.WalLogDrawItem) ([]byte, error) {
 	return encodedData, nil
 }
 
-func (f *JSONFormatter) Decode(data []byte) ([]types.WalLogDrawItem, error) {
-	var items []types.WalLogDrawItem
+// walLogEntryWrapper is a helper struct to unmarshal polymorphic WalLogEntry types.
+type walLogEntryWrapper struct {
+	types.WalLogEntry
+}
+
+func (w *walLogEntryWrapper) UnmarshalJSON(data []byte) error {
+	type typeFinder struct {
+		Type types.LogType `json:"type"`
+	}
+	var tf typeFinder
+	if err := json.Unmarshal(data, &tf); err != nil {
+		return fmt.Errorf("failed to find type: %w", err)
+	}
+
+	var entry types.WalLogEntry
+	switch tf.Type {
+	case types.LogTypeDraw:
+		entry = &types.WalLogDrawItem{}
+	case types.LogTypeUpdate:
+		entry = &types.WalLogUpdateItem{}
+	case types.LogTypeSnapshot:
+		entry = &types.WalLogSnapshotItem{}
+	case types.LogTypeRotate:
+		entry = &types.WalLogRotateItem{}
+	default:
+		return fmt.Errorf("unknown log type: %d", tf.Type)
+	}
+
+	if err := json.Unmarshal(data, entry); err != nil {
+		return err
+	}
+	w.WalLogEntry = entry
+	return nil
+}
+
+func (f *JSONFormatter) Decode(data []byte) ([]types.WalLogEntry, error) {
+	var items []types.WalLogEntry
 	lines := splitLines(data)
+
 	for _, line := range lines {
 		if len(line) == 0 {
 			continue
 		}
-		var item types.WalLogDrawItem
-		if err := json.Unmarshal(line, &item); err != nil {
+
+		var wrapper walLogEntryWrapper
+		if err := json.Unmarshal(line, &wrapper); err != nil {
 			return nil, err
 		}
-		items = append(items, item)
+
+		items = append(items, wrapper.WalLogEntry)
 	}
 	return items, nil
 }

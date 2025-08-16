@@ -114,6 +114,11 @@ func (fts *FenwickTreeSelector) Update(itemID string, delta int64) {
 	}
 }
 
+// UpdateItem updates the quantity and probability of a specific item.
+func (fts *FenwickTreeSelector) UpdateItem(itemID string, quantity int, probability int64) {
+	// TODO: Implement in Iter 2
+}
+
 // TotalAvailable returns the total weight of all items currently available for selection.
 func (fts *FenwickTreeSelector) TotalAvailable() int64 {
 	return fts.totalWeight

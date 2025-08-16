@@ -10,7 +10,7 @@ import (
 type WAL struct {
 	formatter types.LogFormatter
 	storage   types.Storage
-	buffer    []types.WalLogDrawItem
+	buffer    []types.WalLogEntry
 }
 
 var _ types.WAL = (*WAL)(nil)
@@ -51,11 +51,26 @@ func NewWAL(path string, format types.LogFormatter, store types.Storage) (*WAL, 
 	}
 
 	// Preallocate buffer for performance (e.g., 4096 entries)
-	return &WAL{formatter: format, storage: store, buffer: make([]types.WalLogDrawItem, 0, 4096)}, nil
+	return &WAL{formatter: format, storage: store, buffer: make([]types.WalLogEntry, 0, 4096)}, nil
 }
 
 func (w *WAL) LogDraw(item types.WalLogDrawItem) error {
-	w.buffer = append(w.buffer, item)
+	w.buffer = append(w.buffer, &item)
+	return nil
+}
+
+func (w *WAL) LogUpdate(item types.WalLogUpdateItem) error {
+	w.buffer = append(w.buffer, &item)
+	return nil
+}
+
+func (w *WAL) LogSnapshot(item types.WalLogSnapshotItem) error {
+	w.buffer = append(w.buffer, &item)
+	return nil
+}
+
+func (w *WAL) LogRotate(item types.WalLogRotateItem) error {
+	w.buffer = append(w.buffer, &item)
 	return nil
 }
 
@@ -71,8 +86,8 @@ func (w *WAL) Rotate(path string) error {
 	return w.storage.Rotate(path)
 }
 
-// ParseWAL reads the WAL log file and returns a slice of WalLogDrawItem
-func ParseWAL(path string, format types.LogFormatter) ([]types.WalLogDrawItem, error) {
+// ParseWAL reads the WAL log file and returns a slice of WalLogEntry
+func ParseWAL(path string, format types.LogFormatter) ([]types.WalLogEntry, error) {
 	data, err := utils.ReadFileContent(path)
 	if err != nil {
 		return nil, err

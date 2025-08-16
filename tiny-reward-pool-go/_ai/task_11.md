@@ -12,13 +12,13 @@ To make it simple. We have a rule that begin of WAL file must be a `LogTypeSnaps
 - **Plan:**
     1. **`internal/types/types.go`:**
         - Define new `LogType` constants: `LogTypeUpdate`, `LogTypeSnapshot`, and `LogTypeRotate`.
-        - Create a generic `WalLogEntry` struct that uses `json.RawMessage` to hold different log item types.
+        - Same as `WalLogDrawItem` use embeded struct / interface to hold different log item types. Contain common attb `type` and `error` Runtime switch base on `type`, error handle by `error`
         - Define new structs for the new log types:
             - `WalLogUpdateItem{ItemID string, Quantity int, Probability int64}`
             - `WalLogSnapshotItem{Path string}`
             - `WalLogRotateItem{OldPath string, NewPath string}`
     2. **`internal/wal/formatter/` & `internal/wal/wal.go`:**
-        - Update the `LogFormatter` interface and `JSONFormatter` to handle `[]WalLogEntry`.
+        - Update the `LogFormatter` interface and `JSONFormatter`, `StringLineFormatter` to handle `[]WalLogEntry`.
         - Update the `WAL` struct and methods to use `WalLogEntry` and add new logging functions (`LogUpdate`, `LogSnapshot`, `LogRotate`).
     3. **`internal/rewardpool/pool.go`:**
         - Add new methods to apply changes from the WAL: `ApplyUpdateLog(itemID string, quantity int, probability int64)`.

@@ -135,6 +135,11 @@ func (pss *PrefixSumSelector) Update(itemID string, delta int64) {
 	}
 }
 
+// UpdateItem updates the quantity and probability of a specific item.
+func (pss *PrefixSumSelector) UpdateItem(itemID string, quantity int, probability int64) {
+	// TODO: Implement in Iter 2
+}
+
 // TotalAvailable returns the total weight of all items currently available for selection.
 func (pss *PrefixSumSelector) TotalAvailable() int64 {
 	return pss.totalWeight

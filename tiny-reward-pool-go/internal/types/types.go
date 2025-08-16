@@ -7,6 +7,9 @@ type LogType byte
 
 const (
 	LogTypeDraw LogType = iota + 1
+	LogTypeUpdate
+	LogTypeSnapshot
+	LogTypeRotate
 )
 
 // LogError defines the type of a WAL log error.
@@ -30,18 +33,48 @@ type PoolReward struct {
 	Probability int64  `json:"probability"`
 }
 
-// WalLogItem represents a WAL log entry
-type WalLogItem struct {
+// WalLogEntry defines the interface for a WAL log entry.
+type WalLogEntry interface {
+	GetType() LogType
+}
+
+// WalLogEntryBase is a base struct for log entries that implements the WalLogEntry interface.
+type WalLogEntryBase struct {
 	Type  LogType  `json:"type"`
 	Error LogError `json:"error,omitempty"`
 }
 
+func (b WalLogEntryBase) GetType() LogType {
+	return b.Type
+}
+
 // WalLogDrawItem represents a WAL log entry for a draw operation
 type WalLogDrawItem struct {
-	WalLogItem
+	WalLogEntryBase
 	RequestID uint64 `json:"request_id"`
 	ItemID    string `json:"item_id,omitempty"`
 	Success   bool   `json:"success"`
+}
+
+// WalLogUpdateItem represents a WAL log entry for an update operation
+type WalLogUpdateItem struct {
+	WalLogEntryBase
+	ItemID      string `json:"item_id"`
+	Quantity    int    `json:"quantity"`
+	Probability int64  `json:"probability"`
+}
+
+// WalLogSnapshotItem represents a WAL log entry for a snapshot operation
+type WalLogSnapshotItem struct {
+	WalLogEntryBase
+	Path string `json:"path"`
+}
+
+// WalLogRotateItem represents a WAL log entry for a rotate operation
+type WalLogRotateItem struct {
+	WalLogEntryBase
+	OldPath string `json:"old_path"`
+	NewPath string `json:"new_path"`
 }
 
 // RewardPool interface
@@ -53,15 +86,16 @@ type RewardPool interface {
 	Load(config ConfigPool) error
 	SaveSnapshot(path string) error
 	LoadSnapshot(path string) error
+	ApplyUpdateLog(itemID string, quantity int, probability int64)
 }
 
 // LogFormatter Interface: To handle serialization and deserialization.
 type LogFormatter interface {
 	// Batched encode. Should call in Flush
-	Encode(items []WalLogDrawItem) ([]byte, error)
+	Encode(items []WalLogEntry) ([]byte, error)
 
 	// Batched decode. Should call in Parse
-	Decode(data []byte) ([]WalLogDrawItem, error)
+	Decode(data []byte) ([]WalLogEntry, error)
 }
 
 // Storage Interface: To handle the physical writing, reading, and management of the log medium.
@@ -79,8 +113,11 @@ type Storage interface {
 // WAL interface
 // WAL interface with buffered logging
 type WAL interface {
-	// LogDraw appends a log entry to the buffer (does not write to disk immediately)
 	LogDraw(item WalLogDrawItem) error
+	LogUpdate(item WalLogUpdateItem) error
+	LogSnapshot(item WalLogSnapshotItem) error
+	LogRotate(item WalLogRotateItem) error
+
 	// Flush writes all buffered log entries to disk
 	Flush() error
 	// Close closes the WAL file
@@ -118,6 +155,9 @@ type ItemSelector interface {
 	// Update adjusts the quantity of a specific item in the selector.
 	// A positive value increases availability, a negative value decreases it.
 	Update(itemID string, delta int64)
+
+	// UpdateItem updates the quantity and probability of a specific item.
+	UpdateItem(itemID string, quantity int, probability int64)
 
 	// Reset clears the selector's state and re-initializes it with a new catalog.
 	Reset(catalog []PoolReward)
