@@ -123,7 +123,9 @@ func (a *RewardProcessorActor) flush() error {
 				if logger := a.ctx.Utils.GetLogger(); logger != nil {
 					logger.Error("Wall is full, rotatedPath not set. Noting to do. Stop here")
 				}
-				panic(1)
+
+				// too strict
+				// panic(1)
 			}
 			a.ctx.WAL.Reset()
 
