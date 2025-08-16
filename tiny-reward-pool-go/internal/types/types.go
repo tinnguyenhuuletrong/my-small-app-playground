@@ -108,6 +108,9 @@ type Storage interface {
 	// Finalize current file and move to archivePath.
 	// Then reset and continue to use the current one
 	Rotate(archivePath string) error
+
+	// Size returns the current size of the storage.
+	Size() (int64, error)
 }
 
 // WAL interface
@@ -126,6 +129,8 @@ type WAL interface {
 	Rotate(path string) error
 	// Reset buffer
 	Reset()
+	// Size returns the current size of the WAL content.
+	Size() (int64, error)
 }
 
 // Config interface

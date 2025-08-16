@@ -48,10 +48,13 @@ func BenchmarkPoolDrawWithMmapWALChannel(b *testing.B) {
 		Utils: &utils.MockUtils{},
 	}
 
-	sys := actor.NewSystem(ctx, pool, &actor.SystemOptional{
+	sys, err := actor.NewSystem(ctx, pool, &actor.SystemOptional{
 		RequestBufferSize: b.N,
 		FlushAfterNDraw:   10_000,
 	})
+	if err != nil {
+		b.Error(err)
+	}
 
 	b.ResetTimer()
 	start := time.Now()

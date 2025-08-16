@@ -129,3 +129,34 @@ func TestRecoverPool_MMap(t *testing.T) {
 	assert.Equal(t, 99, gold)
 	assert.Equal(t, 199, silver)
 }
+
+func TestRecoverPool_ErrorOnWALWithoutInitialSnapshot(t *testing.T) {
+	snapshot := "../../tmp/test_snapshot_no_init.json"
+	walPath := "../../tmp/test_wal_no_init.log"
+	config := "../../samples/test_config_no_init.json"
+	defer os.Remove(snapshot)
+	defer os.Remove(walPath)
+	defer os.Remove(config)
+
+	// Create a dummy config
+	f, err := os.Create(config)
+	assert.NoError(t, err)
+	_, err = f.WriteString(`{"catalog": [{"item_id": "gold", "quantity": 10}]}`)
+	assert.NoError(t, err)
+	f.Close()
+
+	// Create a WAL that starts with a Draw log instead of a Snapshot log
+	wf, err := os.Create(walPath)
+	assert.NoError(t, err)
+	encoder := json.NewEncoder(wf)
+	// The first log is a draw, which is invalid.
+	encoder.Encode(&types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 1, ItemID: "gold", Success: true})
+	wf.Close()
+
+	jsonFormatter := formatter.NewJSONFormatter()
+	_, err = RecoverPool(snapshot, walPath, config, jsonFormatter, &utils.MockUtils{})
+
+	// Assert that recovery fails with the expected error
+	assert.Error(t, err)
+	assert.Equal(t, "first WAL entry must be a snapshot", err.Error())
+}

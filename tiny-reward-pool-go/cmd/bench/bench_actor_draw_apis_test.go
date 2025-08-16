@@ -20,7 +20,10 @@ func BenchmarkActorDrawChannel(b *testing.B) {
 	ctx.WAL = w
 
 	opt := &actor.SystemOptional{RequestBufferSize: b.N}
-	sys := actor.NewSystem(ctx, pool, opt)
+	sys, err := actor.NewSystem(ctx, pool, opt)
+	if err != nil {
+		b.Error(err)
+	}
 
 	b.ResetTimer()
 

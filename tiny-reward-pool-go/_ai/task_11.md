@@ -28,7 +28,9 @@ To make it simple. We have a rule that begin of WAL file must be a `LogTypeSnaps
             - If a snapshot entry is found, it will load the pool state from the `Path` in that log entry.
             - Finally, it will replay the WAL entries that occurred *after* the loaded snapshot, using a type switch to call the appropriate `Apply...Log` method on the pool (`ApplyDrawLog`, `ApplyUpdateLog`, etc.).
     5. **`internal/actor/actor.go`:**:  
-        - Make sure the first item in WAL log file is `LogTypeSnapshot`
+        - Implement an `Init()` method that checks if the WAL is empty. If it is, it creates an initial snapshot and flushes it to the WAL. This ensures the first entry in a new WAL file is always a `LogTypeSnapshot`.
+    - **`internal/actor/system.go`:**
+        - Call the `actor.Init()` method when creating a new system to ensure proper initialization of the WAL.
     6. **Verification:**
         - After implementation, run `make check` to check for compile errors.
         - Run `make test` to ensure all existing tests pass.

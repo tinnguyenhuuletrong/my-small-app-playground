@@ -2,6 +2,7 @@ package actor
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 
@@ -24,7 +25,7 @@ type SystemOptional struct {
 }
 
 // NewSystem creates, starts, and returns a new actor system.
-func NewSystem(ctx *types.Context, pool types.RewardPool, opt *SystemOptional) *System {
+func NewSystem(ctx *types.Context, pool types.RewardPool, opt *SystemOptional) (*System, error) {
 	flushN := 10
 	if opt != nil && opt.FlushAfterNDraw > 0 {
 		flushN = opt.FlushAfterNDraw
@@ -34,10 +35,18 @@ func NewSystem(ctx *types.Context, pool types.RewardPool, opt *SystemOptional) *
 		bufSize = opt.RequestBufferSize
 	}
 
+	actorInstance := NewRewardProcessorActor(ctx, pool, bufSize, flushN)
+
+	if err := actorInstance.Init(); err != nil {
+		// If init fails, we must ensure the WAL is closed if it was opened.
+		actorInstance.ctx.WAL.Close()
+		return nil, fmt.Errorf("actor initialization failed: %w", err)
+	}
+
 	actorCtx, cancel := context.WithCancel(context.Background())
 
 	sys := &System{
-		actor:  NewRewardProcessorActor(ctx, pool, bufSize, flushN),
+		actor:  actorInstance,
 		cancel: cancel,
 	}
 
@@ -47,7 +56,7 @@ func NewSystem(ctx *types.Context, pool types.RewardPool, opt *SystemOptional) *
 		sys.actor.Receive(actorCtx)
 	}()
 
-	return sys
+	return sys, nil
 }
 
 // Draw sends a draw request to the actor and waits for a response.

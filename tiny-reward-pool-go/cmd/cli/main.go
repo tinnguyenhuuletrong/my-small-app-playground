@@ -57,9 +57,13 @@ func main() {
 		WAL:   w,
 		Utils: utils,
 	}
-	sys := actor.NewSystem(ctx, pool, &actor.SystemOptional{
+	sys, err := actor.NewSystem(ctx, pool, &actor.SystemOptional{
 		FlushAfterNDraw: 5,
 	})
+	if err != nil {
+		fmt.Println("System startup error:", err)
+		return
+	}
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)

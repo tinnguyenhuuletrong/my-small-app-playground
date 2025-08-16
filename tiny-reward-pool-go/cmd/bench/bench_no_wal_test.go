@@ -23,7 +23,10 @@ func BenchmarkPoolDrawNoWalChannel(b *testing.B) {
 	}
 
 	opt := &actor.SystemOptional{RequestBufferSize: b.N}
-	sys := actor.NewSystem(ctx, pool, opt)
+	sys, err := actor.NewSystem(ctx, pool, opt)
+	if err != nil {
+		b.Error(err)
+	}
 
 	b.ResetTimer()
 	start := time.Now()

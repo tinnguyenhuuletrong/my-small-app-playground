@@ -44,6 +44,10 @@ func (s *FileStorage) CanWrite(size int) bool {
 	return s.usage+size <= s.capacity
 }
 
+func (s *FileStorage) Size() (int64, error) {
+	return int64(s.usage), nil
+}
+
 func (s *FileStorage) Flush() error {
 	return s.file.Sync()
 }

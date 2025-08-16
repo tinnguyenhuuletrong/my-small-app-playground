@@ -40,7 +40,11 @@ func TestRewardDistributionReport(t *testing.T) {
 			ctx.WAL = w
 
 			opt := &actor.SystemOptional{RequestBufferSize: 1000, FlushAfterNDraw: 1000}
-			sys := actor.NewSystem(ctx, pool, opt)
+			sys, err := actor.NewSystem(ctx, pool, opt)
+			if err != nil {
+				t.Error(err)
+				return
+			}
 
 			counts := make(map[string]int)
 			for i := 0; i < totalDraws; i++ {
@@ -97,7 +101,11 @@ func TestQuantityExhaustion(t *testing.T) {
 			ctx.WAL = w
 
 			opt := &actor.SystemOptional{RequestBufferSize: 100, FlushAfterNDraw: 10}
-			sys := actor.NewSystem(ctx, pool, opt)
+			sys, err := actor.NewSystem(ctx, pool, opt)
+			if err != nil {
+				t.Error(err)
+				return
+			}
 
 			goldCount := 0
 			counts := make(map[string]int)

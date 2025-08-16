@@ -29,7 +29,10 @@ func BenchmarkDrawChannel_PrefixSumSelector(b *testing.B) {
 	ctx.WAL = w
 
 	opt := &actor.SystemOptional{RequestBufferSize: b.N, FlushAfterNDraw: 1000}
-	sys := actor.NewSystem(ctx, pool, opt)
+	sys, err := actor.NewSystem(ctx, pool, opt)
+	if err != nil {
+		b.Error(err)
+	}
 
 	var memStatsStart, memStatsEnd runtime.MemStats
 	b.ResetTimer()
@@ -69,7 +72,10 @@ func BenchmarkDrawChannel_FenwickTreeSelector(b *testing.B) {
 	ctx.WAL = w
 
 	opt := &actor.SystemOptional{RequestBufferSize: b.N, FlushAfterNDraw: 1000}
-	sys := actor.NewSystem(ctx, pool, opt)
+	sys, err := actor.NewSystem(ctx, pool, opt)
+	if err != nil {
+		b.Error(err)
+	}
 
 	var memStatsStart, memStatsEnd runtime.MemStats
 	b.ResetTimer()

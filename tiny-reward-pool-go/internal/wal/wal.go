@@ -15,6 +15,11 @@ type WAL struct {
 
 var _ types.WAL = (*WAL)(nil)
 
+// Size returns the current size of the WAL content.
+func (w *WAL) Size() (int64, error) {
+	return w.storage.Size()
+}
+
 func (w *WAL) Flush() error {
 	if len(w.buffer) == 0 {
 		return nil

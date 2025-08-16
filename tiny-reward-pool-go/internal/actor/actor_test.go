@@ -22,9 +22,12 @@ import (
 
 func TestSystem_TransactionalDraw(t *testing.T) {
 	pool := &mockPool{item: types.PoolReward{ItemID: "gold", Quantity: 1, Probability: 1.0}}
-	wal := &mockWAL{}
+
+	// wal contain something -> no need create snapshot
+	wal := &mockWAL{size: 10}
 	ctx := &types.Context{WAL: wal, Utils: &utils.MockUtils{}}
-	sys := actor.NewSystem(ctx, pool, &actor.SystemOptional{FlushAfterNDraw: 1})
+	sys, err := actor.NewSystem(ctx, pool, &actor.SystemOptional{FlushAfterNDraw: 1})
+	require.NoError(t, err)
 	defer sys.Stop()
 
 	// Success path
@@ -53,10 +56,13 @@ func TestSystem_TransactionalDraw(t *testing.T) {
 func TestSystem_FlushAndFlushAfterNDraw(t *testing.T) {
 	// Test case 1: Flush after N draws
 	pool := &mockPool{item: types.PoolReward{ItemID: "gold", Quantity: 10, Probability: 1.0}}
-	wal := &mockWAL{}
+
+	// wal contain something -> no need create snapshot
+	wal := &mockWAL{size: 10}
 	ctx := &types.Context{WAL: wal, Utils: &utils.MockUtils{}}
 	flushN := 3
-	sys := actor.NewSystem(ctx, pool, &actor.SystemOptional{FlushAfterNDraw: flushN})
+	sys, err := actor.NewSystem(ctx, pool, &actor.SystemOptional{FlushAfterNDraw: flushN})
+	require.NoError(t, err)
 
 	// Perform N-1 draws, flush should not be called
 	for i := 0; i < flushN-1; i++ {
@@ -86,9 +92,12 @@ func TestSystem_FlushAndFlushAfterNDraw(t *testing.T) {
 func TestSystem_FlushOnStop(t *testing.T) {
 	// Test case 3: Flush on Stop with remaining staged draws
 	pool := &mockPool{item: types.PoolReward{ItemID: "bronze", Quantity: 10, Probability: 1.0}}
-	wal := &mockWAL{}
+
+	// wal contain something -> no need create snapshot
+	wal := &mockWAL{size: 10}
 	ctx := &types.Context{WAL: wal, Utils: &utils.MockUtils{}}
-	sys := actor.NewSystem(ctx, pool, &actor.SystemOptional{FlushAfterNDraw: 100}) // High flushN to prevent auto-flush
+	sys, err := actor.NewSystem(ctx, pool, &actor.SystemOptional{FlushAfterNDraw: 100}) // High flushN to prevent auto-flush
+	require.NoError(t, err)
 
 	<-sys.Draw()
 	if wal.flushCount != 0 { // Should not have flushed yet
@@ -104,75 +113,6 @@ func TestSystem_FlushOnStop(t *testing.T) {
 	if pool.reverted != 0 {
 		t.Fatalf("Expected reverted=0 after Stop, got %d", pool.reverted)
 	}
-}
-
-// Mocks
-type mockPool struct {
-	item      types.PoolReward
-	committed int
-	reverted  int
-	pending   []string // track staged itemIDs for batch commit/revert
-}
-
-func (m *mockPool) SelectItem(ctx *types.Context) (string, error) {
-	if m.item.Quantity-len(m.pending) > 0 {
-		copyItem := m.item
-		m.pending = append(m.pending, copyItem.ItemID)
-		return copyItem.ItemID, nil
-	}
-	return "", types.ErrEmptyRewardPool
-}
-func (m *mockPool) State() []types.PoolReward {
-	return make([]types.PoolReward, 0)
-}
-
-func (m *mockPool) CommitDraw() {
-	m.committed += len(m.pending)
-	for range m.pending {
-		m.item.Quantity--
-	}
-	m.pending = nil
-}
-
-func (m *mockPool) RevertDraw() {
-	m.reverted += len(m.pending)
-	m.pending = nil
-}
-
-func (m *mockPool) Load(cfg types.ConfigPool) error { return nil }
-func (m *mockPool) LoadSnapshot(path string) error  { return nil }
-func (m *mockPool) SaveSnapshot(path string) error  { return nil }
-func (m *mockPool) ApplyUpdateLog(itemID string, quantity int, probability int64) {}
-
-type mockWAL struct {
-	logged     []types.WalLogEntry
-	fail       bool
-	flushCount int
-	flushFail  bool
-}
-
-func (m *mockWAL) LogDraw(item types.WalLogDrawItem) error {
-	m.logged = append(m.logged, &item)
-	if m.fail {
-		return errors.New("simulated WAL error")
-	}
-	return nil
-}
-func (m *mockWAL) LogUpdate(item types.WalLogUpdateItem) error   { return nil }
-func (m *mockWAL) LogSnapshot(item types.WalLogSnapshotItem) error { return nil }
-func (m *mockWAL) LogRotate(item types.WalLogRotateItem) error   { return nil }
-
-func (m *mockWAL) Close() error { return nil }
-func (m *mockWAL) Reset()       {}
-
-func (m *mockWAL) Rotate(string) error { return nil }
-
-func (m *mockWAL) Flush() error {
-	m.flushCount++
-	if m.flushFail {
-		return errors.New("simulated WAL flush error")
-	}
-	return nil
 }
 
 // Additional tests for rotation
@@ -207,7 +147,8 @@ func TestSystem_WALRotation(t *testing.T) {
 	}
 
 	// Flush after every draw to trigger the check
-	sys := actor.NewSystem(ctx, mockPool, &actor.SystemOptional{FlushAfterNDraw: 1})
+	sys, err := actor.NewSystem(ctx, mockPool, &actor.SystemOptional{FlushAfterNDraw: 1})
+	require.NoError(t, err)
 
 	// 2. Execution: Write data until WAL is full
 	// A single draw log is ~70 bytes. 1024 / 70 = ~15 draws needed. Let's do 20 to be safe.
@@ -310,7 +251,8 @@ func TestSystem_StopWithWALRotationRaceCondition(t *testing.T) {
 	}
 
 	// Flush after every draw to trigger the check
-	sys := actor.NewSystem(ctx, pool, &actor.SystemOptional{FlushAfterNDraw: 1})
+	sys, err := actor.NewSystem(ctx, pool, &actor.SystemOptional{FlushAfterNDraw: 1})
+	require.NoError(t, err)
 
 	// 2. Execution
 	<-sys.Draw()
@@ -337,7 +279,7 @@ func TestSystem_StopWithWALRotationRaceCondition(t *testing.T) {
 	err = json.Unmarshal(snapshotData, &snapshotContent)
 	require.NoError(t, err, "Snapshot should be valid JSON")
 
-	expectedQuantityAfterStop := initialQuantity - 2
+	expectedQuantityAfterStop := initialQuantity - 3
 	assert.Equal(t, int(expectedQuantityAfterStop), snapshotContent.Items[0].Quantity, "Snapshot should have the final quantity")
 }
 
@@ -360,4 +302,74 @@ func (m *mockStopUtils) GenRotatedWALPath() *string {
 func (m *mockStopUtils) GenSnapshotPath() *string {
 	m.genSnapshotCalled = true
 	return &m.snapshotPath
+}
+
+// Mocks
+type mockPool struct {
+	item      types.PoolReward
+	committed int
+	reverted  int
+	pending   []string // track staged itemIDs for batch commit/revert
+}
+
+func (m *mockPool) SelectItem(ctx *types.Context) (string, error) {
+	if m.item.Quantity-len(m.pending) > 0 {
+		copyItem := m.item
+		m.pending = append(m.pending, copyItem.ItemID)
+		return copyItem.ItemID, nil
+	}
+	return "", types.ErrEmptyRewardPool
+}
+func (m *mockPool) State() []types.PoolReward {
+	return make([]types.PoolReward, 0)
+}
+
+func (m *mockPool) CommitDraw() {
+	m.committed += len(m.pending)
+	for range m.pending {
+		m.item.Quantity--
+	}
+	m.pending = nil
+}
+
+func (m *mockPool) RevertDraw() {
+	m.reverted += len(m.pending)
+	m.pending = nil
+}
+
+func (m *mockPool) Load(cfg types.ConfigPool) error                               { return nil }
+func (m *mockPool) LoadSnapshot(path string) error                                { return nil }
+func (m *mockPool) SaveSnapshot(path string) error                                { return nil }
+func (m *mockPool) ApplyUpdateLog(itemID string, quantity int, probability int64) {}
+
+type mockWAL struct {
+	logged     []types.WalLogEntry
+	fail       bool
+	flushCount int
+	flushFail  bool
+	size       int
+}
+
+func (m *mockWAL) LogDraw(item types.WalLogDrawItem) error {
+	m.logged = append(m.logged, &item)
+	if m.fail {
+		return errors.New("simulated WAL error")
+	}
+	return nil
+}
+func (m *mockWAL) LogUpdate(item types.WalLogUpdateItem) error     { return nil }
+func (m *mockWAL) LogSnapshot(item types.WalLogSnapshotItem) error { return nil }
+func (m *mockWAL) LogRotate(item types.WalLogRotateItem) error     { return nil }
+
+func (m *mockWAL) Close() error { return nil }
+func (m *mockWAL) Reset()       {}
+
+func (m *mockWAL) Rotate(string) error  { return nil }
+func (w *mockWAL) Size() (int64, error) { return int64(w.size), nil }
+func (m *mockWAL) Flush() error {
+	m.flushCount++
+	if m.flushFail {
+		return errors.New("simulated WAL flush error")
+	}
+	return nil
 }

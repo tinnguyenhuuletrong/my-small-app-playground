@@ -81,6 +81,10 @@ func (s *FileMMapStorage) CanWrite(size int) bool {
 	return s.offset+int64(size) <= int64(len(s.mmap))
 }
 
+func (s *FileMMapStorage) Size() (int64, error) {
+	return s.offset, nil
+}
+
 func (s *FileMMapStorage) Flush() error {
 	return s.mmap.Flush()
 }
