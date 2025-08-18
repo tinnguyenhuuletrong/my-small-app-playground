@@ -133,6 +133,11 @@ func (p *Pool) ApplyUpdateLog(itemID string, quantity int, probability int64) {
 	p.selector.UpdateItem(itemID, quantity, probability)
 }
 
+func (p *Pool) UpdateItem(itemID string, quantity int, probability int64) error {
+	p.selector.UpdateItem(itemID, quantity, probability)
+	return nil
+}
+
 func (p *Pool) State() []types.PoolReward {
 	catalog := p.selector.SnapshotCatalog()
 	return catalog

@@ -34,3 +34,11 @@ type SnapshotMessage struct {
 type StateMessage struct {
 	ResponseChan chan []types.PoolReward
 }
+
+// UpdateMessage is sent to the actor to update an item's properties.
+type UpdateMessage struct {
+	ItemID       string
+	Quantity     int
+	Probability  int64
+	ResponseChan chan error
+}

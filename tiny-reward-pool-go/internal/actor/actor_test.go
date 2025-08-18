@@ -321,7 +321,10 @@ func (m *mockPool) SelectItem(ctx *types.Context) (string, error) {
 	return "", types.ErrEmptyRewardPool
 }
 func (m *mockPool) State() []types.PoolReward {
-	return make([]types.PoolReward, 0)
+	if m.item.Quantity > 0 {
+		return []types.PoolReward{m.item}
+	}
+	return []types.PoolReward{}
 }
 
 func (m *mockPool) CommitDraw() {
@@ -341,6 +344,9 @@ func (m *mockPool) Load(cfg types.ConfigPool) error                             
 func (m *mockPool) LoadSnapshot(path string) error                                { return nil }
 func (m *mockPool) SaveSnapshot(path string) error                                { return nil }
 func (m *mockPool) ApplyUpdateLog(itemID string, quantity int, probability int64) {}
+func (m *mockPool) UpdateItem(itemID string, quantity int, probability int64) error {
+	return nil
+}
 
 type mockWAL struct {
 	logged     []types.WalLogEntry
@@ -357,7 +363,10 @@ func (m *mockWAL) LogDraw(item types.WalLogDrawItem) error {
 	}
 	return nil
 }
-func (m *mockWAL) LogUpdate(item types.WalLogUpdateItem) error     { return nil }
+func (m *mockWAL) LogUpdate(item types.WalLogUpdateItem) error {
+	m.logged = append(m.logged, &item)
+	return nil
+}
 func (m *mockWAL) LogSnapshot(item types.WalLogSnapshotItem) error { return nil }
 func (m *mockWAL) LogRotate(item types.WalLogRotateItem) error     { return nil }
 
@@ -372,4 +381,40 @@ func (m *mockWAL) Flush() error {
 		return errors.New("simulated WAL flush error")
 	}
 	return nil
+}
+
+func TestSystem_UpdateItem(t *testing.T) {
+	// 1. Setup
+	catalog := []types.PoolReward{
+		{ItemID: "item1", Quantity: 10, Probability: 20},
+	}
+	pool := rewardpool.NewPool(catalog)
+	wal := &mockWAL{size: 10} // Non-empty WAL
+	ctx := &types.Context{WAL: wal, Utils: &utils.MockUtils{}}
+	sys, err := actor.NewSystem(ctx, pool, nil)
+	require.NoError(t, err)
+	defer sys.Stop()
+
+	// 2. Execution
+	updatedQuantity := 5
+	updatedProbability := int64(50)
+	err = sys.UpdateItem("item1", updatedQuantity, updatedProbability)
+	require.NoError(t, err)
+
+	// 3. Assertions
+	// Check that the pool state is updated
+	state := sys.State()
+	require.Len(t, state, 1)
+	assert.Equal(t, "item1", state[0].ItemID)
+	assert.Equal(t, updatedQuantity, state[0].Quantity)
+	assert.Equal(t, updatedProbability, state[0].Probability)
+
+	// Check that the WAL has logged the update
+	require.Len(t, wal.logged, 1)
+	updateLog, ok := wal.logged[0].(*types.WalLogUpdateItem)
+	require.True(t, ok, "Logged item is not an update log")
+	assert.Equal(t, types.LogTypeUpdate, updateLog.Type)
+	assert.Equal(t, "item1", updateLog.ItemID)
+	assert.Equal(t, updatedQuantity, updateLog.Quantity)
+	assert.Equal(t, updatedProbability, updateLog.Probability)
 }

@@ -49,6 +49,11 @@ func (m *mockPoolForInit) SaveSnapshot(path string) error {
 	return nil
 }
 
+func (m *mockPoolForInit) UpdateItem(itemID string, quantity int, probability int64) error {
+	//TODO implement me
+	panic("implement me")
+}
+
 // mockUtilsForInit is a mock utils for testing initialization.
 type mockUtilsForInit struct {
 	snapshotPath string

@@ -116,7 +116,28 @@ func (fts *FenwickTreeSelector) Update(itemID string, delta int64) {
 
 // UpdateItem updates the quantity and probability of a specific item.
 func (fts *FenwickTreeSelector) UpdateItem(itemID string, quantity int, probability int64) {
-	// TODO: Implement in Iter 2
+	idx, ok := fts.itemIndex[itemID]
+	if !ok {
+		return // Item not found
+	}
+
+	item := fts.itemInfo[itemID]
+
+	// If the item was in the tree, remove its old probability.
+	if item.Quantity > 0 {
+		fts.tree.Add(idx, -item.Probability)
+		fts.totalWeight -= item.Probability
+	}
+
+	// Update the item's properties.
+	item.Quantity = quantity
+	item.Probability = probability
+
+	// If the item should now be in the tree, add its new probability.
+	if item.Quantity > 0 {
+		fts.tree.Add(idx, item.Probability)
+		fts.totalWeight += item.Probability
+	}
 }
 
 // TotalAvailable returns the total weight of all items currently available for selection.

@@ -137,7 +137,22 @@ func (pss *PrefixSumSelector) Update(itemID string, delta int64) {
 
 // UpdateItem updates the quantity and probability of a specific item.
 func (pss *PrefixSumSelector) UpdateItem(itemID string, quantity int, probability int64) {
-	// TODO: Implement in Iter 2
+	_, ok := pss.itemIndex[itemID]
+	if !ok {
+		return // Item not found
+	}
+
+	// A simple way to handle updates is to rebuild the selector.
+	// This is less efficient but guarantees correctness.
+	for i := range pss.items {
+		if pss.items[i].ItemID == itemID {
+			pss.items[i].Quantity = quantity
+			pss.items[i].Probability = probability
+			break
+		}
+	}
+
+	pss.Reset(pss.items)
 }
 
 // TotalAvailable returns the total weight of all items currently available for selection.

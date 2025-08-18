@@ -91,3 +91,22 @@ func (s *System) Snapshot() error {
 	s.actor.mailbox <- msg
 	return <-respChan
 }
+
+// UpdateItem sends a message to the actor to update an item and waits for a response.
+func (s *System) UpdateItem(itemID string, quantity int, probability int64) error {
+	respChan := make(chan error, 1)
+	s.actor.mailbox <- UpdateMessage{
+		ItemID:       itemID,
+		Quantity:     quantity,
+		Probability:  probability,
+		ResponseChan: respChan,
+	}
+	return <-respChan
+}
+
+// State returns the current state of the reward pool.
+func (s *System) State() []types.PoolReward {
+	respChan := make(chan []types.PoolReward, 1)
+	s.actor.mailbox <- StateMessage{ResponseChan: respChan}
+	return <-respChan
+}

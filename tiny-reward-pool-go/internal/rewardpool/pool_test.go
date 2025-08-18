@@ -3,6 +3,9 @@ package rewardpool
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/selector"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/utils"
 )
@@ -92,4 +95,32 @@ func TestTransactionalDraw(t *testing.T) {
 	if pool.selector.GetItemRemaining("gold") != 0 {
 		t.Errorf("Expected selector remaining gold to be 0 after ApplyDrawLog, got %d", pool.selector.GetItemRemaining("gold"))
 	}
+}
+
+type mockSelectorForUpdate struct {
+	selector.FenwickTreeSelector
+	updateCalled      bool
+	updatedItemID     string
+	updatedQuantity   int
+	updatedProbability int64
+}
+
+func (m *mockSelectorForUpdate) UpdateItem(itemID string, quantity int, probability int64) {
+	m.updateCalled = true
+	m.updatedItemID = itemID
+	m.updatedQuantity = quantity
+	m.updatedProbability = probability
+}
+
+func TestPool_UpdateItem(t *testing.T) {
+	mockSelector := &mockSelectorForUpdate{}
+	pool := NewPool([]types.PoolReward{}, PoolOptional{Selector: mockSelector})
+
+	err := pool.UpdateItem("item1", 10, 50)
+
+	require.NoError(t, err)
+	assert.True(t, mockSelector.updateCalled)
+	assert.Equal(t, "item1", mockSelector.updatedItemID)
+	assert.Equal(t, 10, mockSelector.updatedQuantity)
+	assert.Equal(t, int64(50), mockSelector.updatedProbability)
 }

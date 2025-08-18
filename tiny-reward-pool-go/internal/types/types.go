@@ -87,6 +87,7 @@ type RewardPool interface {
 	SaveSnapshot(path string) error
 	LoadSnapshot(path string) error
 	ApplyUpdateLog(itemID string, quantity int, probability int64)
+	UpdateItem(itemID string, quantity int, probability int64) error
 }
 
 // LogFormatter Interface: To handle serialization and deserialization.

@@ -48,6 +48,14 @@ To make it simple. We have a rule that begin of WAL file must be a `LogTypeSnaps
     4. **Verification:**
         - After implementation, run `make check` to check for compile errors.
         - Run `make test` to ensure all existing tests pass.
+- **Result:**
+    - Successfully implemented the `UpdateItem` functionality across the selector, pool, and actor layers.
+    - Added `UpdateItem` to the `ItemSelector` interface and implemented it in both `FenwickTreeSelector` and `PrefixSumSelector`.
+    - Added `UpdateItem` to the `RewardPool` interface and `Pool` struct.
+    - Integrated the update mechanism into the `ActorSystem` with a new `UpdateMessage`, allowing users to update item properties transactionally.
+    - The actor now logs `WalLogUpdateItem` entries to the WAL after an update.
+    - Added comprehensive unit tests for the new functionality at the selector, pool, and actor levels to ensure correctness.
+    - All checks and tests passed successfully.
 
 ### Iter 3: Implement Snapshot and WAL Rotation Logging
 - **Problem:** Snapshot creation and WAL rotation are not logged in the WAL, which is essential for the new recovery logic.

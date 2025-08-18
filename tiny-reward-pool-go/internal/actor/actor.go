@@ -87,6 +87,8 @@ func (a *RewardProcessorActor) handleMessage(msg interface{}) {
 		m.ResponseChan <- a.flush()
 	case SnapshotMessage:
 		m.ResponseChan <- a.snapshot()
+	case UpdateMessage:
+		a.handleUpdate(m)
 	case StateMessage:
 		// This is a read-only operation, so it's safe to do directly.
 		// Note: In a more complex actor, even reads might be message-based
@@ -126,6 +128,24 @@ func (a *RewardProcessorActor) handleDraw(m DrawMessage) {
 	}
 
 	m.ResponseChan <- resp
+}
+
+func (a *RewardProcessorActor) handleUpdate(m UpdateMessage) {
+	err := a.pool.UpdateItem(m.ItemID, m.Quantity, m.Probability)
+	if err != nil {
+		m.ResponseChan <- err
+		return
+	}
+
+	logItem := types.WalLogUpdateItem{
+		WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeUpdate},
+		ItemID:          m.ItemID,
+		Quantity:        m.Quantity,
+		Probability:     m.Probability,
+	}
+
+	walErr := a.ctx.WAL.LogUpdate(logItem)
+	m.ResponseChan <- walErr
 }
 
 func (a *RewardProcessorActor) flush() error {
