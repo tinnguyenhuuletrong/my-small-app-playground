@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"log/slog"
 	"math"
@@ -19,7 +20,7 @@ import (
 )
 
 func main() {
-	// baseDir := "../.."
+	// baseDir := "..//.."
 	baseDir := "."
 	defaultConfigPath := baseDir + "/samples/config.json"
 	tmpDir := baseDir + "/tmp"
@@ -68,8 +69,12 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
+	fmt.Println("CLI Controls:")
+	fmt.Println("  - Press '1' to add 10 gold items.")
+	fmt.Println("  - Press '2' to toggle silver probability between 10 and 90.")
+	fmt.Println("  - Press Ctrl+C or send SIGTERM to exit.")
+	fmt.Println("-------------------------------------------------")
 	fmt.Println("[Pool state] ", pool.State())
-	fmt.Println("Press Ctrl+C or send SIGTERM to exit.")
 
 	drawLock := make(chan struct{}, 1) // Used to lock draw requests
 	drawLock <- struct{}{}
@@ -88,6 +93,66 @@ func main() {
 		}
 	}()
 
+	// Goroutine to handle user input
+	silverProbToggle := false
+	go func() {
+		reader := bufio.NewReader(os.Stdin)
+		for {
+			char, _, err := reader.ReadRune()
+			if err != nil {
+				fmt.Println("Error reading input:", err)
+				return
+			}
+
+			switch char {
+			case '1':
+				fmt.Println("\n--- Adding 10 gold... ---")
+				var currentGold types.PoolReward
+				for _, item := range sys.State() {
+					if item.ItemID == "gold" {
+						currentGold = item
+						break
+					}
+				}
+				err := sys.UpdateItem("gold", currentGold.Quantity+10, currentGold.Probability)
+				if err != nil {
+					fmt.Printf("Failed to update gold: %v\n", err)
+				} else {
+					fmt.Println("--- Gold updated. New pool state: ---")
+					fmt.Println(sys.State())
+					fmt.Println("-----------------------------------------")
+				}
+
+			case '2':
+				fmt.Println("\n--- Toggling silver probability... ---")
+				var currentSilver types.PoolReward
+				for _, item := range sys.State() {
+					if item.ItemID == "silver" {
+						currentSilver = item
+						break
+					}
+				}
+
+				var newProb int64
+				if silverProbToggle {
+					newProb = 10
+				} else {
+					newProb = 90
+				}
+				silverProbToggle = !silverProbToggle
+
+				err := sys.UpdateItem("silver", currentSilver.Quantity, newProb)
+				if err != nil {
+					fmt.Printf("Failed to update silver: %v\n", err)
+				} else {
+					fmt.Println("--- Silver updated. New pool state: ---")
+					fmt.Println(sys.State())
+					fmt.Println("-----------------------------------------")
+				}
+			}
+		}
+	}()
+
 	<-sigChan
 	fmt.Println("Shutting down gracefully...")
 	<-drawLock
@@ -97,3 +162,5 @@ func main() {
 	fmt.Println("[Pool state] ", pool.State())
 	fmt.Println("Shutdown complete.")
 }
+
+
