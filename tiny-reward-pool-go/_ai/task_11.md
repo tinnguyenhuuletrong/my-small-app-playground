@@ -83,3 +83,25 @@ To make it simple. We have a rule that begin of WAL file must be a `LogTypeSnaps
         - After implementation, run `make check` to check for compile errors.
         - Add a new unit test specifically designed to simulate the `wal.ErrWALFull` condition. This test should verify that the rotation occurs correctly and that no pending operations are lost in the process.
         - Run `make test` to ensure all existing and new tests pass.
+
+### Iter 4: Refactor WAL Replay Logic and Actor Flush
+-   **Target:** Refactor duplicated WAL replay logic into a dedicated module and improve organization of the actor's `flush` method.
+-   **Problem:** The logic for replaying WAL entries is duplicated in `internal/recovery/recovery.go` and `internal/actor/actor.go`. This makes the code harder to maintain and extend. The `flush` method in the actor is also large and hard to follow.
+-   **Plan:**
+    1.  **Create `internal/replay` module:**
+        -   Create a new file `internal/replay/replay.go`.
+        -   Move the log application logic into this new module.
+        -   Define an exported function `ApplyLog(pool types.RewardPool, log types.WalLogEntry)` that applies a single log entry to the pool.
+        -   Define an exported function `ReplayLogs(pool types.RewardPool, logs []types.WalLogEntry)` that iterates over a slice of logs and uses `ApplyLog`.
+    2.  **`internal/recovery/recovery.go`:**
+        -   Update the import to use the new `replay` module.
+        -   Refactor `RecoverPool` to use `replay.ReplayLogs` for replaying the WAL.
+    3.  **`internal/actor/actor.go`:**
+        -   Update the import to use the new `replay` module.
+        -   Refactor the `flush` method to improve readability.
+        -   Extract the logic for handling `types.ErrWALFull` into a new private method, `handleWALFull() error`.
+        -   Inside `handleWALFull`, extract the logic for re-applying and re-logging operations into a new private method, `replayAndRelog(logsToReplay []types.WalLogEntry)`.
+        -   Update `replayAndRelog` to use the new `replay.ApplyLog` function.
+    4.  **Verification:**
+        -   Run `make check` to ensure no compilation errors.
+        -   Run `make test` to ensure all tests still pass after refactoring.
