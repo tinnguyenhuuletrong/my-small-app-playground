@@ -135,9 +135,11 @@ func TestSystem_WALRotation(t *testing.T) {
 
 	initQuantity := 1000
 	numberDraw := 20
-	mockPool := &mockRotationPool{
-		mockPool: mockPool{item: types.PoolReward{ItemID: "gold", Quantity: initQuantity, Probability: 1}},
-	}
+
+	pool := rewardpool.NewPool([]types.PoolReward{
+		{ItemID: "gold", Quantity: initQuantity, Probability: 1},
+	})
+
 	mockUtils := &mockRotationUtils{
 		rotatedPath:  rotatedPath,
 		snapshotPath: snapshotPath,
@@ -149,7 +151,7 @@ func TestSystem_WALRotation(t *testing.T) {
 	}
 
 	// Flush after every draw to trigger the check
-	sys, err := actor.NewSystem(ctx, mockPool, &actor.SystemOptional{FlushAfterNDraw: 1})
+	sys, err := actor.NewSystem(ctx, pool, &actor.SystemOptional{FlushAfterNDraw: 1})
 	require.NoError(t, err)
 
 	// 2. Execution: Write data until WAL is full
@@ -165,15 +167,13 @@ func TestSystem_WALRotation(t *testing.T) {
 	// check state correct
 	state := sys.State()
 	remainingItem := initQuantity - numberDraw
-	require.Equal(t, state[0].Quantity, remainingItem, "pool Quantity should correct")
+	require.Equal(t, remainingItem, state[0].Quantity, "pool Quantity should correct")
 
 	sys.Stop() // Final flush
 
 	// 3. Assertions
 	assert.True(t, mockUtils.genRotatedCalled, "GenRotatedWALPath should have been called")
 	assert.True(t, mockUtils.genSnapshotCalled, "GenSnapshotPath should have been called")
-	assert.True(t, mockPool.saveSnapshotCalled, "SaveSnapshot should have been called")
-	assert.Equal(t, snapshotPath, mockPool.snapshotPath, "Snapshot should be saved to the correct path")
 
 	// Check if the rotated WAL file exists
 	_, err = os.Stat(rotatedPath)
@@ -207,19 +207,6 @@ func (m *mockRotationUtils) GenRotatedWALPath() *string {
 func (m *mockRotationUtils) GenSnapshotPath() *string {
 	m.genSnapshotCalled = true
 	return &m.snapshotPath
-}
-
-type mockRotationPool struct {
-	mockPool
-	snapshotPath       string
-	saveSnapshotCalled bool
-}
-
-func (m *mockRotationPool) SaveSnapshot(path string) error {
-	m.saveSnapshotCalled = true
-	m.snapshotPath = path
-	// Create a dummy snapshot file
-	return os.WriteFile(path, []byte("snapshot_data"), 0644)
 }
 
 func TestSystem_StopWithWALRotationRaceCondition(t *testing.T) {
@@ -357,6 +344,10 @@ func (m *mockPool) CommitDraw() {
 func (m *mockPool) RevertDraw() {
 	m.reverted += len(m.pending)
 	m.pending = nil
+}
+
+func (m *mockPool) ApplyDrawLog(itemID string) {
+	m.item.Quantity--
 }
 
 func (m *mockPool) Load(cfg types.ConfigPool) error                               { return nil }

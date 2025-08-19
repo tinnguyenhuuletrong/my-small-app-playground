@@ -204,22 +204,16 @@ func (a *RewardProcessorActor) flush() error {
 			for _, logEntry := range logsToReplay {
 				switch v := logEntry.(type) {
 				case *types.WalLogDrawItem:
-					// Re-stage the draw in the pool
-					_, err := a.pool.SelectItem(a.ctx)
-					if err != nil {
-						// This shouldn't happen if the logic is correct, as we just reverted.
-						// Log it as a warning and continue.
-						if logger := a.ctx.Utils.GetLogger(); logger != nil {
-							logger.Warn("Failed to re-stage a draw during WAL rotation.", "request_id", v.RequestID, "error", err)
-						}
-						continue
+					// Re-apply the update
+					if v.Success {
+						a.pool.ApplyDrawLog(v.ItemID)
 					}
 					// Re-log it to the WAL buffer and our pending list
 					a.ctx.WAL.LogDraw(*v)
 					a.pendingLogs = append(a.pendingLogs, v)
 				case *types.WalLogUpdateItem:
 					// Re-apply the update
-					a.pool.UpdateItem(v.ItemID, v.Quantity, v.Probability)
+					a.pool.ApplyUpdateLog(v.ItemID, v.Quantity, v.Probability)
 					// Re-log it
 					a.ctx.WAL.LogUpdate(*v)
 					a.pendingLogs = append(a.pendingLogs, v)

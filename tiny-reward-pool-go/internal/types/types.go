@@ -86,8 +86,13 @@ type RewardPool interface {
 	Load(config ConfigPool) error
 	SaveSnapshot(path string) error
 	LoadSnapshot(path string) error
-	ApplyUpdateLog(itemID string, quantity int, probability int64)
+
+	// Update item quality, probability
 	UpdateItem(itemID string, quantity int, probability int64) error
+
+	// WAL log relay
+	ApplyDrawLog(itemID string)
+	ApplyUpdateLog(itemID string, quantity int, probability int64)
 }
 
 // LogFormatter Interface: To handle serialization and deserialization.
