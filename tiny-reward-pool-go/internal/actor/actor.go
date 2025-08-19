@@ -14,7 +14,7 @@ type RewardProcessorActor struct {
 	pool            types.RewardPool
 	mailbox         chan interface{}
 	flushAfterNDraw int
-	stagedDraws     int
+	pendingLogs     []types.WalLogEntry
 }
 
 // Init performs the initial setup for the actor, like creating an initial
@@ -58,6 +58,7 @@ func NewRewardProcessorActor(ctx *types.Context, pool types.RewardPool, mailboxS
 		pool:            pool,
 		mailbox:         make(chan interface{}, mailboxSize),
 		flushAfterNDraw: flushAfterNDraw,
+		pendingLogs:     make([]types.WalLogEntry, 0, flushAfterNDraw*2),
 	}
 }
 
@@ -114,9 +115,9 @@ func (a *RewardProcessorActor) handleDraw(m DrawMessage) {
 	}
 
 	walErr = a.ctx.WAL.LogDraw(logItem)
-	a.stagedDraws++
+	a.pendingLogs = append(a.pendingLogs, &logItem)
 
-	if a.stagedDraws >= a.flushAfterNDraw {
+	if len(a.pendingLogs) >= a.flushAfterNDraw {
 		a.flush()
 	}
 
@@ -145,11 +146,14 @@ func (a *RewardProcessorActor) handleUpdate(m UpdateMessage) {
 	}
 
 	walErr := a.ctx.WAL.LogUpdate(logItem)
+	if walErr == nil {
+		a.pendingLogs = append(a.pendingLogs, &logItem)
+	}
 	m.ResponseChan <- walErr
 }
 
 func (a *RewardProcessorActor) flush() error {
-	if a.stagedDraws <= 0 {
+	if len(a.pendingLogs) == 0 {
 		return nil
 	}
 
@@ -157,43 +161,88 @@ func (a *RewardProcessorActor) flush() error {
 
 	if flushErr != nil {
 		if flushErr == types.ErrWALFull {
-			// WAL is full. The buffer is not flushed. Revert draws.
 			if logger := a.ctx.Utils.GetLogger(); logger != nil {
-				logger.Info("WAL is full. Reverting draws and rotating WAL.")
+				logger.Info("WAL is full. Reverting draws, rotating WAL, and re-applying logs.")
 			}
 
-			// Now rotate WAL
+			// 1. Preserve pending logs and revert in-memory state
+			logsToReplay := make([]types.WalLogEntry, len(a.pendingLogs))
+			copy(logsToReplay, a.pendingLogs)
+			a.pool.RevertDraw()
+			a.pendingLogs = a.pendingLogs[:0]
+			a.ctx.WAL.Reset() // Clear the unflushed buffer in the WAL
+
+			// 2. Rotate WAL file
 			rotatedPath := a.ctx.Utils.GenRotatedWALPath()
 			if rotatedPath != nil {
 				if err := a.ctx.WAL.Rotate(*rotatedPath); err != nil {
 					if logger := a.ctx.Utils.GetLogger(); logger != nil {
 						logger.Error("Failed to rotate WAL.", "error", err)
 					}
+					// This is a critical failure, can't proceed.
 					return err
 				}
-			} else {
-				if logger := a.ctx.Utils.GetLogger(); logger != nil {
-					logger.Error("Wall is full, rotatedPath not set. Noting to do. Stop here")
-				}
-
-				// too strict
-				// panic(1)
 			}
-			a.ctx.WAL.Reset()
-			a.pool.CommitDraw()
-			a.stagedDraws = 0
 
-			// Create snapshot and log it to the new WAL
+			// 3. Create and log a snapshot to the new WAL
 			if err := a.snapshot(); err != nil {
+				// Also a critical failure.
 				return err
 			}
-			// And flush the snapshot log
-			return a.ctx.WAL.Flush()
+			// Flush the snapshot log immediately to secure the new WAL's starting state.
+			if err := a.ctx.WAL.Flush(); err != nil {
+				if logger := a.ctx.Utils.GetLogger(); logger != nil {
+					logger.Error("CRITICAL: Could not flush snapshot to new WAL. State may be inconsistent.", "error", err)
+				}
+				return err
+			}
+
+			// 4. Re-apply and re-log the preserved operations
+			if logger := a.ctx.Utils.GetLogger(); logger != nil {
+				logger.Info("Replaying pending logs to the new WAL.", "count", len(logsToReplay))
+			}
+			for _, logEntry := range logsToReplay {
+				switch v := logEntry.(type) {
+				case *types.WalLogDrawItem:
+					// Re-stage the draw in the pool
+					_, err := a.pool.SelectItem(a.ctx)
+					if err != nil {
+						// This shouldn't happen if the logic is correct, as we just reverted.
+						// Log it as a warning and continue.
+						if logger := a.ctx.Utils.GetLogger(); logger != nil {
+							logger.Warn("Failed to re-stage a draw during WAL rotation.", "request_id", v.RequestID, "error", err)
+						}
+						continue
+					}
+					// Re-log it to the WAL buffer and our pending list
+					a.ctx.WAL.LogDraw(*v)
+					a.pendingLogs = append(a.pendingLogs, v)
+				case *types.WalLogUpdateItem:
+					// Re-apply the update
+					a.pool.UpdateItem(v.ItemID, v.Quantity, v.Probability)
+					// Re-log it
+					a.ctx.WAL.LogUpdate(*v)
+					a.pendingLogs = append(a.pendingLogs, v)
+				}
+			}
+
+			// 5. Final flush attempt on the new WAL
+			if err := a.ctx.WAL.Flush(); err != nil {
+				if logger := a.ctx.Utils.GetLogger(); logger != nil {
+					logger.Error("CRITICAL: Flush failed even after WAL rotation. Data may be lost.", "error", err)
+				}
+				// At this point, recovery is difficult. We've already rotated and snapshotted.
+				// The best we can do is revert the re-staged draws and report the error.
+				a.pool.RevertDraw()
+				a.pendingLogs = a.pendingLogs[:0]
+				return err
+			}
 
 		} else {
 			// Another flush error. Revert draws.
 			a.pool.RevertDraw()
-			a.stagedDraws = 0
+			a.pendingLogs = a.pendingLogs[:0]
+			a.ctx.WAL.Reset() // Clear the unflushed buffer
 			if logger := a.ctx.Utils.GetLogger(); logger != nil {
 				logger.Error("[Actor] WAL Flush failed, reverting draws.", "error", flushErr)
 			}
@@ -205,9 +254,9 @@ func (a *RewardProcessorActor) flush() error {
 	a.pool.CommitDraw()
 
 	if logger := a.ctx.Utils.GetLogger(); logger != nil {
-		logger.Debug(fmt.Sprintf("[Actor] WAL Flush and Commit - %d", a.stagedDraws))
+		logger.Debug(fmt.Sprintf("[Actor] WAL Flush and Commit - %d logs", len(a.pendingLogs)))
 	}
-	a.stagedDraws = 0
+	a.pendingLogs = a.pendingLogs[:0]
 	return nil
 }
 

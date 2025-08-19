@@ -63,7 +63,7 @@ To make it simple. We have a rule that begin of WAL file must be a `LogTypeSnaps
     1.  **Modify `internal/actor/actor.go`:**
         - Refactor the `flush()` method to correctly handle the `wal.ErrWALFull` error.
         - **Detailed Steps for `wal.ErrWALFull` scenario:**
-            i.  **Preserve Pending State:** Before making any changes, create a temporary copy of the `a.pendingDraws` map. This map holds the operations that have been applied in-memory but not yet successfully flushed to the WAL.
+            i.  **Preserve Pending State:** Before making any changes, create a temporary copy of the `a.pendingDraws` slices. This map holds wal log that have been applied in-memory but not yet successfully flushed to the WAL.
             ii. **Revert In-Memory Changes:** Call the `revertPending()` helper function. This will use the original `a.pendingDraws` map to revert the staged changes in the pool, bringing its state back to what is consistent with the last successful write in the (now full) WAL. This process will also clear `a.pendingDraws`.
             iii. **Create Snapshot and Rotate WAL:**
                 - Create a new snapshot of the consistent, reverted pool state.

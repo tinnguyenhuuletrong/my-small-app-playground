@@ -133,8 +133,10 @@ func TestSystem_WALRotation(t *testing.T) {
 	realWAL, err := wal.NewWAL(walPath, walformatter.NewJSONFormatter(), mmapStorage)
 	require.NoError(t, err)
 
+	initQuantity := 1000
+	numberDraw := 20
 	mockPool := &mockRotationPool{
-		mockPool: mockPool{item: types.PoolReward{ItemID: "gold", Quantity: 1000, Probability: 1}},
+		mockPool: mockPool{item: types.PoolReward{ItemID: "gold", Quantity: initQuantity, Probability: 1}},
 	}
 	mockUtils := &mockRotationUtils{
 		rotatedPath:  rotatedPath,
@@ -152,13 +154,19 @@ func TestSystem_WALRotation(t *testing.T) {
 
 	// 2. Execution: Write data until WAL is full
 	// A single draw log is ~70 bytes. 1024 / 70 = ~15 draws needed. Let's do 20 to be safe.
-	for i := 0; i < 20; i++ {
+	for i := 0; i < numberDraw; i++ {
 		<-sys.Draw()
 	}
 
 	// The processor runs in a separate goroutine, so we need to wait a bit
 	// for the last flush to be processed.
 	time.Sleep(200 * time.Millisecond)
+
+	// check state correct
+	state := sys.State()
+	remainingItem := initQuantity - numberDraw
+	require.Equal(t, state[0].Quantity, remainingItem, "pool Quantity should correct")
+
 	sys.Stop() // Final flush
 
 	// 3. Assertions
@@ -229,7 +237,7 @@ func TestSystem_StopWithWALRotationRaceCondition(t *testing.T) {
 
 	// Use a real mmap storage with a tiny size to force rotation
 	mmapStorage, err := walstorage.NewFileMMapStorage(walPath, walstorage.FileMMapStorageOps{
-		MMapFileSizeInBytes: 150,
+		MMapFileSizeInBytes: 150 * 2,
 	})
 	require.NoError(t, err)
 
@@ -257,12 +265,9 @@ func TestSystem_StopWithWALRotationRaceCondition(t *testing.T) {
 	// 2. Execution
 	<-sys.Draw()
 	<-sys.Draw()
-
 	time.Sleep(100 * time.Millisecond)
-
 	<-sys.Draw()
 	time.Sleep(100 * time.Millisecond)
-
 	sys.Stop() // This will trigger rotation
 
 	// 3. Assertions
@@ -279,8 +284,22 @@ func TestSystem_StopWithWALRotationRaceCondition(t *testing.T) {
 	err = json.Unmarshal(snapshotData, &snapshotContent)
 	require.NoError(t, err, "Snapshot should be valid JSON")
 
-	expectedQuantityAfterStop := initialQuantity - 3
-	assert.Equal(t, int(expectedQuantityAfterStop), snapshotContent.Items[0].Quantity, "Snapshot should have the final quantity")
+	// Snapshot should revert and apply remaining draw
+	expectedQuantityAfterStop := initialQuantity - 2
+	assert.Equal(t, int(expectedQuantityAfterStop), snapshotContent.Items[0].Quantity, "Snapshot should have pending")
+
+	// Check active wal log. It should
+	//	- snapshot
+	//	- 1 draw log
+	logItems, err := wal.ParseWAL(walPath, walformatter.NewJSONFormatter())
+	assert.Equal(t, logItems[0].GetType(), types.LogTypeSnapshot, "1st item should be a snapshot")
+	assert.Equal(t, logItems[1].GetType(), types.LogTypeDraw, "2st item should be a draw")
+
+	snapshotItm := logItems[0].(*types.WalLogSnapshotItem)
+	assert.Equal(t, snapshotItm.Path, snapshotPath, "1st item snapshot path should correct")
+	updateItm := logItems[1].(*types.WalLogDrawItem)
+	assert.Equal(t, updateItm.ItemID, "gold", "2st item should relay correct ItemID")
+
 }
 
 type mockStopUtils struct {
