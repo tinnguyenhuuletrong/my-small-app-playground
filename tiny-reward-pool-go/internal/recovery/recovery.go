@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/replay"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/rewardpool"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal"
@@ -48,17 +49,7 @@ func RecoverPool(snapshotPath, walPath, configPath string, formatter types.LogFo
 		}
 
 		// Replay the rest of the WAL.
-		for _, item := range logItems[1:] {
-			switch v := item.(type) {
-			case *types.WalLogDrawItem:
-				if v.Success {
-					pool.ApplyDrawLog(v.ItemID)
-				}
-			case *types.WalLogUpdateItem:
-				pool.ApplyUpdateLog(v.ItemID, v.Quantity, v.Probability)
-			// Other log types like Rotate are not applied to the pool state.
-			}
-		}
+		replay.ReplayLogs(pool, logItems[1:])
 	}
 
 	// 3. Write new snapshot after recovery.

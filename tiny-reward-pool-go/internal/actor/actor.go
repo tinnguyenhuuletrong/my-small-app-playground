@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/replay"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
 )
 
@@ -161,87 +162,17 @@ func (a *RewardProcessorActor) flush() error {
 
 	if flushErr != nil {
 		if flushErr == types.ErrWALFull {
-			if logger := a.ctx.Utils.GetLogger(); logger != nil {
-				logger.Info("WAL is full. Reverting draws, rotating WAL, and re-applying logs.")
-			}
-
-			// 1. Preserve pending logs and revert in-memory state
-			logsToReplay := make([]types.WalLogEntry, len(a.pendingLogs))
-			copy(logsToReplay, a.pendingLogs)
-			a.pool.RevertDraw()
-			a.pendingLogs = a.pendingLogs[:0]
-			a.ctx.WAL.Reset() // Clear the unflushed buffer in the WAL
-
-			// 2. Rotate WAL file
-			rotatedPath := a.ctx.Utils.GenRotatedWALPath()
-			if rotatedPath != nil {
-				if err := a.ctx.WAL.Rotate(*rotatedPath); err != nil {
-					if logger := a.ctx.Utils.GetLogger(); logger != nil {
-						logger.Error("Failed to rotate WAL.", "error", err)
-					}
-					// This is a critical failure, can't proceed.
-					return err
-				}
-			}
-
-			// 3. Create and log a snapshot to the new WAL
-			if err := a.snapshot(); err != nil {
-				// Also a critical failure.
-				return err
-			}
-			// Flush the snapshot log immediately to secure the new WAL's starting state.
-			if err := a.ctx.WAL.Flush(); err != nil {
-				if logger := a.ctx.Utils.GetLogger(); logger != nil {
-					logger.Error("CRITICAL: Could not flush snapshot to new WAL. State may be inconsistent.", "error", err)
-				}
-				return err
-			}
-
-			// 4. Re-apply and re-log the preserved operations
-			if logger := a.ctx.Utils.GetLogger(); logger != nil {
-				logger.Info("Replaying pending logs to the new WAL.", "count", len(logsToReplay))
-			}
-			for _, logEntry := range logsToReplay {
-				switch v := logEntry.(type) {
-				case *types.WalLogDrawItem:
-					// Re-apply the update
-					if v.Success {
-						a.pool.ApplyDrawLog(v.ItemID)
-					}
-					// Re-log it to the WAL buffer and our pending list
-					a.ctx.WAL.LogDraw(*v)
-					a.pendingLogs = append(a.pendingLogs, v)
-				case *types.WalLogUpdateItem:
-					// Re-apply the update
-					a.pool.ApplyUpdateLog(v.ItemID, v.Quantity, v.Probability)
-					// Re-log it
-					a.ctx.WAL.LogUpdate(*v)
-					a.pendingLogs = append(a.pendingLogs, v)
-				}
-			}
-
-			// 5. Final flush attempt on the new WAL
-			if err := a.ctx.WAL.Flush(); err != nil {
-				if logger := a.ctx.Utils.GetLogger(); logger != nil {
-					logger.Error("CRITICAL: Flush failed even after WAL rotation. Data may be lost.", "error", err)
-				}
-				// At this point, recovery is difficult. We've already rotated and snapshotted.
-				// The best we can do is revert the re-staged draws and report the error.
-				a.pool.RevertDraw()
-				a.pendingLogs = a.pendingLogs[:0]
-				return err
-			}
-
-		} else {
-			// Another flush error. Revert draws.
-			a.pool.RevertDraw()
-			a.pendingLogs = a.pendingLogs[:0]
-			a.ctx.WAL.Reset() // Clear the unflushed buffer
-			if logger := a.ctx.Utils.GetLogger(); logger != nil {
-				logger.Error("[Actor] WAL Flush failed, reverting draws.", "error", flushErr)
-			}
-			return flushErr
+			return a.handleWALFull()
 		}
+
+		// Another flush error. Revert draws.
+		a.pool.RevertDraw()
+		a.pendingLogs = a.pendingLogs[:0]
+		a.ctx.WAL.Reset() // Clear the unflushed buffer
+		if logger := a.ctx.Utils.GetLogger(); logger != nil {
+			logger.Error("[Actor] WAL Flush failed, reverting draws.", "error", flushErr)
+		}
+		return flushErr
 	}
 
 	// Flush was successful. Commit draws.
@@ -252,6 +183,81 @@ func (a *RewardProcessorActor) flush() error {
 	}
 	a.pendingLogs = a.pendingLogs[:0]
 	return nil
+}
+
+func (a *RewardProcessorActor) handleWALFull() error {
+	if logger := a.ctx.Utils.GetLogger(); logger != nil {
+		logger.Info("WAL is full. Reverting draws, rotating WAL, and re-applying logs.")
+	}
+
+	// 1. Preserve pending logs and revert in-memory state
+	logsToReplay := make([]types.WalLogEntry, len(a.pendingLogs))
+	copy(logsToReplay, a.pendingLogs)
+	a.pool.RevertDraw()
+	a.pendingLogs = a.pendingLogs[:0]
+	a.ctx.WAL.Reset() // Clear the unflushed buffer in the WAL
+
+	// 2. Rotate WAL file
+	rotatedPath := a.ctx.Utils.GenRotatedWALPath()
+	if rotatedPath != nil {
+		if err := a.ctx.WAL.Rotate(*rotatedPath); err != nil {
+			if logger := a.ctx.Utils.GetLogger(); logger != nil {
+				logger.Error("Failed to rotate WAL.", "error", err)
+			}
+			// This is a critical failure, can't proceed.
+			return err
+		}
+	}
+
+	// 3. Create and log a snapshot to the new WAL
+	if err := a.snapshot(); err != nil {
+		// Also a critical failure.
+		return err
+	}
+	// Flush the snapshot log immediately to secure the new WAL's starting state.
+	if err := a.ctx.WAL.Flush(); err != nil {
+		if logger := a.ctx.Utils.GetLogger(); logger != nil {
+			logger.Error("CRITICAL: Could not flush snapshot to new WAL. State may be inconsistent.", "error", err)
+		}
+		return err
+	}
+
+	// 4. Re-apply and re-log the preserved operations
+	a.replayAndRelog(logsToReplay)
+
+	// 5. Final flush attempt on the new WAL
+	if err := a.ctx.WAL.Flush(); err != nil {
+		if logger := a.ctx.Utils.GetLogger(); logger != nil {
+			logger.Error("CRITICAL: Flush failed even after WAL rotation. Data may be lost.", "error", err)
+		}
+		// At this point, recovery is difficult. We've already rotated and snapshotted.
+		// The best we can do is revert the re-staged draws and report the error.
+		a.pool.RevertDraw()
+		a.pendingLogs = a.pendingLogs[:0]
+		return err
+	}
+
+	return nil
+}
+
+func (a *RewardProcessorActor) replayAndRelog(logsToReplay []types.WalLogEntry) {
+	if logger := a.ctx.Utils.GetLogger(); logger != nil {
+		logger.Info("Replaying pending logs to the new WAL.", "count", len(logsToReplay))
+	}
+	for _, logEntry := range logsToReplay {
+		// Re-apply the operation to the in-memory pool
+		replay.ApplyLog(a.pool, logEntry)
+
+		// Re-log the operation to the new WAL's buffer and the actor's pending list
+		switch v := logEntry.(type) {
+		case *types.WalLogDrawItem:
+			a.ctx.WAL.LogDraw(*v)
+			a.pendingLogs = append(a.pendingLogs, v)
+		case *types.WalLogUpdateItem:
+			a.ctx.WAL.LogUpdate(*v)
+			a.pendingLogs = append(a.pendingLogs, v)
+		}
+	}
 }
 
 func (a *RewardProcessorActor) snapshot() error {
