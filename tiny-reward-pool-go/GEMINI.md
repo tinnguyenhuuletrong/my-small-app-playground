@@ -6,9 +6,9 @@ This document provides context for the Gemini Code Assistant to understand and e
 
 This project is a high-performance, in-memory Reward Pool Service written in Go. It's designed for rapid and reliable reward distribution, featuring a robust logging and snapshotting mechanism to ensure data integrity and fast recovery.
 
-The core of the service is a single-threaded, transactional processing model that ensures low-latency and high-throughput for reward distribution. A Write-Ahead Log (WAL) is implemented for deterministic recovery, with support for in-memory buffering and batch flushing to optimize I/O performance. The system supports snapshots for quick state restoration.
+The core of the service is a single-threaded, transactional processing model that ensures low-latency and high-throughput for reward distribution. A Write-Ahead Log (WAL) is implemented for deterministic recovery, with support for in-memory buffering and batch flushing to optimize I/O performance. The system enforces a strict WAL-first recovery model, where every WAL file must begin with a snapshot, ensuring a consistent and reliable state restoration.
 
-The project is structured into several internal modules, including `config`, `processing`, `recovery`, `rewardpool`, `selector`, `types`, `utils`, and `wal`. A command-line interface (CLI) demo is provided in the `cmd/cli` directory, which showcases the usage of all modules, including graceful shutdown, periodic snapshotting, and WAL rotation.
+The project is structured into several internal modules, including `config`, `processing`, `recovery`, `replay`, `rewardpool`, `selector`, `types`, `utils`, and `wal`. A command-line interface (CLI) demo is provided in the `cmd/cli` directory, which showcases the usage of all modules, including graceful shutdown, periodic snapshotting, and WAL rotation.
 
 The project uses Go modules for dependency management, with `github.com/edsrzf/mmap-go` being a key dependency for memory-mapped file I/O in the WAL implementation.
 
@@ -43,9 +43,16 @@ The project uses a `Makefile` for common development tasks.
 *   **Testing:** Unit tests are provided for all key modules, and the project includes benchmark tests for performance-critical components like the WAL.
 *   **Dependency Injection:** The `Context` struct is used for dependency injection, and the `rewardpool.Pool` accepts an `ItemSelector` to allow for different selection strategies.
 *   **Concurrency and Transactional Integrity:** A single-threaded processing model with a dedicated goroutine and buffered channels is used to handle state changes. The `Actor.Draw` method now returns a channel (`<-chan DrawResponse`) for a more idiomatic and developer-friendly API. To ensure data integrity and adhere to the WAL-first principle, the system uses a two-phase commit process, with the `ItemSelector` being the source of truth for all reward item states (quantity and probability):
-    1.  **Stage:** An operation is first staged by selecting an item via the `ItemSelector`. The selector immediately decrements the item's quantity in its internal state to prevent over-draws during the transaction. The selection is based on the item's `Probability`, while availability is checked against its `Quantity`.
-    2.  **Log:** The operation is written to the Write-Ahead Log. The WAL uses an in-memory buffer that is flushed to disk in batches.
-    3.  **Commit/Revert:** If the WAL write is successful, the staged operation is committed (`CommitDraw`). Since the selector's state was already updated, this step clears the pending draw. If it fails, the operation is reverted (`RevertDraw`), and the `ItemSelector` is updated to restore the item's quantity.
+    1.  **Stage:** An operation (like a draw or item update) is first staged in memory. For draws, the `ItemSelector` immediately decrements the item's quantity in its internal state to prevent over-draws during the transaction. The selection is based on the item's `Probability`, while availability is checked against its `Quantity`.
+    2.  **Log:** The operation is written to the Write-Ahead Log's in-memory buffer. The WAL now supports multiple log types, including draws, item updates, and snapshots.
+    3.  **Commit/Revert:** When the WAL's buffer is flushed to disk, if the write is successful, the staged operations are committed (e.g., `CommitDraw`). Since the selector's state was already updated, this step finalizes the transaction. If the write fails, the operation is reverted (`RevertDraw`), and the `ItemSelector` is updated to restore the item's original state, ensuring consistency.
+*   **WAL Rotation and Snapshots:** The system ensures that no data is lost when the WAL file becomes full. The process is driven by the `actor` and follows these steps:
+    1.  **Detect Full WAL:** When a WAL flush fails with `ErrWALFull`, the rotation process begins.
+    2.  **Preserve and Revert:** All pending (un-flushed) operations are preserved in a temporary list. The actor then reverts the in-memory state of the `ItemSelector` to match the last successfully written state in the WAL.
+    3.  **Snapshot:** A new snapshot of the consistent, reverted state is created and saved to disk.
+    4.  **Rotate and Initialize:** The full WAL is archived, and a new, empty WAL file is created. The first entry written to this new WAL *must* be a `WalLogSnapshotItem` pointing to the newly created snapshot.
+    5.  **Replay and Re-log:** The preserved pending operations are then re-staged in the `ItemSelector` and re-logged to the new WAL's in-memory buffer.
+    6.  **Final Flush:** The buffer is flushed to the new WAL file, securing the re-logged operations. This robust process guarantees that every WAL file is a self-contained, recoverable unit starting with a complete snapshot.
 *   **Error Handling:** Errors are handled explicitly, and the CLI demo includes error handling for recovery and WAL operations.
 *   **Logging:** The CLI demo includes basic logging to the console to provide visibility into the system's state and operations.
 

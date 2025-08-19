@@ -7,6 +7,14 @@
 
 ## Recent Updates (Aug 2025)
 
+- **Task_11:** Made the WAL the source of truth by introducing multiple log types and re-architecting the recovery and actor systems.
+  - **Enhanced WAL:** The WAL now supports multiple log types (`LogTypeUpdate`, `LogTypeSnapshot`, `LogTypeRotate`) beyond just `LogTypeDraw`, with a polymorphic `WalLogEntry` interface.
+  - **Item Updates:** The system now supports transactional updates to item quantity and probability via the actor model.
+  - **`replay` Module:** Created a new `internal/replay` module to centralize WAL replay logic, removing duplication from `recovery` and `actor` modules.
+  - **WAL-Driven Recovery:** The recovery process is now strictly driven by the WAL. It requires the WAL to start with a snapshot, loads the state from it, and then replays subsequent logs.
+  - **Robust WAL Rotation:** The actor's `flush` logic now gracefully handles `ErrWALFull` by preserving pending operations, reverting state, creating a snapshot, rotating the WAL, and then re-applying the pending operations to the new WAL file, preventing data loss.
+  - **Actor Initialization:** The actor now creates an initial snapshot if the WAL is empty, ensuring all new WAL files start with a consistent state.
+  - **CLI Enhancements:** The CLI demo now supports interactive item updates to showcase the new functionality.
 - **Task_09:** Refactored WAL architecture for extensibility and reliability.
   - Moved WAL log format to JSON Lines (JSONL) with typed `WalLogItem`/`WalLogDrawItem` and `LogType`/`LogError` enums.
   - Introduced `LogFormatter` (JSON, StringLine) and `Storage` (File, FileMMap) interfaces; `WAL` now composes these.
