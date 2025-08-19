@@ -57,14 +57,29 @@ To make it simple. We have a rule that begin of WAL file must be a `LogTypeSnaps
     - Added comprehensive unit tests for the new functionality at the selector, pool, and actor levels to ensure correctness.
     - All checks and tests passed successfully.
 
-### Iter 3: Implement Snapshot and WAL Rotation Logging
-- **Problem:** Snapshot creation and WAL rotation are not logged in the WAL, which is essential for the new recovery logic.
-- **Plan:**
-    1. **`internal/rewardpool/pool.go`:**
-        - Inject the `WAL` instance into the `Pool` struct.
-        - In `SaveSnapshot`, after successfully saving a snapshot, call `wal.LogSnapshot` to record the event and its path in the WAL.
-    2. **`internal/recovery/recovery.go`:**
-        - In `RecoverPool`, when rotating the WAL, use `wal.LogRotate` to add an entry to the *new* WAL file that points to the *old*, archived WAL file.
-    3. **Verification:**
+### Iter 3: Correct Snapshot and WAL Rotation Logging
+-   **Problem:** The current `flush()` logic in `internal/actor/actor.go` discards pending WAL entries if a WAL rotation is triggered due to a full WAL file. This leads to data loss. The goal is to ensure all logs are persisted across WAL file rotations while maintaining the constraint that every WAL file must start with a snapshot.
+-   **Plan:**
+    1.  **Modify `internal/actor/actor.go`:**
+        - Refactor the `flush()` method to correctly handle the `wal.ErrWALFull` error.
+        - **Detailed Steps for `wal.ErrWALFull` scenario:**
+            i.  **Preserve Pending State:** Before making any changes, create a temporary copy of the `a.pendingDraws` map. This map holds the operations that have been applied in-memory but not yet successfully flushed to the WAL.
+            ii. **Revert In-Memory Changes:** Call the `revertPending()` helper function. This will use the original `a.pendingDraws` map to revert the staged changes in the pool, bringing its state back to what is consistent with the last successful write in the (now full) WAL. This process will also clear `a.pendingDraws`.
+            iii. **Create Snapshot and Rotate WAL:**
+                - Create a new snapshot of the consistent, reverted pool state.
+                - Call `a.wal.Rotate()` to archive the full WAL file and prepare a new, empty one.
+            iv. **Initialize New WAL with Snapshot:**
+                - Log the newly created snapshot as the first entry in the new WAL file using `a.wal.LogSnapshot()`.
+            v.  **Re-apply and Re-log Operations:**
+                - Iterate through the temporary copy of pending draws saved in step `i`.
+                - For each draw operation, re-introduce it into the system:
+                    - Re-stage the draw in the pool (`a.pool.StageDraw()`)
+                    - Add the draw back to the `a.pendingDraws` map.
+                    - Log the draw to the new WAL's in-memory buffer (`a.wal.LogDraw()`)
+            vi. **Finalize the Flush:**
+                - Call `a.wal.Flush()` again to write the re-logged pending operations to the new WAL file.
+                - After a successful flush, call `commitPending()` to clear the `a.pendingDraws` map, finalizing the transactions.
+    2.  **Verification:**
         - After implementation, run `make check` to check for compile errors.
-        - Run `make test` to ensure all existing tests pass.
+        - Add a new unit test specifically designed to simulate the `wal.ErrWALFull` condition. This test should verify that the rotation occurs correctly and that no pending operations are lost in the process.
+        - Run `make test` to ensure all existing and new tests pass.
