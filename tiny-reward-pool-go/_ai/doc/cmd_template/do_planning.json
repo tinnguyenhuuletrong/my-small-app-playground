@@ -1,0 +1,18 @@
+{
+    "task": "create a planning for next task",
+    "save_to": "create new file _ai/task_12.md",
+    "target": {
+        "goal": "restore requestId. Make it unique and always inc",
+        "current_limit": [
+            "request id reset every start -> should have a way restore it from wal"
+        ],
+        "note": [{
+            "owner": "actor",
+            "des": "actor should own the requestId and managed restore it from snapshot, wal log relay"
+        }]
+    },
+    "steps": {
+        "1": "read current source code",
+        "3": "create a task + planning"
+    }
+}
