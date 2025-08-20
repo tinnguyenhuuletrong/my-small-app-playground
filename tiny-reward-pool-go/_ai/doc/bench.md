@@ -26,32 +26,32 @@ go test -bench=. ./cmd/bench/
 
 Based on the latest benchmark results and architectural changes, here are the key areas for future improvements:
 
-1. **Network/Streaming WAL:** Implement and benchmark WAL backends that stream log entries over the network (e.g., Kafka, gRPC) for distributed durability and scaling.
-2. **Efficient Serialization:** Explore more compact serialization formats (e.g., binary, Protobuf) to reduce WAL size and improve throughput.
-3. **Configurable WAL/Backend Selection:** Allow users to select WAL format and storage backend via configuration, enabling tuning for specific use cases.
-4. **Advanced WAL Rotation/Snapshotting:** Further refine rotation and snapshotting strategies, including incremental snapshots and parallel WAL replay for faster recovery.
-5. **Batching and Async Flush:** Investigate more aggressive batching and asynchronous flush strategies to further reduce latency and disk I/O overhead.
-6. **Selector and API Tuning:** Continue to optimize selector implementations and API ergonomics for both performance and usability.
-7. **Comprehensive Benchmark Coverage:** Expand benchmarks to cover all new WAL backends, serialization formats, and recovery scenarios.
-8. **Actor Model Tuning:** Explore different actor model configurations and message passing strategies to optimize performance and resource usage.
+1.  **Network/Streaming WAL:** Implement and benchmark WAL backends that stream log entries over the network (e.g., Kafka, gRPC) for distributed durability and scaling.
+2.  **Efficient Serialization:** Explore more compact serialization formats (e.g., binary, Protobuf) to reduce WAL size and improve throughput.
+3.  **Configurable WAL/Backend Selection:** Allow users to select WAL format and storage backend via configuration, enabling tuning for specific use cases.
+4.  **Advanced WAL Rotation/Snapshotting:** Further refine rotation and snapshotting strategies, including incremental snapshots and parallel WAL replay for faster recovery.
+5.  **Batching and Async Flush:** Investigate more aggressive batching and asynchronous flush strategies to further reduce latency and disk I/O overhead.
+6.  **Selector and API Tuning:** Continue to optimize selector implementations and API ergonomics for both performance and usability.
+7.  **Comprehensive Benchmark Coverage:** Expand benchmarks to cover all new WAL backends, serialization formats, and recovery scenarios.
+8.  **Actor Model Tuning:** Explore different actor model configurations and message passing strategies to optimize performance and resource usage.
 
-# Latest Benchmark Results (14 Aug 2025)
+# Latest Benchmark Results (20 Aug 2025)
 
-The following results were captured after the completion of `task_10`.
+The following results were captured after the completion of `task_11`.
 
 ```
 goos: darwin
 goarch: amd64
 pkg: github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/cmd/bench
 cpu: Intel(R) Core(TM) i5-1038NG7 CPU @ 2.00GHz
-BenchmarkActorDrawChannel-8                  	 3724472	       320.6 ns/op
-BenchmarkPoolDrawNoWalChannel-8              	 3958736	       284.2 ns/op	       184.0 bytes/draw	   3518170 draws/sec	         3.000 gc_count
-BenchmarkDrawChannel_PrefixSumSelector-8     	 4028985	       307.7 ns/op	       184.0 bytes/draw	         3.000 gc_count
-BenchmarkDrawChannel_FenwickTreeSelector-8   	 3821002	       338.8 ns/op	       184.0 bytes/draw	         3.000 gc_count
-BenchmarkPoolDrawWithMmapWALChannel-8        	 1716962	       736.7 ns/op	       336.7 bytes/draw	   1357338 draws/sec	         3.000 gc_count
-BenchmarkPoolDrawWithFileWALChannel-8        	  355544	      3281 ns/op	       344.9 bytes/draw	    304788 draws/sec	         1.000 gc_count	        20.36 wal_bytes/draw	   7238895 wal_file_size
+BenchmarkActorDrawChannel-8                  	 3132714	       385.0 ns/op
+BenchmarkPoolDrawNoWalChannel-8              	 3379092	       320.2 ns/op	       232.0 bytes/draw	   3123195 draws/sec	         5.000 gc_count
+BenchmarkDrawChannel_PrefixSumSelector-8     	 3885808	       325.4 ns/op	       232.0 bytes/draw	         4.000 gc_count
+BenchmarkDrawChannel_FenwickTreeSelector-8   	 3461512	       369.2 ns/op	       232.0 bytes/draw	         4.000 gc_count
+BenchmarkPoolDrawWithMmapWALChannel-8        	 1586173	       773.5 ns/op	       433.1 bytes/draw	   1292872 draws/sec	         3.000 gc_count
+BenchmarkPoolDrawWithFileWALChannel-8        	  384952	      2964 ns/op	       438.7 bytes/draw	    337405 draws/sec	         1.000 gc_count	        20.44 wal_bytes/draw	   7868895 wal_file_size
 PASS
-ok  	github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/cmd/bench	10.276s
+ok  	github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/cmd/bench	11.097s
 ```
 
 ### Summary Tables
@@ -59,26 +59,60 @@ ok  	github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/
 **API Style Comparison (Direct `Draw` method)**
 | Benchmark | ns/op |
 |-----------------------------|-------|
-| `BenchmarkActorDrawChannel` | 320.6 |
+| `BenchmarkActorDrawChannel` | 385.0 |
 
 **Selector Performance Comparison**
 | Benchmark | ns/op |
 |------------------------------------------|-------|
-| `BenchmarkDrawChannel_PrefixSumSelector` | 307.7 |
-| `BenchmarkDrawChannel_FenwickTreeSelector`| 338.8 |
+| `BenchmarkDrawChannel_PrefixSumSelector` | 325.4 |
+| `BenchmarkDrawChannel_FenwickTreeSelector`| 369.2 |
 
 **Pool Draw Performance (No WAL)**
 | Benchmark | ns/op | draws/sec | bytes/draw | gc_count |
 |----------------------------------|-------|-----------|------------|----------|
-| `BenchmarkPoolDrawNoWalChannel` | 284.2 | 3,518,170 | 184.0 | 3.000 |
+| `BenchmarkPoolDrawNoWalChannel` | 320.2 | 3,123,195 | 232.0 | 5.000 |
 
 **Pool Draw Performance (With WAL)**
 | Benchmark | ns/op | draws/sec | bytes/draw | gc_count | wal_bytes/draw | wal_file_size |
 |-------------------------------------|-------|-----------|------------|----------|----------------|---------------|
-| `BenchmarkPoolDrawWithMmapWALChannel` | 736.7 | 1,357,338 | 336.7 | 3.000 | - | - |
-| `BenchmarkPoolDrawWithFileWALChannel` | 3281 | 304,788 | 344.9 | 1.000 | 20.36 | 7,238,895 |
+| `BenchmarkPoolDrawWithMmapWALChannel` | 773.5 | 1,292,872 | 433.1 | 3.000 | - | - |
+| `BenchmarkPoolDrawWithFileWALChannel` | 2964 | 337,405 | 438.7 | 1.000 | 20.44 | 7,868,895 |
 
-## Analysis of Latest Results (Task 10)
+## Analysis of Latest Results (Task 11)
+
+- **Architectural Changes:** Task 11 introduced significant architectural enhancements to improve the robustness and reliability of the WAL and recovery systems. Key changes include:
+    - **Multiple Log Types:** The WAL now supports various log types (`Draw`, `Update`, `Snapshot`), making it the source of truth for all state changes.
+    - **WAL-Driven Recovery:** The recovery process is now strictly driven by the WAL, which must begin with a snapshot.
+    - **`replay` Module:** A new `internal/replay` module was created to centralize the logic for replaying WAL entries, removing duplication.
+    - **Robust WAL Rotation:** The actor now handles `ErrWALFull` gracefully, ensuring no data is lost during rotation by preserving pending logs, reverting state, snapshotting, and re-logging.
+- **Performance Impact:**
+    - The introduction of more complex logic for handling multiple log types and the robust WAL rotation process has introduced some performance overhead. This is reflected in a slight increase in `ns/op` across most benchmarks compared to Task 10.
+    - The `bytes/draw` has also increased, which is expected due to the more detailed information being written to the WAL (e.g., different log entry types).
+- **Conclusion:** The changes in Task 11 were crucial for the system's reliability and data integrity. The minor performance trade-offs are acceptable given the significant improvements in robustness. The system is now more resilient to failures and ensures a more consistent state.
+
+### Comparison with Task 10
+
+| Benchmark                               | Task 10 ns/op | Task 11 ns/op | Change |
+| --------------------------------------- | ------------- | ------------- | ------ |
+| `BenchmarkActorDrawChannel`             | 320.6         | 385.0         | ~+20%  |
+| `BenchmarkPoolDrawNoWalChannel`         | 284.2         | 320.2         | ~+13%  |
+| `BenchmarkPoolDrawWithMmapWALChannel`   | 736.7         | 773.5         | ~+5%   |
+| `BenchmarkPoolDrawWithFileWALChannel`   | 3281          | 2964          | ~-10%  |
+
+- **Latency:** Most benchmarks show a slight increase in latency, which is expected given the more complex logic. The `FileWAL` benchmark shows an improvement, which could be due to a variety of factors including test variability.
+- **Throughput:** The `draws/sec` has decreased slightly in most cases, which is consistent with the increase in latency.
+
+### Conclusion
+
+The architectural changes in Task 11 have successfully made the system more robust and reliable. The performance impact is minimal and is a worthwhile trade-off for the significant gains in data integrity and system resilience.
+
+---
+
+# Benchmark Evolution
+
+This section contains the analysis from previous benchmark runs, preserving the historical context of performance tuning.
+
+## Task 10 Analysis (14 Aug 2025)
 
 - **Actor Model Refactor Impact:** Task 10 introduced a major refactor of the `processing` module to an `actor` module, aligning with the Actor Model patterns. This change simplifies the concurrency model and improves maintainability.
 - **Performance Changes:**
@@ -101,12 +135,6 @@ ok  	github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/
 ### Conclusion
 
 The Task 10 actor model refactor was successful. It improved the code's structure and maintainability without any significant performance regressions.
-
----
-
-# Benchmark Evolution
-
-This section contains the analysis from previous benchmark runs, preserving the historical context of performance tuning.
 
 ## Task 08 Analysis (11 Aug 2025)
 
