@@ -17,6 +17,7 @@ import (
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal"
 	walformatter "github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/formatter"
 	walstorage "github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/storage"
+	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/walstream"
 )
 
 func main() {
@@ -58,9 +59,28 @@ func main() {
 		WAL:   w,
 		Utils: utils,
 	}
+
+	// Check for --stream-wal flag
+	streamWAL := false
+	for _, arg := range os.Args {
+		if arg == "--stream-wal" {
+			streamWAL = true
+			break
+		}
+	}
+
+	var walStreamer walstream.WALStreamer
+	if streamWAL {
+		fmt.Println("WAL streaming is enabled.")
+		walStreamer = walstream.NewLogStreamer(utils.GetLogger())
+	} else {
+		walStreamer = walstream.NewNoOpStreamer()
+	}
+
 	sys, err := actor.NewSystem(ctx, pool, &actor.SystemOptional{
 		FlushAfterNDraw: 5,
 		LastRequestID:   lastRequestID,
+		WALStreamer:     walStreamer,
 	})
 	if err != nil {
 		fmt.Println("System startup error:", err)

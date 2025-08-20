@@ -91,3 +91,26 @@ I have implemented the persistent request ID feature.
     -   Make sure existing test passed `make test`
     -   Create unit tests for the `LogStreamer`.
     -   Create a mock `WALStreamer` to test the integration with the `actor.System`.
+
+### Iteration 3: Refactor WAL Streaming with a Dedicated Actor
+
+#### Plan
+
+1.  **Create `internal/actor/streamer_actor.go`:**
+    *   Define a new `StreamingActor` struct.
+    *   This actor will manage the `WALStreamer` and process log entries from a dedicated mailbox channel.
+
+2.  **Refactor `RewardProcessorActor` (`internal/actor/actor.go`):**
+    *   Remove the `walStreamer` field.
+    *   Add a channel to send `WalLogEntry` messages to the `StreamingActor`.
+    *   Update the `flush()` method to send logs to this channel instead of calling the streamer directly.
+
+3.  **Update `actor.System` (`internal/actor/system.go`):**
+    *   The `System` will now create and manage both the `RewardProcessorActor` and the new `StreamingActor`.
+    *   It will create the channel to communicate between the two actors.
+    *   The `Stop()` method will be updated to gracefully shut down both actors.
+
+4.  **Update Tests:**
+    *   Make sure fix all compile error passed `make check`
+    *   Make sure existing test passed `make test`
+    *   Adjust the WAL streaming tests to reflect the new asynchronous, two-actor architecture.

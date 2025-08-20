@@ -14,12 +14,13 @@ import (
 // RewardProcessorActor encapsulates the state and behavior of the reward processing.
 // It is designed to be run in a single goroutine, processing messages from its mailbox.
 type RewardProcessorActor struct {
-	ctx             *types.Context
-	pool            types.RewardPool
-	mailbox         chan interface{}
-	flushAfterNDraw int
-	pendingLogs     []types.WalLogEntry
-	requestID       uint64
+	ctx              *types.Context
+	pool             types.RewardPool
+	mailbox          chan interface{}
+	flushAfterNDraw  int
+	pendingLogs      []types.WalLogEntry
+	requestID        uint64
+	streamingChannel chan<- types.WalLogEntry
 }
 
 // Init performs the initial setup for the actor, like creating an initial
@@ -48,13 +49,18 @@ func (a *RewardProcessorActor) Init() error {
 // NewRewardProcessorActor creates a new actor instance.
 func NewRewardProcessorActor(ctx *types.Context, pool types.RewardPool, mailboxSize, flushAfterNDraw int, requestID uint64) *RewardProcessorActor {
 	return &RewardProcessorActor{
-		ctx:             ctx,
-		pool:            pool,
-		mailbox:         make(chan interface{}, mailboxSize),
-		flushAfterNDraw: flushAfterNDraw,
-		pendingLogs:     make([]types.WalLogEntry, 0, flushAfterNDraw*2),
-		requestID:       requestID,
+		ctx:              ctx,
+		pool:             pool,
+		mailbox:          make(chan interface{}, mailboxSize),
+		flushAfterNDraw:  flushAfterNDraw,
+		pendingLogs:      make([]types.WalLogEntry, 0, flushAfterNDraw*2),
+		requestID:        requestID,
+		streamingChannel: nil,
 	}
+}
+
+func (a *RewardProcessorActor) SetStreamChannel(streamingChannel chan<- types.WalLogEntry) {
+	a.streamingChannel = streamingChannel
 }
 
 // Receive starts the actor's message processing loop.
@@ -181,6 +187,14 @@ func (a *RewardProcessorActor) flush() error {
 	if logger := a.ctx.Utils.GetLogger(); logger != nil {
 		logger.Debug(fmt.Sprintf("[Actor] WAL Flush and Commit - %d logs", len(a.pendingLogs)))
 	}
+
+	// Stream the logs
+	if a.streamingChannel != nil {
+		for _, logEntry := range a.pendingLogs {
+			a.streamingChannel <- logEntry
+		}
+	}
+
 	a.pendingLogs = a.pendingLogs[:0]
 	return nil
 }
@@ -303,6 +317,8 @@ func (a *RewardProcessorActor) snapshot() error {
 		return err
 	}
 
+	a.pendingLogs = append(a.pendingLogs, logItem)
+
 	return nil
 }
 
@@ -321,4 +337,9 @@ func (a *RewardProcessorActor) shutdown() {
 
 	a.flush()
 	a.ctx.WAL.Close()
+
+	// all log flushed -> safe to close
+	if a.streamingChannel != nil {
+		close(a.streamingChannel)
+	}
 }
