@@ -53,3 +53,41 @@ I have implemented the persistent request ID feature.
 - `RecoverPool` now restores the `requestID` from snapshots and WAL files.
 - The CLI now restores the `requestID` when starting the actor system.
 - All existing tests are passing, and a new test for request ID restoration has been added and is passing.
+
+### Iteration 2: Create a WAL streaming module
+
+#### Plan
+
+1.  **Create a new package `internal/walstream`:**
+    -   This will contain the logic for the WAL streaming client.
+
+2.  **Define the `WALStreamer` interface in `internal/walstream/streamer.go`:**
+    -   This interface will define the contract for streaming WAL logs.
+    -   It should have a method like `Stream(log *types.WalLogEntry) error`.
+    -   The implementation should be non-blocking.
+
+3.  **Create a `NoOpStreamer` in `internal/walstream/noop_streamer.go`:**
+    -   This will be the default implementation that does nothing.
+    -   This will be used when streaming is not configured.
+
+4.  **Create a `LogStreamer` in `internal/walstream/log_streamer.go`:**
+    -   This will be a simple implementation that logs the WAL entries using the standard logger.
+    -   This is for testing and demonstration purposes.
+
+5.  **Integrate `WALStreamer` into the `actor.RewardProcessorActor`:**
+    -   Add a `walStreamer types.WALStreamer` field to the `RewardProcessorActor` struct.
+    -   Modify the `flush()` method:
+        -   After a successful `a.ctx.WAL.Flush()`, iterate through `a.pendingLogs`.
+        -   For each `logEntry` in `a.pendingLogs`, call `a.walStreamer.Stream(logEntry)`.
+        -   This streaming call should be done in a non-blocking way, potentially by sending the `logEntry` to a channel that a separate goroutine consumes and streams.
+    -   The `replayAndRelog` function will re-apply and re-log the pending operations. These re-logged operations will then be flushed and streamed as part of the normal `flush()` process, avoiding duplicate streaming.
+
+6.  **Update `cmd/cli/main.go` to demonstrate the usage:**
+    -   Add a command-line flag to enable/disable WAL streaming.
+    -   If enabled, create a `LogStreamer` and pass it to the `actor.NewSystem`.
+
+7.  **Testing:**
+    -   Make sure fix all compile error passed `make check`
+    -   Make sure existing test passed `make test`
+    -   Create unit tests for the `LogStreamer`.
+    -   Create a mock `WALStreamer` to test the integration with the `actor.System`.

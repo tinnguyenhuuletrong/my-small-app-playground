@@ -1,14 +1,18 @@
 {
     "task": "create a planning for next task",
-    "save_to": "create new file _ai/task_12.md",
+    "save_to": "create _ai/task_12.md - Iteration 2",
     "target": {
-        "goal": "restore requestId. Make it unique and always inc",
-        "current_limit": [
-            "request id reset every start -> should have a way restore it from wal"
-        ],
+        "scenario": "road to a replica system where 1 node is main and n replica",
+        "goal": "main node continue to stream the walLog to replica via down stream channel",
         "note": [{
-            "owner": "actor",
-            "des": "actor should own the requestId and managed restore it from snapshot, wal log relay"
+            "module": "wal_stream",
+            "des": "create a new module and interface handle the wal_stream",
+            "requirement": [
+                "it is a optional plugin",
+                "use requestID as sync revision / generation",
+                "should not block or slow down the main process highest priority",
+                "lag is acceptable"
+            ]
         }]
     },
     "steps": {
