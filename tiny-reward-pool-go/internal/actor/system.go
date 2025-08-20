@@ -20,6 +20,7 @@ type System struct {
 type SystemOptional struct {
 	FlushAfterNDraw   int
 	RequestBufferSize int
+	LastRequestID     uint64
 }
 
 // NewSystem creates, starts, and returns a new actor system.
@@ -32,8 +33,12 @@ func NewSystem(ctx *types.Context, pool types.RewardPool, opt *SystemOptional) (
 	if opt != nil && opt.RequestBufferSize > 0 {
 		bufSize = opt.RequestBufferSize
 	}
+	lastRequestID := uint64(0)
+	if opt != nil && opt.LastRequestID > 0 {
+		lastRequestID = opt.LastRequestID
+	}
 
-	actorInstance := NewRewardProcessorActor(ctx, pool, bufSize, flushN)
+	actorInstance := NewRewardProcessorActor(ctx, pool, bufSize, flushN, lastRequestID)
 
 	if err := actorInstance.Init(); err != nil {
 		// If init fails, we must ensure the WAL is closed if it was opened.

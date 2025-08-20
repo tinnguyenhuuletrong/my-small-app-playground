@@ -25,46 +25,35 @@ type RewardProcessorActor struct {
 // Init performs the initial setup for the actor, like creating an initial
 // snapshot if the WAL is empty. It's called once when the actor starts.
 func (a *RewardProcessorActor) Init() error {
-	// Sizer defines an interface for checking the size of the WAL.
-	// This is used to determine if the WAL is new and needs an initial snapshot.
-	type Sizer interface {
-		Size() (int64, error)
+
+	size, err := a.ctx.WAL.Size()
+	if err != nil {
+		return fmt.Errorf("could not determine WAL size: %w", err)
 	}
 
-	if s, ok := a.ctx.WAL.(Sizer); ok {
-		size, err := s.Size()
-		if err != nil {
-			return fmt.Errorf("could not determine WAL size: %w", err)
-		}
-
-		if size == 0 {
-			if logger := a.ctx.Utils.GetLogger(); logger != nil {
-				logger.Info("WAL is empty, creating initial snapshot.")
-			}
-			if err := a.snapshot(); err != nil {
-				return fmt.Errorf("failed to create initial snapshot: %w", err)
-			}
-			// The snapshot log is staged in the WAL's buffer, flush it to disk.
-			return a.ctx.WAL.Flush()
-		}
-	} else {
+	if size == 0 {
 		if logger := a.ctx.Utils.GetLogger(); logger != nil {
-			logger.Warn("WAL implementation does not support Size(), cannot determine if it's empty. Skipping initial snapshot.")
+			logger.Info("WAL is empty, creating initial snapshot.")
 		}
+		if err := a.snapshot(); err != nil {
+			return fmt.Errorf("failed to create initial snapshot: %w", err)
+		}
+		// The snapshot log is staged in the WAL's buffer, flush it to disk.
+		return a.ctx.WAL.Flush()
 	}
 
 	return nil
 }
 
 // NewRewardProcessorActor creates a new actor instance.
-func NewRewardProcessorActor(ctx *types.Context, pool types.RewardPool, mailboxSize, flushAfterNDraw int) *RewardProcessorActor {
+func NewRewardProcessorActor(ctx *types.Context, pool types.RewardPool, mailboxSize, flushAfterNDraw int, requestID uint64) *RewardProcessorActor {
 	return &RewardProcessorActor{
 		ctx:             ctx,
 		pool:            pool,
 		mailbox:         make(chan interface{}, mailboxSize),
 		flushAfterNDraw: flushAfterNDraw,
 		pendingLogs:     make([]types.WalLogEntry, 0, flushAfterNDraw*2),
-		requestID:       0,
+		requestID:       requestID,
 	}
 }
 

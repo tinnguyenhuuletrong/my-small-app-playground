@@ -60,6 +60,7 @@ func main() {
 	}
 	sys, err := actor.NewSystem(ctx, pool, &actor.SystemOptional{
 		FlushAfterNDraw: 5,
+		LastRequestID:   lastRequestID,
 	})
 	if err != nil {
 		fmt.Println("System startup error:", err)
