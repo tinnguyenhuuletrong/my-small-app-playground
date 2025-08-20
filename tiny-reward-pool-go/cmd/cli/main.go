@@ -31,7 +31,7 @@ func main() {
 
 	// walFormatter := walformatter.NewJSONFormatter()
 	walFormatter := walformatter.NewStringLineFormatter()
-	pool, err := recovery.RecoverPool(snapshotPath, walPath, defaultConfigPath, walFormatter, utils)
+	pool, lastRequestID, err := recovery.RecoverPool(snapshotPath, walPath, defaultConfigPath, walFormatter, utils)
 	if err != nil {
 		fmt.Println("Recovery failed:", err)
 		os.Exit(1)
@@ -65,6 +65,7 @@ func main() {
 		fmt.Println("System startup error:", err)
 		return
 	}
+	sys.SetRequestID(lastRequestID)
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -114,9 +115,9 @@ func main() {
 						break
 					}
 				}
-				err := sys.UpdateItem("gold", currentGold.Quantity+10, currentGold.Probability)
-				if err != nil {
-					fmt.Printf("Failed to update gold: %v\n", err)
+				errr := sys.UpdateItem("gold", currentGold.Quantity+10, currentGold.Probability)
+				if errr != nil {
+					fmt.Printf("Failed to update gold: %v\n", errr)
 				} else {
 					fmt.Println("--- Gold updated. New pool state: ---")
 					fmt.Println(sys.State())
@@ -141,9 +142,9 @@ func main() {
 				}
 				silverProbToggle = !silverProbToggle
 
-				err := sys.UpdateItem("silver", currentSilver.Quantity, newProb)
-				if err != nil {
-					fmt.Printf("Failed to update silver: %v\n", err)
+				errr := sys.UpdateItem("silver", currentSilver.Quantity, newProb)
+				if errr != nil {
+					fmt.Printf("Failed to update silver: %v\n", errr)
 				} else {
 					fmt.Println("--- Silver updated. New pool state: ---")
 					fmt.Println(sys.State())
@@ -162,5 +163,3 @@ func main() {
 	fmt.Println("[Pool state] ", pool.State())
 	fmt.Println("Shutdown complete.")
 }
-
-

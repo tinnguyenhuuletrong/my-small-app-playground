@@ -351,10 +351,12 @@ func (m *mockPool) ApplyDrawLog(itemID string) {
 }
 
 func (m *mockPool) Load(cfg types.ConfigPool) error                               { return nil }
-func (m *mockPool) LoadSnapshot(path string) error                                { return nil }
-func (m *mockPool) SaveSnapshot(path string) error                                { return nil }
+func (m *mockPool) LoadSnapshot(snapshot *types.PoolSnapshot) error             { return nil }
+func (m *mockPool) CreateSnapshot() (*types.PoolSnapshot, error)                  { return &types.PoolSnapshot{}, nil }
 func (m *mockPool) ApplyUpdateLog(itemID string, quantity int, probability int64) {}
 func (m *mockPool) UpdateItem(itemID string, quantity int, probability int64) error {
+	m.item.Quantity = quantity
+	m.item.Probability = probability
 	return nil
 }
 

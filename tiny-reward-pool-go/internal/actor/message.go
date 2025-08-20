@@ -4,7 +4,6 @@ import "github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-
 
 // DrawMessage is sent to the actor to request a reward draw.
 type DrawMessage struct {
-	RequestID    uint64
 	ResponseChan chan DrawResponse
 }
 
@@ -41,4 +40,15 @@ type UpdateMessage struct {
 	Quantity     int
 	Probability  int64
 	ResponseChan chan error
+}
+
+// GetRequestIDMessage is sent to the actor to get the current request ID.
+type GetRequestIDMessage struct {
+	ResponseChan chan uint64
+}
+
+// SetRequestIDMessage is sent to the actor to set the request ID.
+type SetRequestIDMessage struct {
+	ID           uint64
+	ResponseChan chan struct{}
 }

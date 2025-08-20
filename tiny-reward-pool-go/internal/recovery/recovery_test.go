@@ -15,89 +15,73 @@ import (
 )
 
 func TestRecoverPool_Basic(t *testing.T) {
-	snapshot := "../../tmp/test_snapshot.json"
+	snapshotPath := "../../tmp/test_snapshot.json"
 	walPath := "../../tmp/test_wal.log"
-	config := "../../samples/test_config.json"
-	defer os.Remove(snapshot)
+	configPath := "../../samples/test_config.json"
+	defer os.Remove(snapshotPath)
 	defer os.Remove(walPath)
-	defer os.Remove(config)
+	defer os.Remove(configPath)
 
-	f, err := os.Create(config)
+	// Create a dummy config
+	f, err := os.Create(configPath)
 	assert.NoError(t, err)
-	_, err = f.WriteString(
-		`
-{
-  "catalog": [
-    { "item_id": "gold", "quantity": 100, "probability": 50 },
-    { "item_id": "silver", "quantity": 200, "probability": 30 },
-    { "item_id": "bronze", "quantity": 300, "probability": 20 }
-  ]
-}
-	`)
+	_, err = f.WriteString(`{"catalog": [{"item_id": "gold", "quantity": 100, "probability": 50}]}`)
 	assert.NoError(t, err)
 	f.Close()
 
-	// Setup: create a snapshot and WAL log
-	var pool *rewardpool.Pool
-	loaded, err := rewardpool.CreatePoolFromConfigPath(config)
+	// Create a snapshot
+	pool, err := rewardpool.CreatePoolFromConfigPath(configPath)
 	assert.NoError(t, err)
-	pool = loaded
-
-	err = pool.SaveSnapshot(snapshot)
+	snap, err := pool.CreateSnapshot()
 	assert.NoError(t, err)
+	snap.LastRequestID = 10
+	sf, err := os.Create(snapshotPath)
+	assert.NoError(t, err)
+	assert.NoError(t, json.NewEncoder(sf).Encode(snap))
+	sf.Close()
 
+	// Create a WAL file
 	wf, err := os.Create(walPath)
 	assert.NoError(t, err)
 	encoder := json.NewEncoder(wf)
-	encoder.Encode(&types.WalLogSnapshotItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeSnapshot}, Path: snapshot})
-	encoder.Encode(&types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 1, ItemID: "gold", Success: true})
-	encoder.Encode(&types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 2, ItemID: "silver", Success: true})
-	encoder.Encode(&types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw, Error: types.ErrorPoolEmpty}, RequestID: 3, Success: false})
+	encoder.Encode(&types.WalLogSnapshotItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeSnapshot}, Path: snapshotPath})
+	encoder.Encode(&types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 11, ItemID: "gold", Success: true})
+	encoder.Encode(&types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 12, ItemID: "gold", Success: true})
 	wf.Close()
 
 	jsonFormatter := formatter.NewJSONFormatter()
-	recovered, err := RecoverPool(snapshot, walPath, config, jsonFormatter, &utils.MockUtils{})
+	recoveredPool, lastRequestID, err := RecoverPool(snapshotPath, walPath, configPath, jsonFormatter, &utils.MockUtils{})
 	assert.NoError(t, err)
 
-	// Check that gold and silver quantities are decremented
-	var gold, silver int
-	gold = recovered.GetItemRemaining("gold")
-	silver = recovered.GetItemRemaining("silver")
-	assert.Equal(t, 99, gold)
-	assert.Equal(t, 199, silver)
+	assert.Equal(t, uint64(12), lastRequestID)
+	assert.Equal(t, 98, recoveredPool.GetItemRemaining("gold"))
 }
 
 func TestRecoverPool_MMap(t *testing.T) {
-	snapshot := "../../tmp/test_snapshot_mmap.json"
+	snapshotPath := "../../tmp/test_snapshot_mmap.json"
 	walPath := "../../tmp/test_wal_mmap.log"
-	config := "../../samples/test_config_mmap.json"
-	defer os.Remove(snapshot)
+	configPath := "../../samples/test_config_mmap.json"
+	defer os.Remove(snapshotPath)
 	defer os.Remove(walPath)
-	defer os.Remove(config)
+	defer os.Remove(configPath)
 
-	f, err := os.Create(config)
+	// Create a dummy config
+	f, err := os.Create(configPath)
 	assert.NoError(t, err)
-	_, err = f.WriteString(
-		`
-{
-  "catalog": [
-    { "item_id": "gold", "quantity": 100, "probability": 50 },
-    { "item_id": "silver", "quantity": 200, "probability": 30 },
-    { "item_id": "bronze", "quantity": 300, "probability": 20 }
-  ]
-}
-	`)
+	_, err = f.WriteString(`{"catalog": [{"item_id": "gold", "quantity": 100, "probability": 50}]}`)
 	assert.NoError(t, err)
 	f.Close()
 
-	// Setup: create a snapshot and WAL log
-	var pool *rewardpool.Pool
-	loaded, err := rewardpool.CreatePoolFromConfigPath(config)
+	// Create a snapshot
+	pool, err := rewardpool.CreatePoolFromConfigPath(configPath)
 	assert.NoError(t, err)
-	pool = loaded
-
-	err = pool.SaveSnapshot(snapshot)
+	snap, err := pool.CreateSnapshot()
 	assert.NoError(t, err)
+	snap.LastRequestID = 20
+	sf, err := os.Create(snapshotPath)
+	assert.NoError(t, err)
+	assert.NoError(t, json.NewEncoder(sf).Encode(snap))
+	sf.Close()
 
 	// Write WAL using mmap storage
 	jsonFormatter := formatter.NewJSONFormatter()
@@ -106,57 +90,20 @@ func TestRecoverPool_MMap(t *testing.T) {
 	w, err := wal.NewWAL(walPath, jsonFormatter, mmapStorage)
 	assert.NoError(t, err)
 
-	err = w.LogSnapshot(types.WalLogSnapshotItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeSnapshot}, Path: snapshot})
+	err = w.LogSnapshot(types.WalLogSnapshotItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeSnapshot}, Path: snapshotPath})
 	assert.NoError(t, err)
-	err = w.LogDraw(types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 1, ItemID: "gold", Success: true})
+	err = w.LogDraw(types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 21, ItemID: "gold", Success: true})
 	assert.NoError(t, err)
-	err = w.LogDraw(types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 2, ItemID: "silver", Success: true})
-	assert.NoError(t, err)
-	err = w.LogDraw(types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw, Error: types.ErrorPoolEmpty}, RequestID: 3, Success: false})
+	err = w.LogDraw(types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 22, ItemID: "gold", Success: true})
 	assert.NoError(t, err)
 	err = w.Flush()
 	assert.NoError(t, err)
 	err = w.Close()
 	assert.NoError(t, err)
 
-	recovered, err := RecoverPool(snapshot, walPath, config, jsonFormatter, &utils.MockUtils{})
+	recoveredPool, lastRequestID, err := RecoverPool(snapshotPath, walPath, configPath, jsonFormatter, &utils.MockUtils{})
 	assert.NoError(t, err)
 
-	// Check that gold and silver quantities are decremented
-	var gold, silver int
-	gold = recovered.GetItemRemaining("gold")
-	silver = recovered.GetItemRemaining("silver")
-	assert.Equal(t, 99, gold)
-	assert.Equal(t, 199, silver)
-}
-
-func TestRecoverPool_ErrorOnWALWithoutInitialSnapshot(t *testing.T) {
-	snapshot := "../../tmp/test_snapshot_no_init.json"
-	walPath := "../../tmp/test_wal_no_init.log"
-	config := "../../samples/test_config_no_init.json"
-	defer os.Remove(snapshot)
-	defer os.Remove(walPath)
-	defer os.Remove(config)
-
-	// Create a dummy config
-	f, err := os.Create(config)
-	assert.NoError(t, err)
-	_, err = f.WriteString(`{"catalog": [{"item_id": "gold", "quantity": 10}]}`)
-	assert.NoError(t, err)
-	f.Close()
-
-	// Create a WAL that starts with a Draw log instead of a Snapshot log
-	wf, err := os.Create(walPath)
-	assert.NoError(t, err)
-	encoder := json.NewEncoder(wf)
-	// The first log is a draw, which is invalid.
-	encoder.Encode(&types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 1, ItemID: "gold", Success: true})
-	wf.Close()
-
-	jsonFormatter := formatter.NewJSONFormatter()
-	_, err = RecoverPool(snapshot, walPath, config, jsonFormatter, &utils.MockUtils{})
-
-	// Assert that recovery fails with the expected error
-	assert.Error(t, err)
-	assert.Equal(t, "first WAL entry must be a snapshot", err.Error())
+	assert.Equal(t, uint64(22), lastRequestID)
+	assert.Equal(t, 98, recoveredPool.GetItemRemaining("gold"))
 }

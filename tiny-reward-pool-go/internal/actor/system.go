@@ -4,18 +4,16 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"sync/atomic"
 
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
 )
 
 // System manages the lifecycle of an actor and provides a client-facing API.
 type System struct {
-	actor     *RewardProcessorActor
-	cancel    context.CancelFunc
-	wg        sync.WaitGroup
-	stopOnce  sync.Once
-	requestID uint64 // Add requestID counter
+	actor    *RewardProcessorActor
+	cancel   context.CancelFunc
+	wg       sync.WaitGroup
+	stopOnce sync.Once
 }
 
 // SystemOptional provides optional parameters for creating a new System.
@@ -61,9 +59,8 @@ func NewSystem(ctx *types.Context, pool types.RewardPool, opt *SystemOptional) (
 
 // Draw sends a draw request to the actor and waits for a response.
 func (s *System) Draw() <-chan DrawResponse {
-	reqID := atomic.AddUint64(&s.requestID, 1) // Increment requestID
 	respChan := make(chan DrawResponse, 1)
-	msg := DrawMessage{RequestID: reqID, ResponseChan: respChan} // Pass requestID
+	msg := DrawMessage{ResponseChan: respChan}
 	s.actor.mailbox <- msg
 	return respChan
 }
@@ -109,4 +106,18 @@ func (s *System) State() []types.PoolReward {
 	respChan := make(chan []types.PoolReward, 1)
 	s.actor.mailbox <- StateMessage{ResponseChan: respChan}
 	return <-respChan
+}
+
+// GetRequestID returns the current request ID from the actor.
+func (s *System) GetRequestID() uint64 {
+	respChan := make(chan uint64, 1)
+	s.actor.mailbox <- GetRequestIDMessage{ResponseChan: respChan}
+	return <-respChan
+}
+
+// SetRequestID sets the request ID on the actor.
+func (s *System) SetRequestID(id uint64) {
+	respChan := make(chan struct{}, 1)
+	s.actor.mailbox <- SetRequestIDMessage{ID: id, ResponseChan: respChan}
+	<-respChan
 }

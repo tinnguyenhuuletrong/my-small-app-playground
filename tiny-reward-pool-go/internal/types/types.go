@@ -33,6 +33,12 @@ type PoolReward struct {
 	Probability int64  `json:"probability"`
 }
 
+// PoolSnapshot represents the data structure for a snapshot of the reward pool.
+type PoolSnapshot struct {
+	LastRequestID uint64       `json:"last_request_id"`
+	Catalog       []PoolReward `json:"catalog"`
+}
+
 // WalLogEntry defines the interface for a WAL log entry.
 type WalLogEntry interface {
 	GetType() LogType
@@ -84,8 +90,8 @@ type RewardPool interface {
 	RevertDraw()
 	State() []PoolReward
 	Load(config ConfigPool) error
-	SaveSnapshot(path string) error
-	LoadSnapshot(path string) error
+	CreateSnapshot() (*PoolSnapshot, error)
+	LoadSnapshot(snapshot *PoolSnapshot) error
 
 	// Update item quality, probability
 	UpdateItem(itemID string, quantity int, probability int64) error

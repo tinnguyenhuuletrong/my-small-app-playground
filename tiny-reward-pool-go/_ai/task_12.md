@@ -1,5 +1,5 @@
 
-# Task 12: Restore Request ID
+# Task 12: Road to Replica-Sync
 
 ## Target
 
@@ -12,11 +12,12 @@
 ### Iteration 1: Implement persistent request ID
 
 1.  **`internal/types/types.go`**
+    -   Move the `internal/rewardpool/pool.go` poolSnapshot into types
     -   Add `LastRequestID uint64` to the `poolSnapshot` struct in `internal/rewardpool/pool.go` (or a similar central types location if more appropriate).
 
 2.  **`internal/rewardpool/pool.go`**
-    -   Modify `SaveSnapshot` to accept the last request ID as an argument and save it in the snapshot.
-    -   Modify `LoadSnapshot` to return the `LastRequestID` from the snapshot.
+    -   Modify `SaveSnapshot` to return the partial of `poolSnapshot` -> actore can append the requestId
+    -   Modify `LoadSnapshot` load partial of `poolSnapshot`.
 
 3.  **`internal/actor/actor.go` & `internal/actor/system.go`**
     -   Add a `GetRequestID() uint64` method to `RewardProcessorActor` and `System`.
@@ -33,9 +34,22 @@
     -   Create the `actor.System` and then set the restored request ID on it using the new `SetRequestID` method.
 
 6.  **Testing**
+    -   Make sure fix all compile error passed `make check`
+    -   Make sure existing test passed `make test`
     -   Create a new test file `internal/actor/actor_restore_request_id_test.go` to test the complete flow:
         1. Create a pool, draw some items (which generates request IDs).
         2. Stop the actor system (which saves a snapshot).
         3. Recover the pool and get the last request ID.
         4. Create a new actor system and set the request ID.
         5. Draw again and verify the new request IDs continue from the restored value.
+
+## Result
+
+I have implemented the persistent request ID feature.
+
+- Moved `poolSnapshot` to `types.go` and added `LastRequestID`.
+- Modified `rewardpool` to create snapshots without writing them to disk.
+- The `actor` now owns the `requestID` and includes it in snapshots.
+- `RecoverPool` now restores the `requestID` from snapshots and WAL files.
+- The CLI now restores the `requestID` when starting the actor system.
+- All existing tests are passing, and a new test for request ID restoration has been added and is passing.

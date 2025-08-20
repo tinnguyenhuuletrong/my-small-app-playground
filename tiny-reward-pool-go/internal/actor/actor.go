@@ -2,7 +2,10 @@ package actor
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
+	"sync/atomic"
 
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/replay"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
@@ -16,6 +19,7 @@ type RewardProcessorActor struct {
 	mailbox         chan interface{}
 	flushAfterNDraw int
 	pendingLogs     []types.WalLogEntry
+	requestID       uint64
 }
 
 // Init performs the initial setup for the actor, like creating an initial
@@ -60,6 +64,7 @@ func NewRewardProcessorActor(ctx *types.Context, pool types.RewardPool, mailboxS
 		mailbox:         make(chan interface{}, mailboxSize),
 		flushAfterNDraw: flushAfterNDraw,
 		pendingLogs:     make([]types.WalLogEntry, 0, flushAfterNDraw*2),
+		requestID:       0,
 	}
 }
 
@@ -96,16 +101,22 @@ func (a *RewardProcessorActor) handleMessage(msg interface{}) {
 		// Note: In a more complex actor, even reads might be message-based
 		// to ensure sequential consistency with writes.
 		m.ResponseChan <- a.pool.State()
+	case GetRequestIDMessage:
+		m.ResponseChan <- a.requestID
+	case SetRequestIDMessage:
+		a.requestID = m.ID
+		close(m.ResponseChan)
 	}
 }
 
 func (a *RewardProcessorActor) handleDraw(m DrawMessage) {
+	reqID := atomic.AddUint64(&a.requestID, 1)
 	item, err := a.pool.SelectItem(a.ctx)
 	var walErr error
 
 	logItem := types.WalLogDrawItem{
 		WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw},
-		RequestID:       m.RequestID, // Use RequestID from message
+		RequestID:       reqID,
 		Success:         err == nil,
 	}
 
@@ -122,7 +133,7 @@ func (a *RewardProcessorActor) handleDraw(m DrawMessage) {
 		a.flush()
 	}
 
-	resp := DrawResponse{RequestID: m.RequestID, Err: err} // Add RequestID to response
+	resp := DrawResponse{RequestID: reqID, Err: err}
 	if walErr == nil {
 		resp.Item = item
 	} else {
@@ -262,28 +273,47 @@ func (a *RewardProcessorActor) replayAndRelog(logsToReplay []types.WalLogEntry) 
 
 func (a *RewardProcessorActor) snapshot() error {
 	snapshotPath := a.ctx.Utils.GenSnapshotPath()
-	if snapshotPath != nil {
-		if logger := a.ctx.Utils.GetLogger(); logger != nil {
-			logger.Info("Creating snapshot.", "path", *snapshotPath)
-		}
-		if err := a.pool.SaveSnapshot(*snapshotPath); err != nil {
-			if logger := a.ctx.Utils.GetLogger(); logger != nil {
-				logger.Error("Failed to create snapshot after WAL rotation.", "error", err)
-			}
-			return err
-		}
-
-		logItem := types.WalLogSnapshotItem{
-			WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeSnapshot},
-			Path:            *snapshotPath,
-		}
-		if err := a.ctx.WAL.LogSnapshot(logItem); err != nil {
-			if logger := a.ctx.Utils.GetLogger(); logger != nil {
-				logger.Error("Failed to log snapshot to WAL.", "error", err)
-			}
-			return err
-		}
+	if snapshotPath == nil {
+		return nil // Snapshotting is disabled
 	}
+
+	if logger := a.ctx.Utils.GetLogger(); logger != nil {
+		logger.Info("Creating snapshot.", "path", *snapshotPath)
+	}
+
+	snap, err := a.pool.CreateSnapshot()
+	if err != nil {
+		if logger := a.ctx.Utils.GetLogger(); logger != nil {
+			logger.Error("Failed to create snapshot data.", "error", err)
+		}
+		return err
+	}
+
+	// The actor is the owner of the request ID, so it sets it on the snapshot.
+	snap.LastRequestID = a.requestID
+
+	file, err := os.Create(*snapshotPath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	enc := json.NewEncoder(file)
+	if err := enc.Encode(snap); err != nil {
+		return err
+	}
+
+	logItem := types.WalLogSnapshotItem{
+		WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeSnapshot},
+		Path:            *snapshotPath,
+	}
+	if err := a.ctx.WAL.LogSnapshot(logItem); err != nil {
+		if logger := a.ctx.Utils.GetLogger(); logger != nil {
+			logger.Error("Failed to log snapshot to WAL.", "error", err)
+		}
+		return err
+	}
+
 	return nil
 }
 

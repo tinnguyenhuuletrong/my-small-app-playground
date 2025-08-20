@@ -15,10 +15,6 @@ type Pool struct {
 
 var _ types.RewardPool = (*Pool)(nil)
 
-type poolSnapshot struct {
-	Catalog []types.PoolReward `json:"catalog"`
-}
-
 type PoolOptional struct {
 	Selector types.ItemSelector
 }
@@ -51,41 +47,23 @@ func (p *Pool) Load(config types.ConfigPool) error {
 	return nil
 }
 
-func (p *Pool) SaveSnapshot(path string) error {
+func (p *Pool) CreateSnapshot() (*types.PoolSnapshot, error) {
 	if len(p.pendingDraws) > 0 {
-		return types.ErrPendingDrawsNotEmpty
+		return nil, types.ErrPendingDrawsNotEmpty
 	}
-
-	file, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
 
 	// Reflect item remaining
 	snapshot_catalog := p.selector.SnapshotCatalog()
 
-	snap := poolSnapshot{
+	snap := &types.PoolSnapshot{
 		Catalog: snapshot_catalog,
 	}
-	enc := json.NewEncoder(file)
-	return enc.Encode(snap)
+	return snap, nil
 }
 
-func (p *Pool) LoadSnapshot(path string) error {
-	file, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	var snap poolSnapshot
-	dec := json.NewDecoder(file)
-	if err := dec.Decode(&snap); err != nil {
-		return err
-	}
-
+func (p *Pool) LoadSnapshot(snapshot *types.PoolSnapshot) error {
 	p.pendingDraws = make(map[string]int)
-	p.selector.Reset(snap.Catalog)
+	p.selector.Reset(snapshot.Catalog)
 	return nil
 }
 

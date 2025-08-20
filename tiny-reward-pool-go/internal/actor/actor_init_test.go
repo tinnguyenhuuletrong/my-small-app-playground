@@ -39,14 +39,14 @@ func (m *mockWalWithSize) LogSnapshot(item types.WalLogSnapshotItem) error {
 // mockPoolForInit is a mock pool for testing initialization.
 type mockPoolForInit struct {
 	mockPool
-	snapshotPath       string
-	saveSnapshotCalled bool
+	createSnapshotCalled bool
 }
 
-func (m *mockPoolForInit) SaveSnapshot(path string) error {
-	m.saveSnapshotCalled = true
-	m.snapshotPath = path
-	return nil
+func (m *mockPoolForInit) CreateSnapshot() (*types.PoolSnapshot, error) {
+	m.createSnapshotCalled = true
+	// In the actual implementation, the actor would handle the snapshot path.
+	// For this test, we just need to confirm the method was called.
+	return &types.PoolSnapshot{Catalog: []types.PoolReward{}}, nil
 }
 
 func (m *mockPoolForInit) UpdateItem(itemID string, quantity int, probability int64) error {
@@ -80,17 +80,15 @@ func TestSystem_InitialSnapshotOnEmptyWAL(t *testing.T) {
 		walSize              int64
 		walSizeErr           error
 		expectSnapshot       bool
-		expectSnapshotPath   string
 		expectFlush          bool
 		expectActorStartFail bool
 	}{
 		{
-			name:               "WAL is empty",
-			walSize:            0,
-			walSizeErr:         nil,
-			expectSnapshot:     true,
-			expectSnapshotPath: snapshotPath,
-			expectFlush:        true,
+			name:           "WAL is empty",
+			walSize:        0,
+			walSizeErr:     nil,
+			expectSnapshot: true,
+			expectFlush:    true,
 		},
 		{
 			name:           "WAL is not empty",
@@ -138,11 +136,10 @@ func TestSystem_InitialSnapshotOnEmptyWAL(t *testing.T) {
 			defer sys.Stop()
 
 			// 3. Assertions
-			assert.Equal(t, tt.expectSnapshot, pool.saveSnapshotCalled, "SaveSnapshot call expectation mismatch")
+			assert.Equal(t, tt.expectSnapshot, pool.createSnapshotCalled, "CreateSnapshot call expectation mismatch")
 			assert.Equal(t, tt.expectFlush, wal.flushed, "Flush call expectation mismatch")
 
 			if tt.expectSnapshot {
-				assert.Equal(t, tt.expectSnapshotPath, pool.snapshotPath, "Snapshot saved to wrong path")
 				require.NotNil(t, wal.loggedVal)
 				loggedSnapshot, ok := wal.loggedVal.(*types.WalLogSnapshotItem)
 				require.True(t, ok, "Logged item is not a snapshot")
@@ -174,5 +171,5 @@ func TestSystem_StartWithNonSizableWAL(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, sys)
 	defer sys.Stop()
-	assert.False(t, pool.saveSnapshotCalled, "Snapshot should not be created for non-sizable WAL")
+	assert.False(t, pool.createSnapshotCalled, "Snapshot should not be created for non-sizable WAL")
 }
