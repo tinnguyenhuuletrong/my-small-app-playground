@@ -121,6 +121,11 @@ func (p *Pool) State() []types.PoolReward {
 	return catalog
 }
 
+func CreatePoolFromConfig(config types.ConfigPool) *Pool {
+	pool := NewPool(config.Catalog)
+	return pool
+}
+
 func CreatePoolFromConfigPath(configPath string) (*Pool, error) {
 	file, err := os.Open(configPath)
 	if err != nil {

@@ -21,16 +21,12 @@ Evolve the application from a simple demo into a configurable service. This invo
 - Implemented a new YAML config loader in the `internal/config` package without introducing breaking changes.
 - Created a new `main.go` in `cmd/cli` that successfully loads and prints the configuration from `samples/config.yaml`.
 
-## Iteration 2: Interactive TUI with Bubble Tea
-
-### Plan
-1.  **Add Dependency**: Add `github.com/charmbracelet/bubbletea` to `go.mod`.
-2.  **Define TUI Model**: Create a `model` struct to hold the TUI's state (e.g., input fields, status panes, logs).
-3.  **Implement `Init`, `Update`, `View`**: Structure the TUI application according to The Elm Architecture (Model-View-Update) provided by `bubbletea`. The `Update` function will handle both user input and asynchronous messages from our actor system.
-4.  **Integrate in `main.go`**: The `main` function will initialize and run the `bubbletea` program, passing it a reference to the actor system.
-
 ### Result
-[AI_TODO]
+- Added `github.com/charmbracelet/bubbletea` to `go.mod`.
+- Created a new `tui` package inside `cmd/cli`.
+- Defined a basic TUI model with `Init`, `Update`, and `View` functions.
+- Integrated the TUI into `main.go`, which now launches the Bubble Tea application.
+- The application successfully displays a "Hello, World!" message and can be quit with 'q' or 'ctrl+c'.
 
 ## Iteration 3: gRPC Service API
 
