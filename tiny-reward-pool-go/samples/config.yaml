@@ -1,0 +1,19 @@
+working_dir: "tmp/working_dir"
+pool:
+  catalog:
+    - item_id: "item1"
+      quantity: 100
+      probability: 10
+    - item_id: "item2"
+      quantity: 100
+      probability: 20
+    - item_id: "item3"
+      quantity: 100
+      probability: 30
+    - item_id: "item4"
+      quantity: 100
+      probability: 40
+wal:
+  max_file_size: 1024
+  max_buffer_size: 512
+  formatter: "json"

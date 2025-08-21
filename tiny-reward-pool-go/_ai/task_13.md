@@ -14,7 +14,12 @@ Evolve the application from a simple demo into a configurable service. This invo
 6.  **Create New `main.go`**: Create a new `cmd/cli/main.go` that uses the new configuration loader. For now, it will just load the config and print it to confirm it's working.
 
 ### Result
-[AI_TODO]
+- Archived the old CLI to `cmd/cli_v1`.
+- Created a new `cmd/cli` directory.
+- Added `gopkg.in/yaml.v3` to `go.mod`.
+- Created `samples/config.yaml` with the new configuration structure.
+- Implemented a new YAML config loader in the `internal/config` package without introducing breaking changes.
+- Created a new `main.go` in `cmd/cli` that successfully loads and prints the configuration from `samples/config.yaml`.
 
 ## Iteration 2: Interactive TUI with Bubble Tea
 

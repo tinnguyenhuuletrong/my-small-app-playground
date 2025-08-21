@@ -23,14 +23,14 @@ const (
 
 // ConfigPool represents the configuration for the reward pool
 type ConfigPool struct {
-	Catalog []PoolReward `json:"catalog"`
+	Catalog []PoolReward `json:"catalog" yaml:"catalog"`
 }
 
 // PoolReward represents a reward item in the pool
 type PoolReward struct {
-	ItemID      string `json:"item_id"`
-	Quantity    int    `json:"quantity"`
-	Probability int64  `json:"probability"`
+	ItemID      string `json:"item_id" yaml:"item_id"`
+	Quantity    int    `json:"quantity" yaml:"quantity"`
+	Probability int64  `json:"probability" yaml:"probability"`
 }
 
 // PoolSnapshot represents the data structure for a snapshot of the reward pool.
