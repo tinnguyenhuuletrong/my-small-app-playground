@@ -17,6 +17,9 @@ import (
 )
 
 var cmdStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#00ff66ff"))
+var headerTextStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("#FAFAFA")).
+	Background(lipgloss.Color("#7D56F4"))
 
 type Model struct {
 	system       *actor.System
@@ -218,10 +221,7 @@ func (m Model) View() string {
 }
 
 func (m Model) headerView() string {
-	var style = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FAFAFA")).
-		Background(lipgloss.Color("#7D56F4"))
-	return style.Render("Reward Pool TUI")
+	return headerTextStyle.Render("Reward Pool TUI")
 }
 
 func (m Model) footerView() string {
