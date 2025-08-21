@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
-	"math"
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -29,7 +28,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("LoadConfig failed: %v", err)
 	}
-	fmt.Println(cfg)
 
 	// Setup paths
 	baseDir := "."
@@ -42,9 +40,20 @@ func main() {
 		os.MkdirAll(tmpDir, 0755)
 	}
 
-	utils := utils.NewDefaultUtils(tmpDir, tmpDir, slog.LevelDebug)
+	logChan := make(chan string, 100)
+	writer := &tui.ChannelWriter{Ch: logChan}
 
-	walFormatter := walformatter.NewJSONFormatter()
+	utils := utils.NewDefaultUtils(tmpDir, tmpDir, slog.LevelDebug, writer)
+
+	var walFormatter types.LogFormatter
+	switch cfg.WAL.Formatter {
+	case "json":
+		walFormatter = walformatter.NewJSONFormatter()
+	case "string_line":
+		walFormatter = walformatter.NewStringLineFormatter()
+	default:
+		log.Fatalf("Unsupported WAL formatter: %s", cfg.WAL.Formatter)
+	}
 
 	// Create a pool from the config
 	initialPool := rewardpool.CreatePoolFromConfig(cfg.Pool)
@@ -56,7 +65,7 @@ func main() {
 	}
 
 	fileStorage, err := walstorage.NewFileStorage(walPath, walstorage.FileStorageOpt{
-		SizeFileInBytes: int(math.Round(1024 * 100)), // 100 Kb
+		SizeFileInBytes: cfg.WAL.MaxFileSizeKB * 1024, // From KB to Bytes
 	})
 	if err != nil {
 		fmt.Println("Error creating file storage:", err)
@@ -76,9 +85,10 @@ func main() {
 	walStreamer := walstream.NewNoOpStreamer()
 
 	sys, err := actor.NewSystem(ctx, pool, &actor.SystemOptional{
-		FlushAfterNDraw: 5,
-		LastRequestID:   lastRequestID,
-		WALStreamer:     walStreamer,
+		FlushAfterNDraw:   cfg.WAL.FlushAfterNDraw,
+		RequestBufferSize: cfg.WAL.MaxRequestBuffer,
+		LastRequestID:     lastRequestID,
+		WALStreamer:       walStreamer,
 	})
 	if err != nil {
 		fmt.Println("System startup error:", err)
@@ -86,12 +96,11 @@ func main() {
 	}
 	sys.SetRequestID(lastRequestID)
 
-	p := tea.NewProgram(tui.NewModel(sys))
+	p := tea.NewProgram(tui.NewModel(sys, logChan))
 	if err := p.Start(); err != nil {
 		fmt.Printf("Alas, there's been an error: %v", err)
 		os.Exit(1)
 	}
 
-	sys.Stop()
 	fmt.Println("Shutdown complete.")
 }

@@ -3,6 +3,7 @@ package utils
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -24,9 +25,12 @@ var _ types.Utils = (*DefaultUtils)(nil)
 
 // NewDefaultUtils creates a new DefaultUtils.
 // It takes the base directories for WAL and snapshot files as arguments.
-func NewDefaultUtils(walDir, snapshotDir string, logLevel slog.Level) *DefaultUtils {
+func NewDefaultUtils(walDir, snapshotDir string, logLevel slog.Level, writer io.Writer) *DefaultUtils {
+	if writer == nil {
+		writer = os.Stdout
+	}
 	return &DefaultUtils{
-		logger:      slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel})),
+		logger:      slog.New(slog.NewTextHandler(writer, &slog.HandlerOptions{Level: logLevel})),
 		walDir:      walDir,
 		snapshotDir: snapshotDir,
 	}

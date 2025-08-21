@@ -28,7 +28,7 @@ func main() {
 	snapshotPath := tmpDir + "/snapshot.json"
 	walPath := tmpDir + "/wal.log"
 
-	utils := utils.NewDefaultUtils(tmpDir, tmpDir, slog.LevelDebug)
+	utils := utils.NewDefaultUtils(tmpDir, tmpDir, slog.LevelDebug, nil)
 
 	// walFormatter := walformatter.NewJSONFormatter()
 	walFormatter := walformatter.NewStringLineFormatter()
