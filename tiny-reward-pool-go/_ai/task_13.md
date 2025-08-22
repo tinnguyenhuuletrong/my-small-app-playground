@@ -39,7 +39,6 @@ Evolve the application from a simple demo into a configurable service. This invo
 3.  **Implement Core Commands**:
     *   **Help (`h`)**: Display a list of available commands and their usage.
     *   **Status (`s`)**: Show the current status of the reward pool actor.
-    *   **Print (`p`)**: Print the detailed view of the reward pool.
     *   **Draw (`d`)**: Trigger a draw from the reward pool.
     *   **Update (`u <id> <quantity> <weight>`)**: Update an item's quantity and weight.
     *   **Reload (`r`)**: Reload the reward pool from the configuration.
@@ -50,3 +49,6 @@ Evolve the application from a simple demo into a configurable service. This invo
 5.  **Refine `main.go`**:
     *   Update `main.go` to initialize the actor system and the TUI, and wire them together.
     *   Ensure graceful shutdown of the actor system when the TUI exits.
+6.  **Testing:**
+    -   Make sure fix all compile error passed `make check`
+    -   Make sure existing test passed `make test`

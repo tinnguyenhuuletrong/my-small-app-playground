@@ -22,11 +22,46 @@ import (
 )
 
 func main() {
+	for {
+		sys, logChan, err := setup()
+		if err != nil {
+			log.Fatalf("Setup failed: %v", err)
+		}
+
+		m := tui.NewModel(sys, logChan)
+		p := tea.NewProgram(m)
+		finalModel, err := p.Run()
+
+		sys.Stop()
+		fmt.Println("Shutdown complete.")
+
+		// close logChan
+		close(logChan)
+		for value := range logChan {
+			fmt.Println(value)
+		}
+
+		if err != nil {
+			log.Printf("TUI error: %v", err)
+			// if error -> not reload
+			break
+		}
+
+		if finalModel.(tui.Model).ShouldReload {
+			fmt.Println("Reloading...")
+			continue
+		}
+
+		break
+	}
+}
+
+func setup() (*actor.System, chan string, error) {
 	// Load config
 	c := &config.ConfigImpl{}
 	cfg, err := c.LoadYAML("samples/config.yaml")
 	if err != nil {
-		log.Fatalf("LoadConfig failed: %v", err)
+		return nil, nil, fmt.Errorf("LoadConfig failed: %w", err)
 	}
 
 	// Setup paths
@@ -52,7 +87,7 @@ func main() {
 	case "string_line":
 		walFormatter = walformatter.NewStringLineFormatter()
 	default:
-		log.Fatalf("Unsupported WAL formatter: %s", cfg.WAL.Formatter)
+		return nil, nil, fmt.Errorf("unsupported WAL formatter: %s", cfg.WAL.Formatter)
 	}
 
 	// Create a pool from the config
@@ -60,21 +95,18 @@ func main() {
 
 	pool, lastRequestID, err := recovery.RecoverPoolFromConfig(snapshotPath, walPath, initialPool, walFormatter, utils)
 	if err != nil {
-		fmt.Println("Recovery failed:", err)
-		os.Exit(1)
+		return nil, nil, fmt.Errorf("recovery failed: %w", err)
 	}
 
 	fileStorage, err := walstorage.NewFileStorage(walPath, walstorage.FileStorageOpt{
 		SizeFileInBytes: cfg.WAL.MaxFileSizeKB * 1024, // From KB to Bytes
 	})
 	if err != nil {
-		fmt.Println("Error creating file storage:", err)
-		os.Exit(1)
+		return nil, nil, fmt.Errorf("error creating file storage: %w", err)
 	}
 	w, err := wal.NewWAL(walPath, walFormatter, fileStorage)
 	if err != nil {
-		fmt.Println("Error opening WAL:", err)
-		os.Exit(1)
+		return nil, nil, fmt.Errorf("error opening WAL: %w", err)
 	}
 
 	ctx := &types.Context{
@@ -91,17 +123,10 @@ func main() {
 		WALStreamer:       walStreamer,
 	})
 	if err != nil {
-		fmt.Println("System startup error:", err)
-		return
+		return nil, nil, fmt.Errorf("system startup error: %w", err)
 	}
 	sys.SetRequestID(lastRequestID)
 
 	utils.GetLogger().Debug(fmt.Sprintf("Config: %+v", cfg))
-	p := tea.NewProgram(tui.NewModel(sys, logChan))
-	if _, err := p.Run(); err != nil {
-		fmt.Printf("Alas, there's been an error: %v", err)
-		os.Exit(1)
-	}
-
-	fmt.Println("Shutdown complete.")
+	return sys, logChan, nil
 }
