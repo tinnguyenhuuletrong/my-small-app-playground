@@ -1,14 +1,18 @@
 {
     "task": "create a planning for next task",
-    "save_to": "create _ai/task_13.md - Iteration 2",
+    "save_to": "create _ai/task_13.md - Iteration 3",
     "target": {
         "scenario": "continue improve tui cli",
         "goal": {
-            "1": "add user command help, update pool item (amount and probability) same as cmd/cli_v1/cli/main.go"
+            "1": "modify the main panel display. same as live update `Request ID: 1147`. Display a bar chart show the number of item remaininng"
         }
     },
+    "attachment": {
+        "current_tui": "tui.txt"
+    },
     "steps": {
-        "1": "read current source code",
-        "2": "create a task + planning"
+        "1": "read current source code and current ui in attachment",
+        "2": "let think about the ui and propose the ui layout as ascii first",
+        "3": "create a task + planning"
     }
 }

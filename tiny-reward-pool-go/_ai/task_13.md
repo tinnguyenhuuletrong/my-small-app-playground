@@ -1,54 +1,65 @@
-# Task 13: Service Evolution - Config, REPL, and gRPC
+# Task 13: TUI Improvement - Live Bar Chart
 
-## Target
-Evolve the application from a simple demo into a configurable service. This involves moving to a YAML-based configuration, adding an interactive REPL for administration, and exposing the core functionality via a gRPC API.
+## Iteration 3
 
-## Iteration 1: Archive Old CLI and Implement YAML Configuration
+### Problem
+The current TUI main view only shows a simple history of commands and their results. It doesn't provide a live, visual representation of the state of the reward pool, which would be very useful for monitoring.
 
-### Plan
-1.  **Archive Old CLI**: Rename the directory `cmd/cli` to `cmd/cli_v1`.
-2.  **Create New CLI Directory**: Create a new, empty `cmd/cli` directory.
-3.  **Add Dependency**: Add a YAML parsing library (`gopkg.in/yaml.v3`) to the `go.mod` file.
-4.  **Define `config.yaml`**: Create a `config.yaml` file in the `samples` directory to define settings like `working_dir`, `ConfigPool` configurable in yaml, and WAL parameters.
-5.  **Implement Config Loader**: Update the `internal/config` package to load, parse, and validate the `config.yaml` file.
-6.  **Create New `main.go`**: Create a new `cmd/cli/main.go` that uses the new configuration loader. For now, it will just load the config and print it to confirm it's working.
-
-### Result
-- Archived the old CLI to `cmd/cli_v1`.
-- Created a new `cmd/cli` directory.
-- Added `gopkg.in/yaml.v3` to `go.mod`.
-- Created `samples/config.yaml` with the new configuration structure.
-- Implemented a new YAML config loader in the `internal/config` package without introducing breaking changes.
-- Created a new `main.go` in `cmd/cli` that successfully loads and prints the configuration from `samples/config.yaml`.
-- Added `github.com/charmbracelet/bubbletea` to `go.mod`.
-- Created a new `tui` package inside `cmd/cli`.
-- Defined a basic TUI model with `Init`, `Update`, and `View` functions.
-- Integrated the TUI into `main.go`, which now launches the Bubble Tea application.
-- The application successfully displays a "Hello, World!" message and can be quit with 'q' or 'ctrl+c'.
-
-## Iteration 2: Implement Interactive TUI with Commands
+### Target
+Modify the main panel of the TUI to display a bar chart showing the remaining quantity of each item in the reward pool. The display should update automatically after each draw operation.
 
 ### Plan
-1.  **Enhance TUI Model**:
-    *   Add a `textinput` component for user command entry.
-    *   Use a `viewport` to display logs and command output.
-    *   Structure the UI with a help view, status view, and input area.
-2.  **Command Handling**:
-    *   Implement input handling to capture user commands.
-    *   Create a simple command parser for commands like `h` (help), `s` (status), `d` (draw), `u` (update), `p` (print pool), `r` (reload), and `q` (quit).
-3.  **Implement Core Commands**:
-    *   **Help (`h`)**: Display a list of available commands and their usage.
-    *   **Status (`s`)**: Show the current status of the reward pool actor.
-    *   **Draw (`d`)**: Trigger a draw from the reward pool.
-    *   **Update (`u <id> <quantity> <weight>`)**: Update an item's quantity and weight.
-    *   **Reload (`r`)**: Reload the reward pool from the configuration.
-4.  **Actor Integration**:
-    *   Connect the TUI to the backend actor using channels.
-    *   Use a `ChannelWriter` to stream actor logs and responses to the TUI's viewport.
-    *   Send commands from the TUI to the actor for processing.
-5.  **Refine `main.go`**:
-    *   Update `main.go` to initialize the actor system and the TUI, and wire them together.
-    *   Ensure graceful shutdown of the actor system when the TUI exits.
-6.  **Testing:**
-    -   Make sure fix all compile error passed `make check`
-    -   Make sure existing test passed `make test`
+
+1.  **Refactor `tui.Model` for a new layout:**
+    *   Rename the existing `viewport` to `chartView` which will be used to display the bar chart.
+    *   Add a new `viewport.Model` named `historyView` to manage and display the command history.
+    *   Add a map `initialQuantities map[string]int` to the model to store the initial quantities of each item for calculating bar chart percentages.
+
+2.  **Update `NewModel()` constructor:**
+    *   Initialize both `chartView` and `historyView`.
+    *   Fetch the initial state from `system.State()` and populate the `initialQuantities` map.
+
+3.  **Modify the `View()` method:**
+    *   The main `View()` will be restructured to render the new layout.
+    *   Create a new `renderChartView()` method:
+        *   It will fetch the current pool state via `m.system.State()`.
+        *   For each item, it will calculate the percentage of remaining quantity against the `initialQuantities`.
+        *   It will generate and return an ASCII bar chart string.
+    *   The main `View()` will now compose the `headerView`, the new chart view, the history view, the `footerView`, and the debug view.
+
+4.  **Adjust the `Update()` method:**
+    *   On `concurrentDrawsFinishedMsg`, the message handler will now update the `historyView` with the draw results instead of the main viewport.
+    *   The `chartView` will be implicitly updated on every `View()` call, ensuring it's always in sync with the latest state.
+
+5.  **Handle Window Resizing in `onResize()`:**
+    *   Update the dimensions of both `chartView` and `historyView` when the terminal window is resized to ensure the layout doesn't break.
+
+### UI Mockup
+
+```
++--------------------------------------------------------------------------------------------------+
+| Reward Pool TUI                                                    Request ID: 1147              |
++--------------------------------------------------------------------------------------------------+
+|                                                                                                  |
+| Item Quantities:                                                                                 |
+| diamond: [██████████████████████████████████████████████████] 100/100                              |
+| gold:    [██████████████████████████████████████████████████] 100/100                              |
+| silver:  [████████████████████████████████████████████████  ] 98/100                               |
+| rock:    [██████████████████████████████████████████████████] 100/100                              |
+|                                                                                                  |
++--------------------------------------------------------------------------------------------------+
+| Command History:                                                                                 |
+| > d 1                                                                                            |
+| [Request 1145] You drew: diamond                                                                 |
+| > d 2                                                                                            |
+| [Request 1146] You drew: silver                                                                  |
+| [Request 1147] You drew: silver                                                                  |
+|                                                                                                  |
++--------------------------------------------------------------------------------------------------+
+| > Enter command...                                                                               |
++--------------------------------------------------------------------------------------------------+
+| Debug Log:                                                                                       |
+| time=... level=INFO msg="WAL is empty..."                                                        |
+| ...                                                                                              |
++--------------------------------------------------------------------------------------------------+
+```
