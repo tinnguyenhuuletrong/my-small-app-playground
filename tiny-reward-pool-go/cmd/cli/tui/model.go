@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -23,16 +24,21 @@ var (
 )
 
 type Model struct {
-	system       *actor.System
-	viewport     viewport.Model
-	textInput    textinput.Model
-	history      []string
-	ready        bool
-	logChan      <-chan string
-	debugView    viewport.Model
-	logOutput    []string
-	ShouldReload bool
-	Quitting     bool
+	system          *actor.System
+	chartView       viewport.Model
+	historyView     viewport.Model
+	textInput       textinput.Model
+	history         []string
+	ready           bool
+	logChan         <-chan string
+	debugView       viewport.Model
+	logOutput       []string
+	ShouldReload    bool
+	Quitting        bool
+	initCachedState []types.PoolReward
+	cachedState     []types.PoolReward
+	cachedRequestID uint64
+	ticker          *time.Ticker
 }
 
 func NewModel(system *actor.System, logChan <-chan string) Model {
@@ -42,22 +48,52 @@ func NewModel(system *actor.System, logChan <-chan string) Model {
 	ti.Width = 80
 
 	dv := viewport.New(80, 10)
+	cv := viewport.New(80, 10)
+	hv := viewport.New(80, 10)
+
+	initialState := system.State()
 
 	return Model{
-		system:       system,
-		viewport:     viewport.New(80, 20),
-		textInput:    ti,
-		history:      []string{},
-		logChan:      logChan,
-		debugView:    dv,
-		logOutput:    []string{},
-		ShouldReload: false,
-		Quitting:     false,
+		system:          system,
+		chartView:       cv,
+		historyView:     hv,
+		textInput:       ti,
+		history:         []string{},
+		logChan:         logChan,
+		debugView:       dv,
+		logOutput:       []string{},
+		ShouldReload:    false,
+		Quitting:        false,
+		initCachedState: initialState,
+		cachedState:     initialState,
+		cachedRequestID: system.GetRequestID(),
+		ticker:          time.NewTicker(time.Second),
 	}
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(textinput.Blink, waitForLog(m.logChan))
+	return tea.Batch(textinput.Blink, waitForLog(m.logChan), waitForTick(m.ticker))
+}
+
+type tickMsg time.Time
+type refreshStateMsg struct {
+	State     []types.PoolReward
+	RequestID uint64
+}
+
+func waitForTick(ticker *time.Ticker) tea.Cmd {
+	return func() tea.Msg {
+		return tickMsg(<-ticker.C)
+	}
+}
+
+func refreshState(system *actor.System) tea.Cmd {
+	return func() tea.Msg {
+		return refreshStateMsg{
+			State:     system.State(),
+			RequestID: system.GetRequestID(),
+		}
+	}
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -68,7 +104,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	m.textInput, cmd = m.textInput.Update(msg)
 	cmds = append(cmds, cmd)
-	m.viewport, cmd = m.viewport.Update(msg)
+	m.chartView, cmd = m.chartView.Update(msg)
+	cmds = append(cmds, cmd)
+	m.historyView, cmd = m.historyView.Update(msg)
 	cmds = append(cmds, cmd)
 	m.debugView, cmd = m.debugView.Update(msg)
 	cmds = append(cmds, cmd)
@@ -79,6 +117,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.debugView.SetContent(logMsgStyle.Render(strings.Join(m.logOutput, "")))
 		m.debugView.GotoBottom()
 		cmds = append(cmds, waitForLog(m.logChan))
+
+	case tickMsg:
+		cmds = append(cmds, refreshState(m.system))
+		cmds = append(cmds, waitForTick(m.ticker))
+
+	case refreshStateMsg:
+		m.cachedState = msg.State
+		m.cachedRequestID = msg.RequestID
 
 	case concurrentDrawsFinishedMsg:
 		responses := []actor.DrawResponse(msg)
@@ -95,8 +141,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.history = append(m.history, output)
 		}
-		m.viewport.SetContent(strings.Join(m.history, "\n"))
-		m.viewport.GotoBottom()
+		m.historyView.SetContent(strings.Join(m.history, "\n"))
+		m.historyView.GotoBottom()
+		cmds = append(cmds, refreshState(m.system))
 
 	case tea.KeyMsg:
 		switch msg.Type {
@@ -105,7 +152,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.textInput.Reset()
 			parts := strings.Fields(input)
 
-			// fallback to help cmd
 			if len(parts) == 0 {
 				parts = []string{"h"}
 			}
@@ -114,6 +160,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = m.onUserCommand(command, args, cmds)
 		case tea.KeyCtrlC, tea.KeyEsc:
 			m.Quitting = true
+			m.ticker.Stop()
 			cmds = append(cmds, tea.Quit)
 		}
 
@@ -129,18 +176,36 @@ func (m Model) View() string {
 		return ""
 	}
 	if !m.ready {
-		return "\n  Initializing..."
+		return "Initializing..."
 	}
+
+	// chart view
+	m.chartView.SetContent("\n" + m.renderChartView())
+	chartRender := lipgloss.NewStyle().
+		SetString("Item Quantities\n").
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderBottom(true).
+		Padding(0, 1).
+		Render(m.chartView.View())
+
+	// history view
+	historyRender := lipgloss.NewStyle().
+		SetString("Command History\n").
+		Render(m.historyView.View())
+
+	// debug view
+	debugRender := lipgloss.NewStyle().
+		SetString("Debug Log\n").
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderTop(true).
+		Render(m.debugView.View())
 
 	mainView := lipgloss.JoinVertical(
 		lipgloss.Left,
-		m.viewport.View(),
+		chartRender,
+		historyRender,
 		m.footerView(),
 	)
-
-	debugRender := lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder(), true, false, false, false).
-		Render(m.debugView.View())
 
 	return lipgloss.JoinVertical(
 		lipgloss.Center,
@@ -151,7 +216,7 @@ func (m Model) View() string {
 }
 
 func (m *Model) onUserCommand(command string, args []string, cmds []tea.Cmd) []tea.Cmd {
-	m.history = append(m.history, cmdStyle.Render(command+" "+strings.Join(args, " ")))
+	m.history = append(m.history, cmdStyle.Render("> "+command+" "+strings.Join(args, " ")))
 	switch command {
 	case "h":
 		m.history = append(m.history, getHelp())
@@ -184,34 +249,45 @@ func (m *Model) onUserCommand(command string, args []string, cmds []tea.Cmd) []t
 			m.history = append(m.history, fmt.Sprintf("Failed to update item %s: %v", id, err))
 		} else {
 			m.history = append(m.history, fmt.Sprintf("Updated item %s", id))
+			m.initCachedState = m.system.State()
+			cmds = append(cmds, refreshState(m.system))
 		}
 	case "r":
 		m.ShouldReload = true
+		m.ticker.Stop()
 		return append(cmds, tea.Quit)
 	case "q":
 		m.Quitting = true
+		m.ticker.Stop()
 		return append(cmds, tea.Quit)
 	default:
 		m.history = append(m.history, "Unknown command. Type 'h' for help.")
 	}
-	m.viewport.SetContent(strings.Join(m.history, "\n"))
-	m.viewport.GotoBottom()
+	m.historyView.SetContent(strings.Join(m.history, "\n"))
+	m.historyView.GotoBottom()
 	return cmds
 }
 
 func (m *Model) onResize(msg tea.WindowSizeMsg) {
 	headerHeight := lipgloss.Height(m.headerView())
-	windowWidth := msg.Width
-	viewportHeight := 30
+	footerHeight := lipgloss.Height(m.footerView())
 	debugViewHeight := 10
+	windowWidth := msg.Width
+	contentHeight := msg.Height - headerHeight - footerHeight - debugViewHeight - 6 // Adjust for borders
+
+	chartHeight := contentHeight / 2
+	historyHeight := contentHeight - chartHeight
 
 	if !m.ready {
-		m.viewport = viewport.New(windowWidth, viewportHeight)
-		m.viewport.YPosition = headerHeight
+		m.chartView = viewport.New(windowWidth, chartHeight)
+		m.historyView = viewport.New(windowWidth, historyHeight)
 		m.debugView = viewport.New(windowWidth, debugViewHeight)
 		m.ready = true
 	} else {
-		m.viewport.Width = windowWidth
+		m.chartView.Width = windowWidth
+		m.chartView.Height = chartHeight
+		m.historyView.Width = windowWidth
+		m.historyView.Height = historyHeight
 		m.debugView.Width = windowWidth
 	}
 	m.textInput.Width = windowWidth
@@ -219,7 +295,7 @@ func (m *Model) onResize(msg tea.WindowSizeMsg) {
 }
 
 func (m Model) headerView() string {
-	return headerTextStyle.Render("Reward Pool TUI") + " " + statusStyle.Render(fmt.Sprintf("Request ID: %d", m.system.GetRequestID()))
+	return headerTextStyle.Render("Reward Pool TUI") + " " + statusStyle.Render(fmt.Sprintf("Request ID: %d", m.cachedRequestID))
 }
 
 func (m Model) footerView() string {
@@ -235,9 +311,7 @@ func getHelp() string {
 		"  r          - Reload pool from config\n" +
 		"  q          - Quit\n"
 }
-
 func (m *Model) getStatus() string {
-	// More detailed status can be added here
 	return fmt.Sprintf("Actor System is running. Last Request ID: %d", m.system.GetRequestID())
 }
 
@@ -247,6 +321,46 @@ func prettyState(state []types.PoolReward) string {
 	builder.WriteString(strings.Repeat("-", 37) + "\n")
 	for _, item := range state {
 		builder.WriteString(fmt.Sprintf("% -15s % -10d % -10d\n", item.ItemID, item.Quantity, item.Probability))
+	}
+	return builder.String()
+}
+
+func (m *Model) renderChartView() string {
+	var builder strings.Builder
+
+	// Find the longest item name for alignment
+	maxLen := 0
+	for _, item := range m.cachedState {
+		if len(item.ItemID) > maxLen {
+			maxLen = len(item.ItemID)
+		}
+	}
+
+	sort.Slice(m.cachedState, func(i, j int) bool {
+		return m.cachedState[i].ItemID < m.cachedState[j].ItemID
+	})
+
+	for _, item := range m.cachedState {
+		initialQuantity := 1
+		for _, v := range m.initCachedState {
+			if v.ItemID == item.ItemID {
+				initialQuantity = v.Quantity
+			}
+		}
+
+		barWidth := 50
+		ratio := float64(item.Quantity) / float64(initialQuantity)
+		filled := int(ratio * float64(barWidth))
+		if filled < 0 {
+			filled = 0
+		}
+		if filled > barWidth {
+			filled = barWidth
+		}
+		bar := strings.Repeat("█", filled) + strings.Repeat(" ", barWidth-filled)
+
+		label := fmt.Sprintf("%-*s", maxLen, item.ItemID)
+		builder.WriteString(fmt.Sprintf("%s: [%s] %d/%d\n", label, bar, item.Quantity, initialQuantity))
 	}
 	return builder.String()
 }
