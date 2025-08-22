@@ -1,22 +1,14 @@
 {
     "task": "create a planning for next task",
-    "save_to": "create _ai/task_12.md - Iteration 2",
+    "save_to": "create _ai/task_13.md - Iteration 2",
     "target": {
-        "scenario": "road to a replica system where 1 node is main and n replica",
-        "goal": "main node continue to stream the walLog to replica via down stream channel",
-        "note": [{
-            "module": "wal_stream",
-            "des": "create a new module and interface handle the wal_stream",
-            "requirement": [
-                "it is a optional plugin",
-                "use requestID as sync revision / generation",
-                "should not block or slow down the main process highest priority",
-                "lag is acceptable"
-            ]
-        }]
+        "scenario": "continue improve tui cli",
+        "goal": {
+            "1": "add user command help, update pool item (amount and probability) same as cmd/cli_v1/cli/main.go"
+        }
     },
     "steps": {
         "1": "read current source code",
-        "3": "create a task + planning"
+        "2": "create a task + planning"
     }
 }
