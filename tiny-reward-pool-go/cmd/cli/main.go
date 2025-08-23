@@ -30,14 +30,13 @@ func main() {
 		log.Fatalf("LoadConfig failed: %v", err)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	for {
-		sys, logChan, err := setup(cfg)
+		sys, writer, err := setup(cfg)
 		if err != nil {
 			log.Fatalf("Setup failed: %v", err)
 		}
+
+		ctx, cancel := context.WithCancel(context.Background())
 
 		if cfg.GRPC.Enabled {
 			go func() {
@@ -48,19 +47,15 @@ func main() {
 			}()
 		}
 
-		m := tui.NewModel(sys, logChan)
+		m := tui.NewModel(sys, writer.GetReaderChan())
 		p := tea.NewProgram(m)
 		finalModel, err := p.Run()
 
 		sys.Stop()
 		fmt.Println("Shutdown complete.")
-		cancel() // Cancel the context to stop the gRPC server
+		cancel()
 
-		// close logChan
-		close(logChan)
-		for value := range logChan {
-			fmt.Println(value)
-		}
+		writer.Close()
 
 		if err != nil {
 			log.Printf("TUI error: %v", err)
@@ -77,7 +72,7 @@ func main() {
 	}
 }
 
-func setup(cfg config.YAMLConfig) (*actor.System, chan string, error) {
+func setup(cfg config.YAMLConfig) (*actor.System, *tui.ChannelWriter, error) {
 	// Setup paths
 	baseDir := "."
 	tmpDir := baseDir + "/" + cfg.WorkingDir
@@ -142,5 +137,5 @@ func setup(cfg config.YAMLConfig) (*actor.System, chan string, error) {
 	sys.SetRequestID(lastRequestID)
 
 	utils.GetLogger().Debug(fmt.Sprintf("Config: %+v", cfg))
-	return sys, logChan, nil
+	return sys, writer, nil
 }

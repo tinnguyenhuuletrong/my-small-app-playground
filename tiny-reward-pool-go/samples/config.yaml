@@ -19,5 +19,5 @@ wal:
   formatter: "json"
   flush_after_n_draw: 20
 grpc:
-  enabled: false
+  enabled: true
   listen_address: ":50051"
