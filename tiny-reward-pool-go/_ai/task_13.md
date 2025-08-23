@@ -1,4 +1,4 @@
-# Task 13: Service Evolution - Config, REPL, and gRPC
+# Task 13: Service Evolution - Config, REPL
 
 ## Target
 Evolve the application from a simple demo into a configurable service. This involves moving to a YAML-based configuration, adding an interactive REPL for administration, and exposing the core functionality via a gRPC API.

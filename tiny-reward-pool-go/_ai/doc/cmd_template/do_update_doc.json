@@ -1,12 +1,14 @@
 {
     "task": "update document",
     "resources": {
-        "diff.txt": "git diff between main branch (end of task 10) and end of task 11",
-        "_ai/task_11.md": "task_11 detail"
+        "diff.txt": "git diff between main branch (end of task 11) and end of task 12 & task_13",
+        "_ai/task_12.md": "task_12 detail",
+        "_ai/task_13.md": "task_13 detail"
     },
     "doc_to_update": {
         "agent_note": "_ai/doc/agent_note.md",
-        "GEMINI.md": "_ai/doc/agent_note.md"
+        "GEMINI.md": "_ai/doc/agent_note.md",
+        "README.md": "README.md"
     },
     "steps": {
         "1": "read the resources",

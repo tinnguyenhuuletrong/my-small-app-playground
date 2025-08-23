@@ -7,90 +7,64 @@
 
 ## Recent Updates (Aug 2025)
 
+- **Task_13:** Evolved the application into a configurable service with an interactive TUI.
+  - **YAML Configuration:** Moved from hardcoded paths and JSON to a `config.yaml`-based setup, allowing configuration of the working directory, reward pool, and WAL parameters (`max_file_size_kb`, `max_request_buffer_size`, `formatter`, `flush_after_n_draw`).
+  - **Interactive TUI:** Replaced the basic CLI with a full-featured, interactive terminal user interface (TUI) built with `bubbletea`.
+  - **Live Dashboard:** The TUI provides a live-updating dashboard with a bar chart showing item quantities, a history of commands, and a debug log view.
+  - **REPL-like Commands:** The TUI supports commands like `draw`, `update`, `status`, `help`, and `reload`, providing administrative control over the running service.
+  - **Archived Old CLI:** The previous CLI demo was archived to `cmd/cli_v1`.
+- **Task_12:** Implemented persistent request IDs and a WAL streaming mechanism.
+  - **Persistent Request ID:** The `requestID` is now persistent across restarts. It is saved as part of the pool snapshot and correctly restored from both the snapshot and the WAL, ensuring it is always unique and increasing.
+  - **WAL Streaming for Replication:** Introduced a new `internal/walstream` module and a dedicated `StreamingActor` to asynchronously stream WAL entries to a target, laying the groundwork for replica synchronization. This is designed to be non-blocking.
 - **Task_11:** Made the WAL the source of truth by introducing multiple log types and re-architecting the recovery and actor systems.
   - **Enhanced WAL:** The WAL now supports multiple log types (`LogTypeUpdate`, `LogTypeSnapshot`, `LogTypeRotate`) beyond just `LogTypeDraw`, with a polymorphic `WalLogEntry` interface.
   - **Item Updates:** The system now supports transactional updates to item quantity and probability via the actor model.
   - **`replay` Module:** Created a new `internal/replay` module to centralize WAL replay logic, removing duplication from `recovery` and `actor` modules.
   - **WAL-Driven Recovery:** The recovery process is now strictly driven by the WAL. It requires the WAL to start with a snapshot, loads the state from it, and then replays subsequent logs.
   - **Robust WAL Rotation:** The actor's `flush` logic now gracefully handles `ErrWALFull` by preserving pending operations, reverting state, creating a snapshot, rotating the WAL, and then re-applying the pending operations to the new WAL file, preventing data loss.
-  - **Actor Initialization:** The actor now creates an initial snapshot if the WAL is empty, ensuring all new WAL files start with a consistent state.
-  - **CLI Enhancements:** The CLI demo now supports interactive item updates to showcase the new functionality.
 - **Task_09:** Refactored WAL architecture for extensibility and reliability.
   - Moved WAL log format to JSON Lines (JSONL) with typed `WalLogItem`/`WalLogDrawItem` and `LogType`/`LogError` enums.
   - Introduced `LogFormatter` (JSON, StringLine) and `Storage` (File, FileMMap) interfaces; `WAL` now composes these.
-  - Added `ErrWALFull` and `Storage.CanWrite(size)` to safely trigger rotation on full write targets.
-  - Centralized WAL rotation and snapshot creation in `processing.Processor` using a `Utils` interface (`GenRotatedWALPath`, `GenSnapshotPath`, `GetLogger`).
-  - Updated `recovery.RecoverPool` to accept `formatter` and `utils`, replay WAL via formatter, write snapshot, and archive/rotate WAL.
-  - CLI wiring updated to construct `DefaultUtils`, select formatter/storage, and inject into `RecoverPool`/`NewWAL`.
-  - New tests for formatter/storage and integration test for WAL rotation; all tests passing.
-  - Benchmarks updated; see `_ai/doc/bench.md` for Task 09 analysis and results.
-- **Task_08:** Fixed a critical bug in the reward distribution logic. Refactored the `ItemSelector` implementations (`FenwickTreeSelector` and `PrefixSumSelector`) to correctly use `Probability` for weighted selection and `Quantity` for availability. Delegated all state management from the `rewardpool.Pool` to the `ItemSelector`, making it the single source of truth. Added a `distribution_test` to verify the correctness of the reward distribution.
-- **Task_06:** Refactored the `rewardpool.Pool` to use a more efficient in-memory data structure for weighted random item selection, improving the performance of the `SelectItem` operation. Introduced an `ItemSelector` interface and implemented `FenwickTreeSelector` using a Fenwick Tree for O(log N) selection. Updated `Pool` to use this abstraction, ensuring `pendingDraws` are correctly accounted for to prevent over-draws. All related tests were updated and passed.
-- **Task_05:** Refactored the `Processor.Draw` method to return a channel (`<-chan DrawResponse`) for a more idiomatic and developer-friendly API. Optimized the channel-based implementation using `sync.Pool` to reduce allocation overhead. Refactored benchmarks to accurately measure performance, with `bench_draw_apis_test.go` providing a direct comparison of callback vs. channel `Draw` methods, and other benchmarks using the recommended channel-based approach.
-- **Task_04:** Refactored the core processing logic to be strictly WAL-first and transactional.
-  - **Two-Phase Commit:** Introduced a staging area (`pendingDraws`) in the `RewardPool`. Operations now follow a select/stage (`SelectItem`) and then commit/revert (`CommitDraw`/`RevertDraw`) pattern. This ensures the WAL is written before any in-memory state is finalized.
-  - **WAL Buffering:** The WAL now buffers log entries in memory. The `LogDraw` operation appends to this buffer, and a `Flush` operation writes the buffer to disk, improving performance by reducing I/O calls.
-  - **Batch Processing:** The `Processor` now supports batching draws with a `flushAfterNDraw` setting. It accumulates staged draws and commits them in a batch after a configurable number of operations, further optimizing throughput.
-- **Benchmarking:** Added new benchmark for memory-mapped WAL (mmap WAL) in `cmd/bench/bench_wal_mmap_test.go`.
-- **Metrics Collection:** Benchmarks now compare No WAL, Real WAL, and Mmap WAL. Mmap WAL achieves ~2M draws/sec, much faster than file WAL, but slower than mock WAL.
-- **Documentation:** `_ai/doc/bench.md` updated with new results, metrics table, and analysis. Mmap WAL is a strong middle ground for performance and durability.
-- **Makefile Update:** Added `distribution_test` target to `Makefile` for running distribution tests.
-- **New Tests:** Added `bench_selector_test.go` for benchmarking selector performance and `cmd/distribution_test` for distribution tests.
+- **Task_08:** Fixed a critical bug in the reward distribution logic. Refactored the `ItemSelector` implementations (`FenwickTreeSelector` and `PrefixSumSelector`) to correctly use `Probability` for weighted selection and `Quantity` for availability.
 
 ## Modules & Structure
 
-- `internal/types/types.go`: Centralized type definitions and interfaces.
-  - Data: `ConfigPool`, `PoolReward`, `WalLogItem`, `WalLogDrawItem`, `LogType`, `LogError`.
-  - WAL abstractions: `LogFormatter` (Encode/Decode), `Storage` (Write/Flush/Close/Rotate/CanWrite), `WAL` interface.
-  - Context/Utils: `Context` carries `WAL` and `Utils`. `Utils` provides `GetLogger`, `GenRotatedWALPath`, `GenSnapshotPath`.
-  - Errors: `ErrWALFull`, `ErrWalBufferNotEmpty`, `ErrEmptyRewardPool`, `ErrPendingDrawsNotEmpty`, `ErrShutingDown`.
-- `internal/wal/formatter/`: `JSONFormatter` (JSONL) and `StringLineFormatter` (compact string format) implementing `LogFormatter`.
-- `internal/wal/storage/`: `FileStorage` (append/sync with capacity), `FileMMapStorage` (pre-sized mmap region) implementing `Storage`.
-- `internal/wal/wal.go`: WAL composes `LogFormatter` and `Storage`, buffers `WalLogDrawItem`, `Flush` checks `CanWrite` and writes via storage, `ParseWAL` decodes via formatter.
-- `internal/utils/utils.go`: `DefaultUtils` (logger, path generation for rotated WAL and snapshot). `ReadFileContent` utility (handles mmap zero padding). `test_utils.go` includes `MockUtils` and `MockWAL` for tests.
-- `internal/actor/actor.go`: Single-threaded processor; transactional batching. On `ErrWALFull` from `Flush`, performs WAL rotation and snapshot via `Utils` and resumes.
-- `internal/recovery/recovery.go`: Recovery now accepts `formatter` and `utils`, replays WAL via formatter, saves snapshot, and archives/removes old WAL using `utils.GenRotatedWALPath()`.
-- `internal/rewardpool/pool.go`: Reward pool logic with staging (`pendingDraws`) and selector-driven state; provides snapshot load/save and apply log.
-- `cmd/cli/main.go`: CLI demo wiring for `DefaultUtils`, formatter/storage selection, recovery, processing, and graceful shutdown.
-- `cmd/bench`: Benchmarks for APIs, selectors, and WAL backends.
+- `internal/config`: Loads and parses the `config.yaml` file.
+- `internal/actor`: Contains the core `RewardProcessorActor` for state management and the `StreamingActor` for WAL replication.
+- `internal/walstream`: Defines the `WALStreamer` interface and provides `NoOpStreamer` and `LogStreamer` implementations.
+- `internal/rewardpool`: Manages the reward items, now with snapshotting logic that includes the `last_request_id`.
+- `internal/recovery`: Recovers state from snapshots and WAL files, now also restoring the `last_request_id`.
+- `cmd/cli`: The new interactive TUI application.
+  - `tui/model.go`: The main `bubbletea` model, handling UI state, commands, and rendering.
+- `cmd/cli_v1`: The archived, non-interactive CLI.
+- `samples/config.yaml`: The central configuration file for the application.
 
 ## Key Features
 
-- All state changes are handled in a dedicated goroutine via a buffered channel.
+- **YAML Configuration:** All major settings are now managed in a single `config.yaml` file.
+- **Interactive TUI:** A rich, interactive terminal interface for managing and observing the reward pool in real-time.
+- **Persistent Request IDs:** Guarantees that request IDs are unique and monotonically increasing even after restarts.
+- **WAL Streaming:** Asynchronously streams WAL logs to an external target, enabling real-time replication.
 - **WAL-First Principle:** Two-phase commit ensures WAL is written before in-memory state is mutated.
-- **Batch Processing:** Multiple draws can be batched before flushing/committing to improve throughput.
 - **Pluggable WAL:** Formatters (JSONL, StringLine) and storages (File, MMap) are interchangeable via interfaces.
-- **Auto Rotation & Snapshotting:** Processor detects `ErrWALFull`, rotates WAL to an archive path, and creates a snapshot using `Utils`-provided paths; then continues processing.
-- Request IDs generated safely with atomic operations.
-- Channel-based `Draw` API for ergonomics; callback benchmark available for comparison.
-- Pool supports save/load snapshot (JSON).
-- WAL supports flush and rotation.
-- WAL recovery replays WAL after snapshot, writes new snapshot, and archives rotated WAL on startup.
-
-## Benchmarks:
-
-Compare No WAL, Real WAL, and Mmap WAL for throughput, latency, and GC count. See `_ai/doc/bench.md` for detailed results and Task 09 analysis.
+- **Auto Rotation & Snapshotting:** The processor automatically handles WAL file rotation and snapshot creation when the WAL is full.
 
 ## Testing and Verification
 
 - **Check syntax:** Run `make check` to check source and report compile errors / warining.
 - **Unit Tests:** Run `make test` to execute all unit tests.
-- **Distribution Test:** Run `make distribution_test` to verify that the reward distribution is correct according to the configured probabilities. This is a critical step to ensure the core logic is working as expected.
+- **Distribution Test:** Run `make distribution_test` to verify that the reward distribution is correct according to the configured probabilities.
 - **Benchmarks:** Run `make bench` to run all benchmark tests.
 
 ## Example Usage
 
-- See `cmd/cli/main.go` for a demo of the complete system.
-- See `cmd/bench/` for various WAL performance benchmarks.
+- Configure the service in `samples/config.yaml`.
+- Run `make run` to start the interactive TUI.
+- Use commands like `h` (help), `d` (draw), and `u` (update) within the TUI.
 
 ## Next Steps
 
-- Implement network/streaming WAL backends (e.g., Kafka/gRPC) using formatter/storage abstractions.
-- Explore compact/binary serialization (e.g., Protobuf) to reduce WAL size and improve throughput.
-- Add configuration-driven selection of formatter/storage and policy tuning (flush/rotation thresholds).
-- Investigate parallel WAL replay and incremental snapshotting for faster recovery.
-- Continue mmap/file storage tuning and selector/API ergonomics improvements.
-
----
-
-This note is for quick onboarding and context transfer for future AI agents or developers.
+- Implement gRPC service to expose the reward pool functionality over the network.
+- Add more advanced TUI features, such as filtering and searching the command history.
+- Explore more sophisticated WAL streaming backends like Kafka or gRPC streams.
+- Enhance configuration validation and error handling.

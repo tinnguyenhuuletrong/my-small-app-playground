@@ -38,6 +38,10 @@ The project uses a `Makefile` for common development tasks.
 
 ## Development Conventions
 
+*   **Configuration:** The application is configured via a central `samples/config.yaml` file.
+*   **Interactive TUI:** The primary interface is an interactive terminal application built with `bubbletea`, located in `cmd/cli`.
+*   **Persistent Request IDs:** The actor model ensures that `requestID` is persistent across restarts by saving it in snapshots and recovering it from the WAL.
+*   **WAL Streaming:** A `walstream` module with a dedicated `StreamingActor` provides asynchronous, non-blocking streaming of WAL entries for replication.
 *   **Modular Design:** The project follows a modular design, with clear separation of concerns between different packages.
 *   **Interfaces:** Interfaces are used to define contracts between different modules, promoting testability and loose coupling. A key example is the `ItemSelector` interface, which abstracts the underlying data structure for weighted random item selection. The `PoolReward.Probability` field has been updated to `int64` to align with the `ItemSelector` module's requirements. Implementations include `FenwickTreeSelector` and `PrefixSumSelector`.
 *   **Testing:** Unit tests are provided for all key modules, and the project includes benchmark tests for performance-critical components like the WAL.
