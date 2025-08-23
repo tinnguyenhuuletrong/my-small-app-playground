@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"log/slog"
@@ -19,13 +20,32 @@ import (
 	walformatter "github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/formatter"
 	walstorage "github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/storage"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/walstream"
+	rewardpool_grpc_service "github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/pkg/rewardpool-grpc-service"
 )
 
 func main() {
+	c := &config.ConfigImpl{}
+	cfg, err := c.LoadYAML("samples/config.yaml")
+	if err != nil {
+		log.Fatalf("LoadConfig failed: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	for {
-		sys, logChan, err := setup()
+		sys, logChan, err := setup(cfg)
 		if err != nil {
 			log.Fatalf("Setup failed: %v", err)
+		}
+
+		if cfg.GRPC.Enabled {
+			go func() {
+				log.Printf("server listening at %v", cfg.GRPC.ListenAddress)
+				if err := rewardpool_grpc_service.ListenAndServe(ctx, sys, cfg.GRPC.ListenAddress); err != nil {
+					log.Fatalf("failed to serve: %v", err)
+				}
+			}()
 		}
 
 		m := tui.NewModel(sys, logChan)
@@ -34,6 +54,7 @@ func main() {
 
 		sys.Stop()
 		fmt.Println("Shutdown complete.")
+		cancel() // Cancel the context to stop the gRPC server
 
 		// close logChan
 		close(logChan)
@@ -56,14 +77,7 @@ func main() {
 	}
 }
 
-func setup() (*actor.System, chan string, error) {
-	// Load config
-	c := &config.ConfigImpl{}
-	cfg, err := c.LoadYAML("samples/config.yaml")
-	if err != nil {
-		return nil, nil, fmt.Errorf("LoadConfig failed: %w", err)
-	}
-
+func setup(cfg config.YAMLConfig) (*actor.System, chan string, error) {
 	// Setup paths
 	baseDir := "."
 	tmpDir := baseDir + "/" + cfg.WorkingDir

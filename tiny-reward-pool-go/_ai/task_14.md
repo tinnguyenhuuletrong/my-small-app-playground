@@ -58,8 +58,12 @@
 
 ### Result
 
-I will start with step 1.
+I have completed all the steps in the plan.
 
-### Problem
-
-None.
+- Created a new gRPC service in `pkg/rewardpool-grpc-service`.
+- Defined the protobuf file and generated the Go code.
+- Implemented the gRPC service.
+- Updated the configuration to enable/disable the gRPC service.
+- Integrated the gRPC server into the CLI application.
+- Added unit tests for the gRPC service.
+- Refactored the code to improve the structure and handle graceful shutdown.

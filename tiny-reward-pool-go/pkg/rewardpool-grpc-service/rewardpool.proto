@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package rewardpool;
+
+option go_package = "github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/pkg/rewardpool-grpc-service/generated";
+
+// The reward pool service definition.
+service RewardPoolService {
+  // Get the current state of the reward pool
+  rpc GetState(GetStateRequest) returns (GetStateResponse);
+  // Draw items from the reward pool
+  rpc Draw(stream DrawRequest) returns (stream DrawResponse);
+}
+
+// A reward item in the pool
+message RewardItem {
+  string item_id = 1;
+  int32 quantity = 2;
+  int64 probability = 3;
+}
+
+// The request message for GetState.
+message GetStateRequest {}
+
+// The response message for GetState.
+message GetStateResponse {
+  repeated RewardItem items = 1;
+}
+
+// The request message for Draw.
+message DrawRequest {
+  // Number of items to draw, if 0 or not set, will be considered as 1
+  int32 count = 1;
+}
+
+// The response message for Draw.
+message DrawResponse {
+  uint64 request_id = 1;
+  string item_id = 2;
+  string error = 3;
+}
