@@ -1,18 +1,20 @@
 {
     "task": "create a planning for next task",
-    "save_to": "create _ai/task_13.md - Iteration 3",
+    "save_to": "create _ai/task_14.md",
     "target": {
-        "scenario": "continue improve tui cli",
-        "goal": {
-            "1": "modify the main panel display. same as live update `Request ID: 1147`. Display a bar chart show the number of item remaininng"
-        }
-    },
-    "attachment": {
-        "current_tui": "tui.txt"
+        "scenario": "add /pkg/rewardpool-grpc-service",
+        "goal": [{
+            "target": "add grpc service module for actor",
+            "requirements": {
+                "1": "like @cmd/cli/tui. New function accept an actor as reference -> maximize flexibility extendable interface",
+                "2": "support grpc method State, Draws(batch)",
+                "3": "define proto file, version inside module -> we publish it into registry later",
+                "4": "update @cmd/cli to start a grpc service ( optional yaml config, default is false )"
+            }
+        }]
     },
     "steps": {
         "1": "read current source code and current ui in attachment",
-        "2": "let think about the ui and propose the ui layout as ascii first",
         "3": "create a task + planning"
     }
 }
