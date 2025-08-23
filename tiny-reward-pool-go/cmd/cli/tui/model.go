@@ -360,7 +360,7 @@ func (m *Model) renderChartView() string {
 		bar := strings.Repeat("█", filled) + strings.Repeat(" ", barWidth-filled)
 
 		label := fmt.Sprintf("%-*s", maxLen, item.ItemID)
-		builder.WriteString(fmt.Sprintf("%s: [%s] %d/%d\n", label, bar, item.Quantity, initialQuantity))
+		builder.WriteString(fmt.Sprintf("%s: [%s] %d/%d - %d\n", label, bar, item.Quantity, initialQuantity, item.Probability))
 	}
 	return builder.String()
 }
