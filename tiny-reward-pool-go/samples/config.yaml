@@ -5,13 +5,13 @@ pool:
       quantity: 100
       probability: 10
     - item_id: "gold"
-      quantity: 100
+      quantity: 1000
       probability: 20
     - item_id: "silver"
-      quantity: 100
+      quantity: 10000
       probability: 30
     - item_id: "rock"
-      quantity: 100
+      quantity: 100000
       probability: 40
     - item_id: "mud"
       quantity: -1
@@ -20,10 +20,10 @@ pool:
       quantity: -1
       probability: 50
 wal:
-  max_file_size_kb: 1024
+  max_file_size_kb: 200
   max_request_buffer_size: 512
-  formatter: "json"
-  flush_after_n_draw: 20
+  formatter: "string_line"
+  flush_after_n_draw: 200
 grpc:
   enabled: true
   listen_address: ":50051"

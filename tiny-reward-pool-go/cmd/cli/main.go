@@ -107,8 +107,8 @@ func setup(cfg config.YAMLConfig) (*actor.System, *tui.ChannelWriter, error) {
 		return nil, nil, fmt.Errorf("recovery failed: %w", err)
 	}
 
-	fileStorage, err := walstorage.NewFileStorage(walPath, walstorage.FileStorageOpt{
-		SizeFileInBytes: cfg.WAL.MaxFileSizeKB * 1024, // From KB to Bytes
+	fileStorage, err := walstorage.NewFileMMapStorage(walPath, walstorage.FileMMapStorageOps{
+		MMapFileSizeInBytes: int64(cfg.WAL.MaxFileSizeKB * 1024), // From KB to Bytes
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("error creating file storage: %w", err)
