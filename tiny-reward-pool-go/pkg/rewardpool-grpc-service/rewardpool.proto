@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package rewardpool;
 
-option go_package = "github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/pkg/rewardpool-grpc-service/generated";
+option go_package = "github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/pkg/rewardpool-grpc-service";
 
 // The reward pool service definition.
 service RewardPoolService {

@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.8
 // 	protoc        v6.32.0
-// source: pkg/rewardpool-grpc-service/proto/rewardpool.proto
+// source: pkg/rewardpool-grpc-service/rewardpool.proto
 
 package rewardpool_grpc_service
 
@@ -33,7 +33,7 @@ type RewardItem struct {
 
 func (x *RewardItem) Reset() {
 	*x = RewardItem{}
-	mi := &file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_msgTypes[0]
+	mi := &file_pkg_rewardpool_grpc_service_rewardpool_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -45,7 +45,7 @@ func (x *RewardItem) String() string {
 func (*RewardItem) ProtoMessage() {}
 
 func (x *RewardItem) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_msgTypes[0]
+	mi := &file_pkg_rewardpool_grpc_service_rewardpool_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -58,7 +58,7 @@ func (x *RewardItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RewardItem.ProtoReflect.Descriptor instead.
 func (*RewardItem) Descriptor() ([]byte, []int) {
-	return file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_rawDescGZIP(), []int{0}
+	return file_pkg_rewardpool_grpc_service_rewardpool_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *RewardItem) GetItemId() string {
@@ -91,7 +91,7 @@ type GetStateRequest struct {
 
 func (x *GetStateRequest) Reset() {
 	*x = GetStateRequest{}
-	mi := &file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_msgTypes[1]
+	mi := &file_pkg_rewardpool_grpc_service_rewardpool_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -103,7 +103,7 @@ func (x *GetStateRequest) String() string {
 func (*GetStateRequest) ProtoMessage() {}
 
 func (x *GetStateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_msgTypes[1]
+	mi := &file_pkg_rewardpool_grpc_service_rewardpool_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -116,7 +116,7 @@ func (x *GetStateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStateRequest.ProtoReflect.Descriptor instead.
 func (*GetStateRequest) Descriptor() ([]byte, []int) {
-	return file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_rawDescGZIP(), []int{1}
+	return file_pkg_rewardpool_grpc_service_rewardpool_proto_rawDescGZIP(), []int{1}
 }
 
 // The response message for GetState.
@@ -129,7 +129,7 @@ type GetStateResponse struct {
 
 func (x *GetStateResponse) Reset() {
 	*x = GetStateResponse{}
-	mi := &file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_msgTypes[2]
+	mi := &file_pkg_rewardpool_grpc_service_rewardpool_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -141,7 +141,7 @@ func (x *GetStateResponse) String() string {
 func (*GetStateResponse) ProtoMessage() {}
 
 func (x *GetStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_msgTypes[2]
+	mi := &file_pkg_rewardpool_grpc_service_rewardpool_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -154,7 +154,7 @@ func (x *GetStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStateResponse.ProtoReflect.Descriptor instead.
 func (*GetStateResponse) Descriptor() ([]byte, []int) {
-	return file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_rawDescGZIP(), []int{2}
+	return file_pkg_rewardpool_grpc_service_rewardpool_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *GetStateResponse) GetItems() []*RewardItem {
@@ -175,7 +175,7 @@ type DrawRequest struct {
 
 func (x *DrawRequest) Reset() {
 	*x = DrawRequest{}
-	mi := &file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_msgTypes[3]
+	mi := &file_pkg_rewardpool_grpc_service_rewardpool_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -187,7 +187,7 @@ func (x *DrawRequest) String() string {
 func (*DrawRequest) ProtoMessage() {}
 
 func (x *DrawRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_msgTypes[3]
+	mi := &file_pkg_rewardpool_grpc_service_rewardpool_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -200,7 +200,7 @@ func (x *DrawRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DrawRequest.ProtoReflect.Descriptor instead.
 func (*DrawRequest) Descriptor() ([]byte, []int) {
-	return file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_rawDescGZIP(), []int{3}
+	return file_pkg_rewardpool_grpc_service_rewardpool_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *DrawRequest) GetCount() int32 {
@@ -222,7 +222,7 @@ type DrawResponse struct {
 
 func (x *DrawResponse) Reset() {
 	*x = DrawResponse{}
-	mi := &file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_msgTypes[4]
+	mi := &file_pkg_rewardpool_grpc_service_rewardpool_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -234,7 +234,7 @@ func (x *DrawResponse) String() string {
 func (*DrawResponse) ProtoMessage() {}
 
 func (x *DrawResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_msgTypes[4]
+	mi := &file_pkg_rewardpool_grpc_service_rewardpool_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -247,7 +247,7 @@ func (x *DrawResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DrawResponse.ProtoReflect.Descriptor instead.
 func (*DrawResponse) Descriptor() ([]byte, []int) {
-	return file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_rawDescGZIP(), []int{4}
+	return file_pkg_rewardpool_grpc_service_rewardpool_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *DrawResponse) GetRequestId() uint64 {
@@ -271,11 +271,11 @@ func (x *DrawResponse) GetError() string {
 	return ""
 }
 
-var File_pkg_rewardpool_grpc_service_proto_rewardpool_proto protoreflect.FileDescriptor
+var File_pkg_rewardpool_grpc_service_rewardpool_proto protoreflect.FileDescriptor
 
-const file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_rawDesc = "" +
+const file_pkg_rewardpool_grpc_service_rewardpool_proto_rawDesc = "" +
 	"\n" +
-	"2pkg/rewardpool-grpc-service/proto/rewardpool.proto\x12\n" +
+	",pkg/rewardpool-grpc-service/rewardpool.proto\x12\n" +
 	"rewardpool\"c\n" +
 	"\n" +
 	"RewardItem\x12\x17\n" +
@@ -297,26 +297,26 @@ const file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_rawDesc = "" +
 	"\x04Draw\x12\x17.rewardpool.DrawRequest\x1a\x18.rewardpool.DrawResponse(\x010\x01BhZfgithub.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/pkg/rewardpool-grpc-serviceb\x06proto3"
 
 var (
-	file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_rawDescOnce sync.Once
-	file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_rawDescData []byte
+	file_pkg_rewardpool_grpc_service_rewardpool_proto_rawDescOnce sync.Once
+	file_pkg_rewardpool_grpc_service_rewardpool_proto_rawDescData []byte
 )
 
-func file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_rawDescGZIP() []byte {
-	file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_rawDescOnce.Do(func() {
-		file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_rawDesc), len(file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_rawDesc)))
+func file_pkg_rewardpool_grpc_service_rewardpool_proto_rawDescGZIP() []byte {
+	file_pkg_rewardpool_grpc_service_rewardpool_proto_rawDescOnce.Do(func() {
+		file_pkg_rewardpool_grpc_service_rewardpool_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_pkg_rewardpool_grpc_service_rewardpool_proto_rawDesc), len(file_pkg_rewardpool_grpc_service_rewardpool_proto_rawDesc)))
 	})
-	return file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_rawDescData
+	return file_pkg_rewardpool_grpc_service_rewardpool_proto_rawDescData
 }
 
-var file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
-var file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_goTypes = []any{
+var file_pkg_rewardpool_grpc_service_rewardpool_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_pkg_rewardpool_grpc_service_rewardpool_proto_goTypes = []any{
 	(*RewardItem)(nil),       // 0: rewardpool.RewardItem
 	(*GetStateRequest)(nil),  // 1: rewardpool.GetStateRequest
 	(*GetStateResponse)(nil), // 2: rewardpool.GetStateResponse
 	(*DrawRequest)(nil),      // 3: rewardpool.DrawRequest
 	(*DrawResponse)(nil),     // 4: rewardpool.DrawResponse
 }
-var file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_depIdxs = []int32{
+var file_pkg_rewardpool_grpc_service_rewardpool_proto_depIdxs = []int32{
 	0, // 0: rewardpool.GetStateResponse.items:type_name -> rewardpool.RewardItem
 	1, // 1: rewardpool.RewardPoolService.GetState:input_type -> rewardpool.GetStateRequest
 	3, // 2: rewardpool.RewardPoolService.Draw:input_type -> rewardpool.DrawRequest
@@ -329,26 +329,26 @@ var file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_depIdxs = []int32{
 	0, // [0:1] is the sub-list for field type_name
 }
 
-func init() { file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_init() }
-func file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_init() {
-	if File_pkg_rewardpool_grpc_service_proto_rewardpool_proto != nil {
+func init() { file_pkg_rewardpool_grpc_service_rewardpool_proto_init() }
+func file_pkg_rewardpool_grpc_service_rewardpool_proto_init() {
+	if File_pkg_rewardpool_grpc_service_rewardpool_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_rawDesc), len(file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pkg_rewardpool_grpc_service_rewardpool_proto_rawDesc), len(file_pkg_rewardpool_grpc_service_rewardpool_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_goTypes,
-		DependencyIndexes: file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_depIdxs,
-		MessageInfos:      file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_msgTypes,
+		GoTypes:           file_pkg_rewardpool_grpc_service_rewardpool_proto_goTypes,
+		DependencyIndexes: file_pkg_rewardpool_grpc_service_rewardpool_proto_depIdxs,
+		MessageInfos:      file_pkg_rewardpool_grpc_service_rewardpool_proto_msgTypes,
 	}.Build()
-	File_pkg_rewardpool_grpc_service_proto_rewardpool_proto = out.File
-	file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_goTypes = nil
-	file_pkg_rewardpool_grpc_service_proto_rewardpool_proto_depIdxs = nil
+	File_pkg_rewardpool_grpc_service_rewardpool_proto = out.File
+	file_pkg_rewardpool_grpc_service_rewardpool_proto_goTypes = nil
+	file_pkg_rewardpool_grpc_service_rewardpool_proto_depIdxs = nil
 }

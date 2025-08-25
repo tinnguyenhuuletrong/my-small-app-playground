@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v6.32.0
-// source: pkg/rewardpool-grpc-service/proto/rewardpool.proto
+// source: pkg/rewardpool-grpc-service/rewardpool.proto
 
 package rewardpool_grpc_service
 
@@ -158,5 +158,5 @@ var RewardPoolService_ServiceDesc = grpc.ServiceDesc{
 			ClientStreams: true,
 		},
 	},
-	Metadata: "pkg/rewardpool-grpc-service/proto/rewardpool.proto",
+	Metadata: "pkg/rewardpool-grpc-service/rewardpool.proto",
 }

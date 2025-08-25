@@ -7,7 +7,6 @@ import (
 
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/actor"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
-	generated "github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/pkg/rewardpool-grpc-service/generated"
 	"google.golang.org/grpc"
 )
 
@@ -23,7 +22,7 @@ type ActorSystem interface {
 
 // RewardPoolService is a gRPC service that exposes the reward pool functionality.
 type RewardPoolService struct {
-	generated.UnimplementedRewardPoolServiceServer
+	UnimplementedRewardPoolServiceServer
 	system ActorSystem
 }
 
@@ -42,7 +41,7 @@ func ListenAndServe(ctx context.Context, system ActorSystem, listenAddress strin
 	}
 	s := grpc.NewServer()
 	grpcService := NewRewardPoolService(system)
-	generated.RegisterRewardPoolServiceServer(s, grpcService)
+	RegisterRewardPoolServiceServer(s, grpcService)
 
 	go func() {
 		<-ctx.Done()
@@ -53,23 +52,23 @@ func ListenAndServe(ctx context.Context, system ActorSystem, listenAddress strin
 }
 
 // GetState returns the current state of the reward pool.
-func (s *RewardPoolService) GetState(ctx context.Context, req *generated.GetStateRequest) (*generated.GetStateResponse, error) {
+func (s *RewardPoolService) GetState(ctx context.Context, req *GetStateRequest) (*GetStateResponse, error) {
 	state := s.system.State()
-	items := make([]*generated.RewardItem, 0, len(state))
+	items := make([]*RewardItem, 0, len(state))
 	for _, item := range state {
-		items = append(items, &generated.RewardItem{
+		items = append(items, &RewardItem{
 			ItemId:      item.ItemID,
 			Quantity:    int32(item.Quantity),
 			Probability: item.Probability,
 		})
 	}
-	return &generated.GetStateResponse{
+	return &GetStateResponse{
 		Items: items,
 	}, nil
 }
 
 // Draw draws items from the reward pool.
-func (s *RewardPoolService) Draw(stream generated.RewardPoolService_DrawServer) error {
+func (s *RewardPoolService) Draw(stream RewardPoolService_DrawServer) error {
 	for {
 		req, err := stream.Recv()
 		if err == io.EOF {
@@ -90,7 +89,7 @@ func (s *RewardPoolService) Draw(stream generated.RewardPoolService_DrawServer) 
 			if resp.Err != nil {
 				errMsg = resp.Err.Error()
 			}
-			if err := stream.Send(&generated.DrawResponse{
+			if err := stream.Send(&DrawResponse{
 				RequestId: resp.RequestID,
 				ItemId:    resp.Item,
 				Error:     errMsg,
