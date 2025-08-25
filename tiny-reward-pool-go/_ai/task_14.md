@@ -67,3 +67,26 @@ I have completed all the steps in the plan.
 - Integrated the gRPC server into the CLI application.
 - Added unit tests for the gRPC service.
 - Refactored the code to improve the structure and handle graceful shutdown.
+
+## Iter 2: Support Unlimited Quantity for PoolReward
+
+### Problem
+The current implementation of `PoolReward` uses an `int` for `Quantity`, which doesn't support the concept of an unlimited quantity for a reward item. This limits the flexibility of the reward pool, as some items might be intended to be always available.
+
+### Plan
+1.  **Introduce a constant for unlimited quantity:** In `internal/types/types.go`, define a constant `UnlimitedQuantity = -1`.
+2.  **Update `PoolReward` struct documentation:** Clarify that a `Quantity` of `-1` means the item is unlimited.
+3.  **Modify `rewardpool.Pool`:**
+    *   In `SelectItem`, check for `UnlimitedQuantity` before decrementing the quantity.
+    *   In `ApplyDrawLog`, add a similar check.
+4.  **Modify `selector.FenwickTreeSelector`:**
+    *   Update `Reset`, `Update`, and `UpdateItem` to handle `UnlimitedQuantity`. Items with unlimited quantity should always be included in the selection tree.
+5.  **Modify `selector.PrefixSumSelector`:**
+    *   Apply similar changes as in `FenwickTreeSelector`.
+6.  **Update configuration:**
+    *   Update `samples/config.yaml` with an example of an item with unlimited quantity.
+7.  **Update tests:**
+    *   Add test cases to `rewardpool/pool_test.go` and `selector/*_selector_test.go` to verify the behavior of unlimited quantity.
+8.  **Testing**:
+    * make sure `make check` pass 
+    * make sure `make test` pass

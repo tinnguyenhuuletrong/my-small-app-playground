@@ -1,20 +1,13 @@
 {
     "task": "create a planning for next task",
-    "save_to": "create _ai/task_14.md",
+    "save_to": "create _ai/task_14.md iter 2",
     "target": {
-        "scenario": "add /pkg/rewardpool-grpc-service",
         "goal": [{
-            "target": "add grpc service module for actor",
-            "requirements": {
-                "1": "like @cmd/cli/tui. New function accept an actor as reference -> maximize flexibility extendable interface",
-                "2": "support grpc method State, Draws(batch)",
-                "3": "define proto file, version inside module -> we publish it into registry later",
-                "4": "update @cmd/cli to start a grpc service ( optional yaml config, default is false )"
-            }
+            "target": "support PoolReward unlimited Quantity amount"
         }]
     },
     "steps": {
-        "1": "read current source code and current ui in attachment",
-        "3": "create a task + planning"
+        "1": "read current source code",
+        "2": "create a task + planning"
     }
 }
