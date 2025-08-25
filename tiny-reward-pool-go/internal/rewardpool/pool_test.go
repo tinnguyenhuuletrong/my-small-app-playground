@@ -124,3 +124,78 @@ func TestPool_UpdateItem(t *testing.T) {
 	assert.Equal(t, 10, mockSelector.updatedQuantity)
 	assert.Equal(t, int64(50), mockSelector.updatedProbability)
 }
+
+func TestTransactionalDrawWithUnlimitedQuantity(t *testing.T) {
+	// Initial setup for the test
+	initialCatalog := []types.PoolReward{
+		{ItemID: "unlimited_item", Quantity: types.UnlimitedQuantity, Probability: 1.0},
+	}
+	pool := NewPool(initialCatalog)
+
+	ctx := &types.Context{
+		WAL:   &utils.MockWAL{},
+		Utils: &utils.MockUtils{},
+	}
+
+	// SelectItem should stage the item
+	item, err := pool.SelectItem(ctx)
+	if err != nil {
+		t.Fatalf("SelectItem failed: %v", err)
+	}
+	if item == "" || item != "unlimited_item" {
+		t.Fatalf("Expected unlimited_item, got %v", item)
+	}
+
+	// Verify pendingDraws and selector state after SelectItem
+	if pool.pendingDraws["unlimited_item"] != 1 {
+		t.Errorf("Expected pendingDraws[unlimited_item] to be 1, got %d", pool.pendingDraws["unlimited_item"])
+	}
+	if pool.selector.GetItemRemaining("unlimited_item") != types.UnlimitedQuantity {
+		t.Errorf("Expected selector remaining unlimited_item to be %d, got %d", types.UnlimitedQuantity, pool.selector.GetItemRemaining("unlimited_item"))
+	}
+
+	// CommitDraw should not change the quantity and clear pendingDraws
+	pool.CommitDraw()
+	val := pool.GetItemRemaining("unlimited_item")
+	if val != types.UnlimitedQuantity {
+		t.Fatalf("Expected catalog quantity %d after commit, got %d", types.UnlimitedQuantity, val)
+	}
+	if pool.pendingDraws["unlimited_item"] != 0 {
+		t.Errorf("Expected pendingDraws[unlimited_item] to be 0 after commit, got %d", pool.pendingDraws["unlimited_item"])
+	}
+	// Selector state should remain unlimited
+	if pool.selector.GetItemRemaining("unlimited_item") != types.UnlimitedQuantity {
+		t.Errorf("Expected selector remaining unlimited_item to be %d after commit, got %d", types.UnlimitedQuantity, pool.selector.GetItemRemaining("unlimited_item"))
+	}
+
+	// Test RevertDraw
+	item, err = pool.SelectItem(ctx)
+	if err != nil {
+		t.Fatalf("SelectItem failed for revert test: %v", err)
+	}
+	if pool.pendingDraws["unlimited_item"] != 1 {
+		t.Errorf("Revert test: Expected pendingDraws[unlimited_item] to be 1, got %d", pool.pendingDraws["unlimited_item"])
+	}
+	if pool.selector.GetItemRemaining("unlimited_item") != types.UnlimitedQuantity {
+		t.Errorf("Revert test: Expected selector remaining unlimited_item to be %d, got %d", types.UnlimitedQuantity, pool.selector.GetItemRemaining("unlimited_item"))
+	}
+
+	pool.RevertDraw()
+	if pool.pendingDraws["unlimited_item"] != 0 {
+		t.Fatalf("Expected pendingDraws[unlimited_item] 0 after revert, got %d", pool.pendingDraws["unlimited_item"])
+	}
+	// Selector state should be back to initial quantity after revert
+	if pool.selector.GetItemRemaining("unlimited_item") != types.UnlimitedQuantity {
+		t.Errorf("Expected selector remaining unlimited_item to be %d after revert, got %d", types.UnlimitedQuantity, pool.selector.GetItemRemaining("unlimited_item"))
+	}
+
+	// Test ApplyDrawLog
+	pool.ApplyDrawLog("unlimited_item")
+	val = pool.GetItemRemaining("unlimited_item")
+	if val != types.UnlimitedQuantity {
+		t.Fatalf("Expected catalog quantity %d after ApplyDrawLog, got %d", types.UnlimitedQuantity, val)
+	}
+	if pool.selector.GetItemRemaining("unlimited_item") != types.UnlimitedQuantity {
+		t.Errorf("Expected selector remaining unlimited_item to be %d after ApplyDrawLog, got %d", types.UnlimitedQuantity, pool.selector.GetItemRemaining("unlimited_item"))
+	}
+}

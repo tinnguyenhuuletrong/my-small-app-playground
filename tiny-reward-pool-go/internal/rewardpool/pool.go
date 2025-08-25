@@ -80,7 +80,9 @@ func (p *Pool) SelectItem(ctx *types.Context) (string, error) {
 
 	p.pendingDraws[selectedItemID]++
 	// Immediately decrement the quantity in the selector to prevent over-draws
-	p.selector.Update(selectedItemID, -1)
+	if p.GetItemRemaining(selectedItemID) != types.UnlimitedQuantity {
+		p.selector.Update(selectedItemID, -1)
+	}
 
 	return selectedItemID, nil
 }

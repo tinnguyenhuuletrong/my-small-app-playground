@@ -60,7 +60,7 @@ func (pss *PrefixSumSelector) Reset(catalog []types.PoolReward) {
 		pss.itemIndex[item.ItemID] = i
 		pss.itemInfo[item.ItemID] = &pss.items[i]
 
-		if item.Quantity > 0 {
+		if item.Quantity > 0 || item.Quantity == types.UnlimitedQuantity {
 			currentWeight += item.Probability
 		}
 		pss.prefixSums[i] = currentWeight
@@ -83,7 +83,7 @@ func (pss *PrefixSumSelector) Select(ctx *types.Context) (string, error) {
 	}
 
 	selectedItemID := pss.itemIDs[idx]
-	if pss.itemInfo[selectedItemID].Quantity <= 0 {
+	if pss.itemInfo[selectedItemID].Quantity <= 0 && pss.itemInfo[selectedItemID].Quantity != types.UnlimitedQuantity {
 		return "", fmt.Errorf("internal error: selected item %s has zero quantity", selectedItemID)
 	}
 
@@ -116,6 +116,10 @@ func (pss *PrefixSumSelector) Update(itemID string, delta int64) {
 	}
 
 	item := pss.itemInfo[itemID]
+	if item.Quantity == types.UnlimitedQuantity {
+		return // Do not update quantity for unlimited items
+	}
+
 	oldQuantity := item.Quantity
 	newQuantity := oldQuantity + int(delta)
 	item.Quantity = newQuantity
@@ -137,22 +141,33 @@ func (pss *PrefixSumSelector) Update(itemID string, delta int64) {
 
 // UpdateItem updates the quantity and probability of a specific item.
 func (pss *PrefixSumSelector) UpdateItem(itemID string, quantity int, probability int64) {
-	_, ok := pss.itemIndex[itemID]
+	idx, ok := pss.itemIndex[itemID]
 	if !ok {
 		return // Item not found
 	}
 
-	// A simple way to handle updates is to rebuild the selector.
-	// This is less efficient but guarantees correctness.
-	for i := range pss.items {
-		if pss.items[i].ItemID == itemID {
-			pss.items[i].Quantity = quantity
-			pss.items[i].Probability = probability
-			break
-		}
+	item := pss.itemInfo[itemID]
+	var oldProbability int64
+	if item.Quantity > 0 || item.Quantity == types.UnlimitedQuantity {
+		oldProbability = item.Probability
 	}
 
-	pss.Reset(pss.items)
+	item.Quantity = quantity
+	item.Probability = probability
+
+	var newProbability int64
+	if item.Quantity > 0 || item.Quantity == types.UnlimitedQuantity {
+		newProbability = item.Probability
+	}
+
+	weightChange := newProbability - oldProbability
+
+	if weightChange != 0 {
+		for i := idx; i < len(pss.prefixSums); i++ {
+			pss.prefixSums[i] += weightChange
+		}
+		pss.totalWeight += weightChange
+	}
 }
 
 // TotalAvailable returns the total weight of all items currently available for selection.

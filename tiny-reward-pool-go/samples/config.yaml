@@ -13,6 +13,12 @@ pool:
     - item_id: "rock"
       quantity: 100
       probability: 40
+    - item_id: "mud"
+      quantity: -1
+      probability: 70
+    - item_id: "log"
+      quantity: -1
+      probability: 50
 wal:
   max_file_size_kb: 1024
   max_request_buffer_size: 512

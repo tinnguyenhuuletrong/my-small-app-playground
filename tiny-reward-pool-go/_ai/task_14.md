@@ -90,3 +90,14 @@ The current implementation of `PoolReward` uses an `int` for `Quantity`, which d
 8.  **Testing**:
     * make sure `make check` pass 
     * make sure `make test` pass
+
+### Result
+I have successfully implemented the support for unlimited quantity for `PoolReward` items. 
+
+- I introduced a `types.UnlimitedQuantity` constant and updated the relevant modules (`rewardpool`, `selector`) to handle it correctly.
+- The quantity of items with `types.UnlimitedQuantity` is not decremented upon drawing.
+- I updated the configuration file with an example of an unlimited quantity item.
+- I added comprehensive unit tests for the reward pool and selectors to ensure the correctness of the implementation.
+- I also added a distribution test to verify the behavior of the system with unlimited quantity items.
+
+All checks and tests have passed, confirming that the changes are working as expected and have not introduced any regressions.

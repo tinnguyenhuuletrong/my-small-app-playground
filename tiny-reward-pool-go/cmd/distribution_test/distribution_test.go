@@ -245,3 +245,79 @@ func assertDistribution(t *testing.T, counts map[string]int, totalDraws int, gol
 	}
 }
 
+func TestRewardDistributionWithUnlimitedQuantity(t *testing.T) {
+	selectors := []struct {
+		name     string
+		selector types.ItemSelector
+	}{
+		{"PrefixSumSelector", selector.NewPrefixSumSelector()},
+		{"FenwickTreeSelector", selector.NewFenwickTreeSelector()},
+	}
+
+	const totalDraws = 100000
+
+	for _, s := range selectors {
+		t.Run(s.name, func(t *testing.T) {
+			ctx := &types.Context{Utils: &utils.MockUtils{}}
+			rewards := []types.PoolReward{
+				{ItemID: "gold", Quantity: 50000, Probability: 10},
+				{ItemID: "silver", Quantity: 1000000, Probability: 20},
+				{ItemID: "unlimited_rock", Quantity: types.UnlimitedQuantity, Probability: 70},
+			}
+			pool := rewardpool.NewPool(
+				rewards,
+				rewardpool.PoolOptional{
+					Selector: s.selector,
+				},
+			)
+			w := &utils.MockWAL{}
+			ctx.WAL = w
+
+			opt := &actor.SystemOptional{RequestBufferSize: 1000, FlushAfterNDraw: 1000}
+			sys, err := actor.NewSystem(ctx, pool, opt)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+
+			counts := make(map[string]int)
+			for i := 0; i < totalDraws; i++ {
+				resp := <-sys.Draw()
+				if resp.Err == nil {
+					counts[resp.Item]++
+				}
+			}
+			sys.Stop()
+
+			fmt.Printf("\n--- Distribution Report for %s (with Unlimited Quantity) ---\n", s.name)
+			fmt.Println("|      Item      |   Count   | Proportion |")
+			fmt.Println("|----------------|-----------|------------|")
+
+			totalProbability := int64(0)
+			for _, r := range rewards {
+				totalProbability += r.Probability
+			}
+
+			for _, r := range rewards {
+				expectedProp := float64(r.Probability) / float64(totalProbability)
+				actualProp := float64(counts[r.ItemID]) / float64(totalDraws)
+				fmt.Printf("| %-14s | %9d |   %.4f   (expected %.4f) |\n", r.ItemID, counts[r.ItemID], actualProp, expectedProp)
+			}
+			fmt.Println("-------------------------------------------------")
+
+			finalState := pool.State()
+			for _, item := range finalState {
+				if item.ItemID == "unlimited_rock" {
+					if item.Quantity != types.UnlimitedQuantity {
+						t.Errorf("Expected unlimited_rock quantity to be %d, but got %d", types.UnlimitedQuantity, item.Quantity)
+					}
+				} else if item.ItemID == "gold" {
+					expectedQty := rewards[0].Quantity - counts["gold"]
+					if item.Quantity != expectedQty {
+						t.Errorf("Expected gold quantity to be %d, but got %d", expectedQty, item.Quantity)
+					}
+				}
+			}
+		})
+	}
+}

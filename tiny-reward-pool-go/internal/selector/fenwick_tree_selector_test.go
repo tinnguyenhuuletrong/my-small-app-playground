@@ -166,3 +166,53 @@ func TestFenwickTreeSelector_IntegrationWithDraw(t *testing.T) {
 	_, err = fts.Select(ctx)
 	assert.Equal(t, types.ErrEmptyRewardPool, err)
 }
+
+func TestFenwickTreeSelector_WithUnlimitedQuantity(t *testing.T) {
+	fts := NewFenwickTreeSelector()
+	ctx := &types.Context{}
+
+	catalog := []types.PoolReward{
+		{ItemID: "itemA", Quantity: 1, Probability: 10},
+		{ItemID: "unlimitedB", Quantity: types.UnlimitedQuantity, Probability: 20},
+		{ItemID: "itemC", Quantity: 0, Probability: 30},
+	}
+	fts.Reset(catalog)
+
+	// Test Reset
+	assert.Equal(t, int64(30), fts.TotalAvailable()) // 10 + 20
+	assert.Equal(t, 1, fts.GetItemRemaining("itemA"))
+	assert.Equal(t, types.UnlimitedQuantity, fts.GetItemRemaining("unlimitedB"))
+	assert.Equal(t, 0, fts.GetItemRemaining("itemC"))
+
+	// Test Select
+	// Draw itemA
+	fts.rand = rand.New(&utils.MockRandSource{Values: []int64{0}}) // Selects itemA
+	selected, err := fts.Select(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, "itemA", selected)
+	fts.Update(selected, -1)
+
+	assert.Equal(t, int64(20), fts.TotalAvailable())
+	assert.Equal(t, 0, fts.GetItemRemaining("itemA"))
+
+	// Draw unlimitedB
+	fts.rand = rand.New(&utils.MockRandSource{Values: []int64{0}}) // Selects unlimitedB
+	selected, err = fts.Select(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, "unlimitedB", selected)
+	fts.Update(selected, -1) // Should have no effect
+
+	assert.Equal(t, int64(20), fts.TotalAvailable())
+	assert.Equal(t, types.UnlimitedQuantity, fts.GetItemRemaining("unlimitedB"))
+
+	// Test UpdateItem
+	// Update unlimitedB to be limited
+	fts.UpdateItem("unlimitedB", 1, 25)
+	assert.Equal(t, int64(25), fts.TotalAvailable())
+	assert.Equal(t, 1, fts.GetItemRemaining("unlimitedB"))
+
+	// Update itemA to be unlimited
+	fts.UpdateItem("itemA", types.UnlimitedQuantity, 15)
+	assert.Equal(t, int64(40), fts.TotalAvailable()) // 25 + 15
+	assert.Equal(t, types.UnlimitedQuantity, fts.GetItemRemaining("itemA"))
+}

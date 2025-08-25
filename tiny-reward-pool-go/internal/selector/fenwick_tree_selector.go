@@ -62,7 +62,7 @@ func (fts *FenwickTreeSelector) Reset(catalog []types.PoolReward) {
 		fts.itemIndex[item.ItemID] = i
 		fts.itemInfo[item.ItemID] = &fts.items[i]
 
-		if item.Quantity > 0 {
+		if item.Quantity > 0 || item.Quantity == types.UnlimitedQuantity {
 			fts.tree.Add(i, item.Probability)
 			fts.totalWeight += item.Probability
 		}
@@ -84,7 +84,7 @@ func (fts *FenwickTreeSelector) Select(ctx *types.Context) (string, error) {
 	}
 
 	selectedItemID := fts.itemIDs[idx]
-	if fts.itemInfo[selectedItemID].Quantity <= 0 {
+	if fts.itemInfo[selectedItemID].Quantity <= 0 && fts.itemInfo[selectedItemID].Quantity != types.UnlimitedQuantity {
 		return "", fmt.Errorf("internal error: selected item %s has zero quantity", selectedItemID)
 	}
 
@@ -99,6 +99,10 @@ func (fts *FenwickTreeSelector) Update(itemID string, delta int64) {
 	}
 
 	item := fts.itemInfo[itemID]
+	if item.Quantity == types.UnlimitedQuantity {
+		return // Do not update quantity for unlimited items
+	}
+
 	oldQuantity := item.Quantity
 	newQuantity := oldQuantity + int(delta)
 	item.Quantity = newQuantity
@@ -124,7 +128,7 @@ func (fts *FenwickTreeSelector) UpdateItem(itemID string, quantity int, probabil
 	item := fts.itemInfo[itemID]
 
 	// If the item was in the tree, remove its old probability.
-	if item.Quantity > 0 {
+	if item.Quantity > 0 || item.Quantity == types.UnlimitedQuantity {
 		fts.tree.Add(idx, -item.Probability)
 		fts.totalWeight -= item.Probability
 	}
@@ -134,7 +138,7 @@ func (fts *FenwickTreeSelector) UpdateItem(itemID string, quantity int, probabil
 	item.Probability = probability
 
 	// If the item should now be in the tree, add its new probability.
-	if item.Quantity > 0 {
+	if item.Quantity > 0 || item.Quantity == types.UnlimitedQuantity {
 		fts.tree.Add(idx, item.Probability)
 		fts.totalWeight += item.Probability
 	}

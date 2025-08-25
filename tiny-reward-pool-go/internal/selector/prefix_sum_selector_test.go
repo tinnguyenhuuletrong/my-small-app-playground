@@ -164,3 +164,58 @@ func TestPrefixSumSelector_IntegrationWithDraw(t *testing.T) {
 	_, err = pss.Select(ctx)
 	assert.Equal(t, types.ErrEmptyRewardPool, err)
 }
+
+func TestPrefixSumSelector_WithUnlimitedQuantity(t *testing.T) {
+	pss := NewPrefixSumSelector()
+	ctx := &types.Context{}
+
+	catalog := []types.PoolReward{
+		{ItemID: "itemA", Quantity: 1, Probability: 10},
+		{ItemID: "unlimitedB", Quantity: types.UnlimitedQuantity, Probability: 20},
+		{ItemID: "itemC", Quantity: 0, Probability: 30},
+	}
+	pss.Reset(catalog)
+
+	// Test Reset
+	assert.Equal(t, int64(30), pss.TotalAvailable()) // 10 + 20
+	assert.Equal(t, 1, pss.GetItemRemaining("itemA"))
+	assert.Equal(t, types.UnlimitedQuantity, pss.GetItemRemaining("unlimitedB"))
+	assert.Equal(t, 0, pss.GetItemRemaining("itemC"))
+	assert.Equal(t, []int64{10, 30, 30}, pss.prefixSums)
+
+	// Test Select
+	// Draw itemA
+	pss.rand = rand.New(&utils.MockRandSource{Values: []int64{0}}) // Selects itemA
+	selected, err := pss.Select(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, "itemA", selected)
+	pss.Update(selected, -1)
+
+	assert.Equal(t, int64(20), pss.TotalAvailable())
+	assert.Equal(t, 0, pss.GetItemRemaining("itemA"))
+	assert.Equal(t, []int64{0, 20, 20}, pss.prefixSums)
+
+	// Draw unlimitedB
+	pss.rand = rand.New(&utils.MockRandSource{Values: []int64{0}}) // Selects unlimitedB
+	selected, err = pss.Select(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, "unlimitedB", selected)
+	pss.Update(selected, -1) // Should have no effect
+
+	assert.Equal(t, int64(20), pss.TotalAvailable())
+	assert.Equal(t, types.UnlimitedQuantity, pss.GetItemRemaining("unlimitedB"))
+	assert.Equal(t, []int64{0, 20, 20}, pss.prefixSums)
+
+	// Test UpdateItem
+	// Update unlimitedB to be limited
+	pss.UpdateItem("unlimitedB", 1, 25)
+	assert.Equal(t, int64(25), pss.TotalAvailable())
+	assert.Equal(t, 1, pss.GetItemRemaining("unlimitedB"))
+	assert.Equal(t, []int64{0, 25, 25}, pss.prefixSums)
+
+	// Update itemA to be unlimited
+	pss.UpdateItem("itemA", types.UnlimitedQuantity, 15)
+	assert.Equal(t, int64(40), pss.TotalAvailable()) // 25 + 15
+	assert.Equal(t, types.UnlimitedQuantity, pss.GetItemRemaining("itemA"))
+	assert.Equal(t, []int64{15, 40, 40}, pss.prefixSums)
+}

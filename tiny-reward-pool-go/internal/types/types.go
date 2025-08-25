@@ -26,7 +26,13 @@ type ConfigPool struct {
 	Catalog []PoolReward `json:"catalog" yaml:"catalog"`
 }
 
-// PoolReward represents a reward item in the pool
+const (
+	// UnlimitedQuantity represents an infinite quantity for a reward item.
+	UnlimitedQuantity = -1
+)
+
+// PoolReward represents a reward item in the pool.
+// A Quantity of -1 indicates an unlimited supply.
 type PoolReward struct {
 	ItemID      string `json:"item_id" yaml:"item_id"`
 	Quantity    int    `json:"quantity" yaml:"quantity"`
