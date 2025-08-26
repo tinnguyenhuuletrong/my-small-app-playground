@@ -3,6 +3,8 @@
 A high-performance, in-memory Reward Pool Service written in Go. Designed for rapid, reliable reward distribution with robust logging and snapshotting.
 
 <video controls src="doc/demo.mp4" title="Title"></video>
+https://github.com/user-attachments/assets/eb0a256e-d5cb-4e91-8733-cdfffb689fa8
+
 
 ## Features
 - In-memory reward pool with configurable item catalog via YAML.
