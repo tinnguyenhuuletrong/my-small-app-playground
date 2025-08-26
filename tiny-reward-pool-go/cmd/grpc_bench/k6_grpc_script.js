@@ -12,15 +12,30 @@ export default () => {
     plaintext: true
   });
 
-  const data = { count: 1 };
-  const response = client.invoke('rewardpool.RewardPoolService/Draw', data);
 
-  check(response, {
-    'status is OK': (r) => r && r.status === grpc.StatusOK,
-  });
+  // draw 10 times per request
+  const data = { count: 10 };
+  const stream = new grpc.Stream(client, 'rewardpool.RewardPoolService/Draw')
+  
+  let success = true
+  stream.on('data', data => {
+    // console.log(JSON.stringify(data));
+  })
 
-//   console.log(JSON.stringify(response.message));
+  stream.on('error', () => {
+    success = false
+  })
 
-  client.close();
-  sleep(1);
+  stream.on('end', (data) =>{
+    // console.log("end", JSON.stringify(data));
+    check(success, {
+      'status is OK': success,
+    });
+    client.close();
+  })
+
+  // finished write
+  stream.write(data)
+  stream.end()
+  sleep(0.5);
 };

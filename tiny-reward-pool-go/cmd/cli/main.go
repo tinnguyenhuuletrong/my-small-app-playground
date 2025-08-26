@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"log/slog"
@@ -24,8 +25,18 @@ import (
 )
 
 func main() {
+	var configPath string
+	flag.StringVar(&configPath, "config", "", "path to the config.yaml file")
+	flag.Parse()
+
+	if configPath == "" {
+		fmt.Println("Error: config file path is required.")
+		flag.Usage()
+		os.Exit(1)
+	}
+
 	c := &config.ConfigImpl{}
-	cfg, err := c.LoadYAML("samples/config.yaml")
+	cfg, err := c.LoadYAML(configPath)
 	if err != nil {
 		log.Fatalf("LoadConfig failed: %v", err)
 	}

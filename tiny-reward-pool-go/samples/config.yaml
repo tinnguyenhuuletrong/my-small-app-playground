@@ -20,7 +20,7 @@ pool:
       quantity: -1
       probability: 50
 wal:
-  max_file_size_kb: 200
+  max_file_size_kb: 512
   max_request_buffer_size: 512
   formatter: "string_line"
   flush_after_n_draw: 200

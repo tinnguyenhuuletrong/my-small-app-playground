@@ -4,7 +4,7 @@ BIN=bin/tiny-reward-pool-cli
 .PHONY: run build test proto-gen
 
 run:
-	go run $(CLI)
+	go run $(CLI) -config samples/config.yaml
 
 build:
 	go build -o $(BIN) $(CLI)
