@@ -8,6 +8,7 @@ import (
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/actor"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 )
 
 // ActorSystem is an interface that actor.System implements.
@@ -42,6 +43,10 @@ func ListenAndServe(ctx context.Context, system ActorSystem, listenAddress strin
 	s := grpc.NewServer()
 	grpcService := NewRewardPoolService(system)
 	RegisterRewardPoolServiceServer(s, grpcService)
+
+	// Addon: support grpc-cli or grpccurl list
+	// Register reflection service on gRPC server.
+	reflection.Register(s)
 
 	go func() {
 		<-ctx.Done()
