@@ -3,10 +3,14 @@
 ## Goal
 
 - High-performance, in-memory Reward Pool Service in Go
-- Implements PRD requirements: reward pool, WAL, config, CLI, and robust processing model
+- Implements PRD requirements: reward pool, WAL, config, CLI, gRPC service, and robust processing model
 
 ## Recent Updates (Aug 2025)
 
+- **Task_14:** Added a gRPC service and support for unlimited quantity items.
+  - **gRPC Service:** Implemented a gRPC service in `pkg/rewardpool-grpc-service` that exposes `GetState` and `Draw` methods. The service can be enabled and configured in `config.yaml`.
+  - **Unlimited Quantity:** Added support for reward items with unlimited quantity by setting the `quantity` field to `-1`. The core logic in `rewardpool` and `selector` has been updated to handle this.
+  - **New Tools:** Added `k6` for gRPC benchmarking and `protoc` for protobuf code generation.
 - **Task_13:** Evolved the application into a configurable service with an interactive TUI.
   - **YAML Configuration:** Moved from hardcoded paths and JSON to a `config.yaml`-based setup, allowing configuration of the working directory, reward pool, and WAL parameters (`max_file_size_kb`, `max_request_buffer_size`, `formatter`, `flush_after_n_draw`).
   - **Interactive TUI:** Replaced the basic CLI with a full-featured, interactive terminal user interface (TUI) built with `bubbletea`.
@@ -34,6 +38,7 @@
 - `internal/walstream`: Defines the `WALStreamer` interface and provides `NoOpStreamer` and `LogStreamer` implementations.
 - `internal/rewardpool`: Manages the reward items, now with snapshotting logic that includes the `last_request_id`.
 - `internal/recovery`: Recovers state from snapshots and WAL files, now also restoring the `last_request_id`.
+- `pkg/rewardpool-grpc-service`: The gRPC service implementation.
 - `cmd/cli`: The new interactive TUI application.
   - `tui/model.go`: The main `bubbletea` model, handling UI state, commands, and rendering.
 - `cmd/cli_v1`: The archived, non-interactive CLI.
@@ -41,6 +46,8 @@
 
 ## Key Features
 
+- **gRPC Service:** Exposes `GetState` and `Draw` methods for programmatic access.
+- **Unlimited Quantity:** Supports reward items with unlimited quantity.
 - **YAML Configuration:** All major settings are now managed in a single `config.yaml` file.
 - **Interactive TUI:** A rich, interactive terminal interface for managing and observing the reward pool in real-time.
 - **Persistent Request IDs:** Guarantees that request IDs are unique and monotonically increasing even after restarts.
@@ -55,6 +62,8 @@
 - **Unit Tests:** Run `make test` to execute all unit tests.
 - **Distribution Test:** Run `make distribution_test` to verify that the reward distribution is correct according to the configured probabilities.
 - **Benchmarks:** Run `make bench` to run all benchmark tests.
+- **Proto Generation:** Run `make proto-gen` to generate Go code from `.proto` files.
+- **gRPC Benchmarking:** Run `make bench-grpc` to run the k6 load test for the gRPC service.
 
 ## Example Usage
 
@@ -64,7 +73,6 @@
 
 ## Next Steps
 
-- Implement gRPC service to expose the reward pool functionality over the network.
 - Add more advanced TUI features, such as filtering and searching the command history.
 - Explore more sophisticated WAL streaming backends like Kafka or gRPC streams.
 - Enhance configuration validation and error handling.

@@ -1,9 +1,8 @@
 {
     "task": "update document",
     "resources": {
-        "diff.txt": "git diff between main branch (end of task 11) and end of task 12 & task_13",
-        "_ai/task_12.md": "task_12 detail",
-        "_ai/task_13.md": "task_13 detail"
+        "diff.txt": "git diff between main branch (end of task 13) and end of task_14",
+        "_ai/task_14.md": "task_14 detail"
     },
     "doc_to_update": {
         "agent_note": "_ai/doc/agent_note.md",
@@ -14,5 +13,8 @@
         "1": "read the resources",
         "2": "read current source code",
         "3": "update doc_to_update"
+    },
+    "note": {
+        "1": "update the tool instalation required like k6, grpc related (protoc, grpc for go)"
     }
 }

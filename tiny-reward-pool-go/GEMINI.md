@@ -8,7 +8,7 @@ This project is a high-performance, in-memory Reward Pool Service written in Go.
 
 The core of the service is a single-threaded, transactional processing model that ensures low-latency and high-throughput for reward distribution. A Write-Ahead Log (WAL) is implemented for deterministic recovery, with support for in-memory buffering and batch flushing to optimize I/O performance. The system enforces a strict WAL-first recovery model, where every WAL file must begin with a snapshot, ensuring a consistent and reliable state restoration.
 
-The project is structured into several internal modules, including `config`, `processing`, `recovery`, `replay`, `rewardpool`, `selector`, `types`, `utils`, and `wal`. A command-line interface (CLI) demo is provided in the `cmd/cli` directory, which showcases the usage of all modules, including graceful shutdown, periodic snapshotting, and WAL rotation.
+The project is structured into several internal modules, including `config`, `processing`, `recovery`, `replay`, `rewardpool`, `selector`, `types`, `utils`, and `wal`. A command-line interface (CLI) demo is provided in the `cmd/cli` directory, which showcases the usage of all modules, including graceful shutdown, periodic snapshotting, and WAL rotation. A gRPC service is also available in the `pkg/rewardpool-grpc-service` directory, providing programmatic access to the reward pool.
 
 The project uses Go modules for dependency management, with `github.com/edsrzf/mmap-go` being a key dependency for memory-mapped file I/O in the WAL implementation.
 
@@ -36,15 +36,27 @@ The project uses a `Makefile` for common development tasks.
     make test
     ```
 
+*   **Generate Go code from .proto files:**
+    ```sh
+    make proto-gen
+    ```
+
+*   **Run gRPC benchmark:**
+    ```sh
+    make bench-grpc
+    ```
+
 ## Development Conventions
 
 *   **Configuration:** The application is configured via a central `samples/config.yaml` file.
+*   **gRPC Service:** A gRPC service is defined in `pkg/rewardpool-grpc-service` and can be enabled via the configuration file. It provides `GetState` and `Draw` methods.
+*   **Unlimited Quantity:** The system supports reward items with unlimited quantity by setting the `quantity` field to `-1`.
 *   **Interactive TUI:** The primary interface is an interactive terminal application built with `bubbletea`, located in `cmd/cli`.
 *   **Persistent Request IDs:** The actor model ensures that `requestID` is persistent across restarts by saving it in snapshots and recovering it from the WAL.
 *   **WAL Streaming:** A `walstream` module with a dedicated `StreamingActor` provides asynchronous, non-blocking streaming of WAL entries for replication.
 *   **Modular Design:** The project follows a modular design, with clear separation of concerns between different packages.
 *   **Interfaces:** Interfaces are used to define contracts between different modules, promoting testability and loose coupling. A key example is the `ItemSelector` interface, which abstracts the underlying data structure for weighted random item selection. The `PoolReward.Probability` field has been updated to `int64` to align with the `ItemSelector` module's requirements. Implementations include `FenwickTreeSelector` and `PrefixSumSelector`.
-*   **Testing:** Unit tests are provided for all key modules, and the project includes benchmark tests for performance-critical components like the WAL.
+*   **Testing:** Unit tests are provided for all key modules, and the project includes benchmark tests for performance-critical components like the WAL and gRPC service.
 *   **Dependency Injection:** The `Context` struct is used for dependency injection, and the `rewardpool.Pool` accepts an `ItemSelector` to allow for different selection strategies.
 *   **Concurrency and Transactional Integrity:** A single-threaded processing model with a dedicated goroutine and buffered channels is used to handle state changes. The `Actor.Draw` method now returns a channel (`<-chan DrawResponse`) for a more idiomatic and developer-friendly API. To ensure data integrity and adhere to the WAL-first principle, the system uses a two-phase commit process, with the `ItemSelector` being the source of truth for all reward item states (quantity and probability):
     1.  **Stage:** An operation (like a draw or item update) is first staged in memory. For draws, the `ItemSelector` immediately decrements the item's quantity in its internal state to prevent over-draws during the transaction. The selection is based on the item's `Probability`, while availability is checked against its `Quantity`.
@@ -82,7 +94,7 @@ The development process is broken down into tasks, which are documented in files
     1.  **Review Previous Work:** Read the current task file to understand the overall `Target` and the `Problem` identified in the previous iteration.
     2.  **Formulate a `Plan`:** Based on the target and previous problems, create a clear and concise plan for the current iteration. This plan should be documented under the `Plan` section for the current `Iter`.
     3.  **Implement the Plan:** Execute the plan by writing or modifying the Go code and corresponding tests. The agent must adhere to the project's existing structure and conventions.
-    4.  **Verify with Tests:** After implementation, run the project's tests to ensure all changes are correct and have not introduced regressions. The primary command for this is `go test ./internal/...`. For benchmarks, use `make bench`.
+    4.  **Verify with Tests:** After implementation, run the project's tests to ensure all changes are correct and have not introduced regressions. The primary command for this is `go test ./...`. For benchmarks, use `make bench`.
     5.  **Document the `Result`:** Once the implementation is complete and verified, document the outcome under the `Result` section of the current iteration.
     6.  **Identify `Problem`s:** If any limitations, bugs, or areas for improvement are found, document them in the `Problem` section. This sets the stage for the next iteration.
 
