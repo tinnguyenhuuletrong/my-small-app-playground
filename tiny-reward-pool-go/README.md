@@ -2,6 +2,8 @@
 
 A high-performance, in-memory Reward Pool Service written in Go. Designed for rapid, reliable reward distribution with robust logging and snapshotting.
 
+<video controls src="doc/demo.mp4" title="Title"></video>
+
 ## Features
 - In-memory reward pool with configurable item catalog via YAML.
 - **gRPC Service**: Exposes `GetState` and `Draw` methods for programmatic access.

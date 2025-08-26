@@ -14,7 +14,8 @@ export default () => {
 
 
   // draw 10 times per request
-  const data = { count: 10 };
+  const batchedSzie = 10
+  const data = { count: batchedSzie };
   const stream = new grpc.Stream(client, 'rewardpool.RewardPoolService/Draw')
   
   let success = true
@@ -29,7 +30,7 @@ export default () => {
   stream.on('end', (data) =>{
     // console.log("end", JSON.stringify(data));
     check(success, {
-      'status is OK': success,
+      [`status is OK - batchedSzie=${batchedSzie} / call`]: success,
     });
     client.close();
   })
