@@ -1,13 +1,21 @@
 {
-    "task": "create a planning for next task",
-    "save_to": "create _ai/task_14.md iter 2",
+    "task": "brainstorm then create a planning for next task",
+    "save_to": "create _ai/task_15.md iter 1",
+    "resources": {
+        "lmax": "https://lmax-exchange.github.io/disruptor/user-guide/index.html",
+        "ring-buffer": "https://github.com/smallnest/ringbuffer"
+    },
     "target": {
-        "goal": [{
-            "target": "support PoolReward unlimited Quantity amount"
-        }]
+        "goal": [
+            {
+                "target": "brainstorm and evaluate is it worth to apply / learn from the lmax, ringbuffer. to make the engine faster"
+            }
+        ]
     },
     "steps": {
         "1": "read current source code",
-        "2": "create a task + planning"
+        "2": "read the resources",
+        "3": "find where we can improve by apply the resources tatic",
+        "4": "create implement planning in new task _ai/task_15.md"
     }
 }
