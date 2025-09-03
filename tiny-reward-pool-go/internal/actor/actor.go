@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"sync/atomic"
 
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/replay"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
@@ -105,7 +104,8 @@ func (a *RewardProcessorActor) handleMessage(msg interface{}) {
 }
 
 func (a *RewardProcessorActor) handleDraw(m DrawMessage) {
-	reqID := atomic.AddUint64(&a.requestID, 1)
+	a.requestID += 1
+	reqID := a.requestID
 	item, err := a.pool.SelectItem(a.ctx)
 	var walErr error
 
