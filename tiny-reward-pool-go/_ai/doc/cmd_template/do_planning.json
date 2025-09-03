@@ -1,21 +1,18 @@
 {
     "task": "brainstorm then create a planning for next task",
-    "save_to": "create _ai/task_15.md iter 1",
-    "resources": {
-        "lmax": "https://lmax-exchange.github.io/disruptor/user-guide/index.html",
-        "ring-buffer": "https://github.com/smallnest/ringbuffer"
-    },
+    "save_to": "create _ai/task_15.md",
     "target": {
-        "goal": [
-            {
-                "target": "brainstorm and evaluate is it worth to apply / learn from the lmax, ringbuffer. to make the engine faster"
-            }
+        "goal": "enhance wal file structure. it should have <Header><Data><Footer>",
+        "note": [
+            "total size of wal file in config should be respected. especially for mmap",
+            "fixed size for header and footer. Let propose a power of 2 file size for read and write efficient, reserve for future fields",
+            "header: for now contain version",
+            "footer: for now contain internal/types/types.go:WalLogRotateItem. better to delete this struct and move this into footer",
+            "modify existing modules and test adapt with this"
         ]
     },
     "steps": {
         "1": "read current source code",
-        "2": "read the resources",
-        "3": "find where we can improve by apply the resources tatic",
-        "4": "create implement planning in new task _ai/task_15.md"
+        "2": "create implement planning in new task _ai/task_15.md"
     }
 }
