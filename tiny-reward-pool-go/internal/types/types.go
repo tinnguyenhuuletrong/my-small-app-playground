@@ -40,9 +40,15 @@ type PoolReward struct {
 }
 
 // PoolSnapshot represents the data structure for a snapshot of the reward pool.
+// The SHA256 field contains a hash of the catalog data for integrity checking.
+// The hash is calculated from the JSON representation of the catalog after sorting
+// all items by ItemID (alphabetically) to ensure deterministic hashing.
+// This means the same catalog data will always produce the same hash regardless
+// of the original order of items in the catalog.
 type PoolSnapshot struct {
 	LastRequestID uint64       `json:"last_request_id"`
 	Catalog       []PoolReward `json:"catalog"`
+	SHA256        string       `json:"sha256"`
 }
 
 // WalLogEntry defines the interface for a WAL log entry.

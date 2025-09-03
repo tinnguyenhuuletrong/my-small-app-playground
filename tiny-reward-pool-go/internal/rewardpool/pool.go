@@ -1,8 +1,11 @@
 package rewardpool
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
+	"sort"
 
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/selector"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
@@ -55,8 +58,26 @@ func (p *Pool) CreateSnapshot() (*types.PoolSnapshot, error) {
 	// Reflect item remaining
 	snapshot_catalog := p.selector.SnapshotCatalog()
 
+	// Create a sorted copy of the catalog for deterministic hashing
+	sortedCatalog := make([]types.PoolReward, len(snapshot_catalog))
+	copy(sortedCatalog, snapshot_catalog)
+	sort.Slice(sortedCatalog, func(i, j int) bool {
+		return sortedCatalog[i].ItemID < sortedCatalog[j].ItemID
+	})
+
+	// Calculate SHA256 hash for integrity checking
+	hash := sha256.New()
+	// Hash the sorted catalog data by converting to JSON for consistent hashing
+	catalogJSON, err := json.Marshal(sortedCatalog)
+	if err != nil {
+		return nil, err
+	}
+	hash.Write(catalogJSON)
+	sha256Hash := hex.EncodeToString(hash.Sum(nil))
+
 	snap := &types.PoolSnapshot{
 		Catalog: snapshot_catalog,
+		SHA256:  sha256Hash,
 	}
 	return snap, nil
 }
