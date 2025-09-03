@@ -1,6 +1,8 @@
 package storage
 
 import (
+	"encoding/binary"
+	"io"
 	"math"
 	"os"
 
@@ -20,23 +22,59 @@ type FileStorageOpt struct {
 }
 
 func NewFileStorage(path string, ops ...FileStorageOpt) (*FileStorage, error) {
-	maxEntry := math.MaxInt
+	maxSize := math.MaxInt
 	for _, v := range ops {
-		maxEntry = v.SizeFileInBytes
+		if v.SizeFileInBytes > 0 {
+			maxSize = v.SizeFileInBytes
+		}
 	}
 
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	// Use O_RDWR instead of O_APPEND and O_WRONLY to allow seeking back to write the header
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		return nil, err
 	}
-	return &FileStorage{file: f, capacity: maxEntry}, nil
+
+	s := &FileStorage{file: f, capacity: maxSize}
+
+	info, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+
+	if info.Size() == 0 {
+		// New file, write header
+		hdr := types.WALHeader{
+			Magic:   types.WALMagic,
+			Version: types.WALVersion1,
+			Status:  types.WALStatusOpen,
+		}
+		if err := binary.Write(f, binary.LittleEndian, &hdr); err != nil {
+			f.Close()
+			return nil, err
+		}
+		s.usage = types.WALHeaderSize
+	} else {
+		// Existing file, just record usage
+		s.usage = int(info.Size())
+	}
+
+	// Seek to the end for subsequent writes
+	if _, err := f.Seek(0, io.SeekEnd); err != nil {
+		f.Close()
+		return nil, err
+	}
+
+	return s, nil
 }
 
 func (s *FileStorage) Write(data []byte) error {
-	if _, err := s.file.Write(data); err != nil {
+	n, err := s.file.Write(data)
+	if err != nil {
 		return err
 	}
-	s.usage += len(data)
+	s.usage += n
 	return nil
 }
 
@@ -52,15 +90,50 @@ func (s *FileStorage) Flush() error {
 	return s.file.Sync()
 }
 
+func (s *FileStorage) finalize(isRotated bool, nextPath string) error {
+	if err := s.file.Sync(); err != nil {
+		return err
+	}
+
+	// Seek to the beginning to write the header
+	if _, err := s.file.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+
+	hdr := types.WALHeader{
+		Magic:   types.WALMagic,
+		Version: types.WALVersion1,
+		Status:  types.WALStatusClosed,
+	}
+
+	if isRotated {
+		copy(hdr.NextWALPath[:], nextPath)
+	}
+
+	if err := binary.Write(s.file, binary.LittleEndian, &hdr); err != nil {
+		return err
+	}
+
+	return s.file.Sync()
+}
+
 func (s *FileStorage) Close() error {
+	if err := s.finalize(false, ""); err != nil {
+		// Log or handle error, but still try to close the file
+		s.file.Close()
+		return err
+	}
 	return s.file.Close()
 }
 
 func (s *FileStorage) Rotate(archivePath string) error {
-	// Get the path of the current file.
 	originalPath := s.file.Name()
 
-	// Close the current file.
+	// Finalize and close the current file
+	if err := s.finalize(true, archivePath); err != nil {
+		s.file.Close() // still try to close
+		return err
+	}
 	if err := s.file.Close(); err != nil {
 		return err
 	}
@@ -70,14 +143,14 @@ func (s *FileStorage) Rotate(archivePath string) error {
 		return err
 	}
 
-	// Create a new file at the original path.
-	newFile, err := os.OpenFile(originalPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	// Create a new storage object for the new file
+	newStorage, err := NewFileStorage(originalPath, FileStorageOpt{SizeFileInBytes: s.capacity})
 	if err != nil {
 		return err
 	}
 
-	// Update the storage with the new file.
-	s.file = newFile
-	s.usage = 0
+	// Replace the current storage's state with the new one
+	*s = *newStorage
+
 	return nil
 }

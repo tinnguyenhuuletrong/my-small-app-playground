@@ -9,7 +9,24 @@ const (
 	LogTypeDraw LogType = iota + 1
 	LogTypeUpdate
 	LogTypeSnapshot
-	LogTypeRotate
+)
+
+// WALHeader defines the structure of the WAL file header.
+type WALHeader struct {
+	Magic       uint32
+	Version     uint32
+	Status      uint32
+	NextWALPath [200]byte
+	Padding     [44]byte // To make the total size 256 bytes
+}
+
+// WAL file constants
+const (
+	WALMagic      uint32 = 0x746E776C // "tnwl" in little-endian
+	WALVersion1   uint32 = 1
+	WALHeaderSize        = 256
+	WALStatusOpen   uint32 = 0
+	WALStatusClosed uint32 = 1
 )
 
 // LogError defines the type of a WAL log error.
@@ -88,12 +105,7 @@ type WalLogSnapshotItem struct {
 	Path string `json:"path"`
 }
 
-// WalLogRotateItem represents a WAL log entry for a rotate operation
-type WalLogRotateItem struct {
-	WalLogEntryBase
-	OldPath string `json:"old_path"`
-	NewPath string `json:"new_path"`
-}
+
 
 // RewardPool interface
 type RewardPool interface {
@@ -143,7 +155,6 @@ type WAL interface {
 	LogDraw(item WalLogDrawItem) error
 	LogUpdate(item WalLogUpdateItem) error
 	LogSnapshot(item WalLogSnapshotItem) error
-	LogRotate(item WalLogRotateItem) error
 
 	// Flush writes all buffered log entries to disk
 	Flush() error

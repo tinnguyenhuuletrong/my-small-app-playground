@@ -50,8 +50,7 @@ func (w *walLogEntryWrapper) UnmarshalJSON(data []byte) error {
 		entry = &types.WalLogUpdateItem{}
 	case types.LogTypeSnapshot:
 		entry = &types.WalLogSnapshotItem{}
-	case types.LogTypeRotate:
-		entry = &types.WalLogRotateItem{}
+	
 	default:
 		return fmt.Errorf("unknown log type: %d", tf.Type)
 	}

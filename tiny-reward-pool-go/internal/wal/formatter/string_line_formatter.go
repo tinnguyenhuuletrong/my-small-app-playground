@@ -27,8 +27,6 @@ func (f *StringLineFormatter) Encode(items []types.WalLogEntry) ([]byte, error) 
 			sb.WriteString(fmt.Sprintf("%d,%s,%d,%d\n", item.GetType(), v.ItemID, v.Quantity, v.Probability))
 		case *types.WalLogSnapshotItem:
 			sb.WriteString(fmt.Sprintf("%d,%s\n", item.GetType(), v.Path))
-		case *types.WalLogRotateItem:
-			sb.WriteString(fmt.Sprintf("%d,%s,%s\n", item.GetType(), v.OldPath, v.NewPath))
 		}
 	}
 	return []byte(sb.String()), nil
@@ -112,18 +110,8 @@ func (f *StringLineFormatter) Decode(data []byte) ([]types.WalLogEntry, error) {
 				},
 				Path: parts[1],
 			})
-		case types.LogTypeRotate:
-			if len(parts) != 3 {
-				return nil, fmt.Errorf("invalid WAL log format for rotate: %s", line)
-			}
-			items = append(items, &types.WalLogRotateItem{
-				WalLogEntryBase: types.WalLogEntryBase{
-					Type: logType,
-				},
-				OldPath: parts[1],
-				NewPath: parts[2],
-			})
 		}
 	}
 	return items, nil
 }
+

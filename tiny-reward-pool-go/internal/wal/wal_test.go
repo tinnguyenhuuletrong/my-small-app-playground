@@ -1,114 +1,181 @@
 package wal_test
 
 import (
-	"encoding/json"
-	"os"
+	
+	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal"
-	walformatter "github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/formatter"
-	walstorage "github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/storage"
+	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/formatter"
+	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/storage"
 )
 
-func TestParseWAL(t *testing.T) {
-	path := "test_wal.log"
-	f, err := os.Create(path)
-	if err != nil {
-		t.Fatalf("failed to create wal log: %v", err)
-	}
+func TestWAL_JSON(t *testing.T) {
+	tempDir := t.TempDir()
+	walPath := filepath.Join(tempDir, "test.wal")
 
-	// Write test data in JSONL format
-	encoder := json.NewEncoder(f)
-	_ = encoder.Encode(types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 1, ItemID: "gold", Success: true})
-	_ = encoder.Encode(types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 2, ItemID: "silver", Success: true})
-	_ = encoder.Encode(types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw, Error: types.ErrorPoolEmpty}, RequestID: 3, Success: false})
-	_ = encoder.Encode(types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 4, ItemID: "bronze", Success: true})
-	f.Close()
+	// Create a new WAL with JSON formatter
+	w, err := wal.NewWAL(walPath, formatter.NewJSONFormatter(), nil)
+	require.NoError(t, err)
 
-	items, err := wal.ParseWAL(path, walformatter.NewJSONFormatter())
-	if err != nil {
-		t.Fatalf("ParseWAL failed: %v", err)
+	// Log some entries
+	drawItem := types.WalLogDrawItem{
+		WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw},
+		RequestID:       1,
+		ItemID:          "item1",
+		Success:         true,
 	}
-	defer os.Remove(path)
+	updateItem := types.WalLogUpdateItem{
+		WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeUpdate},
+		ItemID:          "item2",
+		Quantity:        10,
+		Probability:     100,
+	}
+	w.LogDraw(drawItem)
+	w.LogUpdate(updateItem)
 
-	if len(items) != 4 {
-		t.Fatalf("expected 4 items, got %d", len(items))
-	}
+	// Flush and close the WAL
+	err = w.Flush()
+	require.NoError(t, err)
+	err = w.Close()
+	require.NoError(t, err)
 
-	expectedItem0 := &types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 1, ItemID: "gold", Success: true}
-	item0, ok := items[0].(*types.WalLogDrawItem)
-	if !ok {
-		t.Fatalf("unexpected type for item 0")
-	}
-	if item0.Type != expectedItem0.Type || item0.RequestID != expectedItem0.RequestID || item0.ItemID != expectedItem0.ItemID || item0.Success != expectedItem0.Success {
-		t.Errorf("unexpected item 0: got %+v, want %+v", items[0], expectedItem0)
-	}
+	// Parse the WAL file
+	entries, hdr, err := wal.ParseWAL(walPath, formatter.NewJSONFormatter())
+	require.NoError(t, err)
+	require.NotNil(t, hdr)
+	assert.Len(t, entries, 2)
+	assert.Equal(t, types.WALStatusClosed, hdr.Status)
 
-	expectedItem2 := &types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw, Error: types.ErrorPoolEmpty}, RequestID: 3, Success: false}
-	item2, ok := items[2].(*types.WalLogDrawItem)
-	if !ok {
-		t.Fatalf("unexpected type for item 2")
-	}
-	if item2.Type != expectedItem2.Type || item2.RequestID != expectedItem2.RequestID || item2.Success != expectedItem2.Success || item2.Error != expectedItem2.Error {
-		t.Errorf("unexpected item 2: got %+v, want %+v", items[2], expectedItem2)
-	}
+	// Check the first entry
+	parsedDrawItem, ok := entries[0].(*types.WalLogDrawItem)
+	require.True(t, ok)
+	assert.Equal(t, drawItem.RequestID, parsedDrawItem.RequestID)
+	assert.Equal(t, drawItem.ItemID, parsedDrawItem.ItemID)
+	assert.Equal(t, drawItem.Success, parsedDrawItem.Success)
+
+	// Check the second entry
+	parsedUpdateItem, ok := entries[1].(*types.WalLogUpdateItem)
+	require.True(t, ok)
+	assert.Equal(t, updateItem.ItemID, parsedUpdateItem.ItemID)
+	assert.Equal(t, updateItem.Quantity, parsedUpdateItem.Quantity)
+	assert.Equal(t, updateItem.Probability, parsedUpdateItem.Probability)
 }
 
-func TestLogDraw(t *testing.T) {
-	path := "test_wal.log"
-	fileStorage, err := walstorage.NewFileStorage(path)
-	if err != nil {
-		t.Fatalf("Failed to create file storage: %v", err)
+func TestWAL_StringLine(t *testing.T) {
+	tempDir := t.TempDir()
+	walPath := filepath.Join(tempDir, "test.wal")
+
+	// Create a new WAL with StringLine formatter
+	w, err := wal.NewWAL(walPath, formatter.NewStringLineFormatter(), nil)
+	require.NoError(t, err)
+
+	// Log some entries
+	drawItem := types.WalLogDrawItem{
+		WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw},
+		RequestID:       1,
+		ItemID:          "item1",
+		Success:         true,
 	}
-	w, err := wal.NewWAL(path, walformatter.NewJSONFormatter(), fileStorage)
-	if err != nil {
-		t.Fatalf("Failed to create WAL: %v", err)
-	}
-	defer os.Remove(path)
-	defer w.Close()
-	item := types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 1, ItemID: "gold", Success: true}
-	if err := w.LogDraw(item); err != nil {
-		t.Fatalf("LogDraw failed: %v", err)
-	}
+	w.LogDraw(drawItem)
+
+	// Flush and close
+	err = w.Flush()
+	require.NoError(t, err)
+	err = w.Close()
+	require.NoError(t, err)
+
+	// Parse the WAL file
+	entries, _, err := wal.ParseWAL(walPath, formatter.NewStringLineFormatter())
+	require.NoError(t, err)
+	assert.Len(t, entries, 1)
+
+	// Check the first entry
+	parsedDrawItem, ok := entries[0].(*types.WalLogDrawItem)
+	require.True(t, ok)
+	assert.Equal(t, drawItem.RequestID, parsedDrawItem.RequestID)
 }
 
-func TestWALFlush(t *testing.T) {
-	path := "test_wal_flush.log"
-	fileStorage, err := walstorage.NewFileStorage(path)
-	if err != nil {
-		t.Fatalf("Failed to create file storage: %v", err)
-	}
-	w, err := wal.NewWAL(path, walformatter.NewJSONFormatter(), fileStorage)
-	if err != nil {
-		t.Fatalf("Failed to create WAL: %v", err)
-	}
-	defer os.Remove(path)
-	defer w.Close()
+func TestWAL_Rotate(t *testing.T) {
+	tempDir := t.TempDir()
+	walPath := filepath.Join(tempDir, "test.wal")
+	archivePath := filepath.Join(tempDir, "test.wal.rotated")
 
-	// Log one item to flush
-	item := types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 1, ItemID: "gold", Success: true}
-	if err := w.LogDraw(item); err != nil {
-		t.Fatalf("LogDraw failed: %v", err)
-	}
+	// Create a new WAL
+	w, err := wal.NewWAL(walPath, formatter.NewJSONFormatter(), nil)
+	require.NoError(t, err)
 
-	if err := w.Flush(); err != nil {
-		t.Fatalf("Flush failed: %v", err)
+	// Log an entry and flush
+	drawItem := types.WalLogDrawItem{
+		WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw},
+		RequestID:       1,
+		ItemID:          "item1",
+		Success:         true,
 	}
+	w.LogDraw(drawItem)
+	err = w.Flush()
+	require.NoError(t, err)
 
-	// Verify content
-	items, err := wal.ParseWAL(path, walformatter.NewJSONFormatter())
-	if err != nil {
-		t.Fatalf("ParseWAL failed after flush: %v", err)
+	// Rotate the WAL
+	err = w.Rotate(archivePath)
+	require.NoError(t, err)
+
+	// Check that the archived WAL exists and has a closed status
+	_, hdr, err := wal.ParseWAL(archivePath, formatter.NewJSONFormatter())
+	require.NoError(t, err)
+	require.NotNil(t, hdr)
+	assert.Equal(t, types.WALStatusClosed, hdr.Status)
+	assert.Contains(t, string(hdr.NextWALPath[:]), archivePath)
+
+	// Log another entry to the new WAL
+	updateItem := types.WalLogUpdateItem{
+		WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeUpdate},
+		ItemID:          "item2",
+		Quantity:        10,
+		Probability:     100,
 	}
-	if len(items) != 1 {
-		t.Fatalf("expected 1 item after flush, got %d", len(items))
+	w.LogUpdate(updateItem)
+	err = w.Flush()
+	require.NoError(t, err)
+	w.Close()
+
+	// Verify the content of the new WAL
+	entries, hdr, err := wal.ParseWAL(walPath, formatter.NewJSONFormatter())
+	require.NoError(t, err)
+	require.NotNil(t, hdr)
+	assert.Len(t, entries, 1)
+	assert.Equal(t, types.WALStatusClosed, hdr.Status)
+	parsedUpdateItem, ok := entries[0].(*types.WalLogUpdateItem)
+	require.True(t, ok)
+	assert.Equal(t, "item2", parsedUpdateItem.ItemID)
+}
+
+func TestWAL_Full(t *testing.T) {
+	tempDir := t.TempDir()
+	walPath := filepath.Join(tempDir, "test.wal")
+
+	// Create a file storage with a small capacity
+	// Capacity needs to be larger than header size
+	storage, err := storage.NewFileStorage(walPath, storage.FileStorageOpt{SizeFileInBytes: types.WALHeaderSize + 10})
+	require.NoError(t, err)
+
+	// Create a new WAL
+	w, err := wal.NewWAL(walPath, formatter.NewJSONFormatter(), storage)
+	require.NoError(t, err)
+
+	// Log an entry that will exceed the capacity
+	drawItem := types.WalLogDrawItem{
+		WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw},
+		RequestID:       1,
+		ItemID:          "a-very-long-item-id-to-exceed-capacity",
+		Success:         true,
 	}
-	item0, ok := items[0].(*types.WalLogDrawItem)
-	if !ok {
-		t.Fatalf("unexpected type for item 0")
-	}
-	if item0.ItemID != "gold" {
-		t.Errorf("unexpected item after flush: %+v", items[0])
-	}
+	w.LogDraw(drawItem)
+
+	// Flush should return ErrWALFull
+	err = w.Flush()
+	assert.Equal(t, types.ErrWALFull, err)
 }

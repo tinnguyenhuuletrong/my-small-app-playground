@@ -1,6 +1,8 @@
 package storage
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
 	"os"
 
@@ -46,14 +48,17 @@ func NewFileMMapStorage(path string, opts ...FileMMapStorageOps) (*FileMMapStora
 		return nil, err
 	}
 
-	offset := info.Size()
+	currentSize := info.Size()
+	isNewFile := currentSize == 0
 
-	if offset == 0 {
+	if isNewFile {
 		if err := f.Truncate(sizeMapInBytes); err != nil {
 			f.Close()
 			return nil, fmt.Errorf("failed to truncate file: %w", err)
 		}
-		offset = 0
+	} else {
+		// If the file exists, use its size for the mapping
+		sizeMapInBytes = currentSize
 	}
 
 	m, err := mmap.Map(f, mmap.RDWR, 0)
@@ -62,13 +67,31 @@ func NewFileMMapStorage(path string, opts ...FileMMapStorageOps) (*FileMMapStora
 		return nil, fmt.Errorf("failed to mmap file: %w", err)
 	}
 
-	return &FileMMapStorage{
+	s := &FileMMapStorage{
 		file:           f,
 		mmap:           m,
 		path:           path,
-		offset:         offset,
 		sizeMapInBytes: sizeMapInBytes,
-	}, nil
+	}
+
+	if isNewFile {
+		hdr := types.WALHeader{
+			Magic:   types.WALMagic,
+			Version: types.WALVersion1,
+			Status:  types.WALStatusOpen,
+		}
+		var buf bytes.Buffer
+		if err := binary.Write(&buf, binary.LittleEndian, &hdr); err != nil {
+			s.Close()
+			return nil, err
+		}
+		copy(s.mmap, buf.Bytes())
+		s.offset = int64(types.WALHeaderSize)
+	} else {
+		s.offset = currentSize
+	}
+
+	return s, nil
 }
 
 func (s *FileMMapStorage) Write(data []byte) error {
@@ -78,6 +101,7 @@ func (s *FileMMapStorage) Write(data []byte) error {
 }
 
 func (s *FileMMapStorage) CanWrite(size int) bool {
+	// For mmap, the capacity is the total length of the map.
 	return s.offset+int64(size) <= int64(len(s.mmap))
 }
 
@@ -89,12 +113,46 @@ func (s *FileMMapStorage) Flush() error {
 	return s.mmap.Flush()
 }
 
+func (s *FileMMapStorage) finalize(isRotated bool, nextPath string) error {
+	if err := s.mmap.Flush(); err != nil {
+		return err
+	}
+
+	hdr := types.WALHeader{
+		Magic:   types.WALMagic,
+		Version: types.WALVersion1,
+		Status:  types.WALStatusClosed,
+	}
+
+	if isRotated {
+		copy(hdr.NextWALPath[:], nextPath)
+	}
+
+	var buf bytes.Buffer
+	if err := binary.Write(&buf, binary.LittleEndian, &hdr); err != nil {
+		return err
+	}
+	copy(s.mmap, buf.Bytes())
+
+	return s.mmap.Flush()
+}
+
 func (s *FileMMapStorage) Close() error {
 	if s.mmap != nil {
-		if err := s.mmap.Unmap(); err != nil {
+		if err := s.finalize(false, ""); err != nil {
+			s.mmap.Unmap()
+			s.file.Close()
 			return err
 		}
-		s.mmap = nil
+		if err := s.mmap.Unmap(); err != nil {
+			s.file.Close()
+			return err
+		}
+		// Truncate the file to the actual size of the data written.
+		if err := s.file.Truncate(s.offset); err != nil {
+			s.file.Close()
+			return err
+		}
 	}
 	if s.file != nil {
 		return s.file.Close()
@@ -103,8 +161,17 @@ func (s *FileMMapStorage) Close() error {
 }
 
 func (s *FileMMapStorage) Rotate(archivePath string) error {
-	// Unmap and close current file
-	if err := s.Close(); err != nil {
+	// Finalize and close current file
+	if err := s.finalize(true, archivePath); err != nil {
+		s.mmap.Unmap()
+		s.file.Close()
+		return err
+	}
+	if err := s.mmap.Unmap(); err != nil {
+		s.file.Close()
+		return err
+	}
+	if err := s.file.Close(); err != nil {
 		return err
 	}
 

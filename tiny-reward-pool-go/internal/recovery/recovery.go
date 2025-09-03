@@ -1,6 +1,7 @@
 package recovery
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -17,20 +18,20 @@ func RecoverPool(snapshotPath, walPath, configPath string, formatter types.LogFo
 	var pool *rewardpool.Pool
 	var lastRequestID uint64
 
-	// 1. Parse the WAL file to find the latest snapshot and subsequent logs.
-	logItems, err := wal.ParseWAL(walPath, formatter)
-	if err != nil && !os.IsNotExist(err) {
-		return nil, 0, fmt.Errorf("failed to parse WAL: %w", err)
+	// 1. Unroll the WAL chain to get all log entries.
+	allLogItems, processedWalFiles, err := unrollWALChain(walPath, formatter)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to unroll WAL chain: %w", err)
 	}
 
 	// 2. Determine the starting point for recovery.
 	var snapshotToLoad string
 	var logsToReplay []types.WalLogEntry
 
-	// Find the last snapshot in the WAL.
+	// Find the last snapshot in the combined WAL entries.
 	lastSnapshotIdx := -1
-	for i := len(logItems) - 1; i >= 0; i-- {
-		if s, ok := logItems[i].(*types.WalLogSnapshotItem); ok {
+	for i := len(allLogItems) - 1; i >= 0; i-- {
+		if s, ok := allLogItems[i].(*types.WalLogSnapshotItem); ok {
 			snapshotToLoad = s.Path
 			lastSnapshotIdx = i
 			break
@@ -39,11 +40,11 @@ func RecoverPool(snapshotPath, walPath, configPath string, formatter types.LogFo
 
 	if lastSnapshotIdx != -1 {
 		// If a snapshot was found in the WAL, replay logs that came after it.
-		logsToReplay = logItems[lastSnapshotIdx+1:]
+		logsToReplay = allLogItems[lastSnapshotIdx+1:]
 	} else {
 		// No snapshot in the WAL, so use the standalone snapshotPath and replay all WAL entries.
 		snapshotToLoad = snapshotPath
-		logsToReplay = logItems
+		logsToReplay = allLogItems
 	}
 
 	// 3. Load the initial state from the chosen snapshot.
@@ -93,12 +94,14 @@ func RecoverPool(snapshotPath, walPath, configPath string, formatter types.LogFo
 		}
 	}
 
-	// 5. Clean up old WAL file. The actor will create a new one on startup.
-	if _, err := os.Stat(walPath); err == nil {
-		if err := os.Remove(walPath); err != nil {
-			// Log this error but don't fail the recovery.
-			if utils.GetLogger() != nil {
-				utils.GetLogger().Error("failed to remove old WAL file", "path", walPath, "error", err)
+	// 5. Clean up old WAL files.
+	for _, path := range processedWalFiles {
+		if _, err := os.Stat(path); err == nil {
+			if err := os.Remove(path); err != nil {
+				// Log this error but don't fail the recovery.
+				if utils.GetLogger() != nil {
+					utils.GetLogger().Error("failed to remove old WAL file", "path", path, "error", err)
+				}
 			}
 		}
 	}
@@ -112,10 +115,10 @@ func RecoverPoolFromConfig(snapshotPath, walPath string, initialPool *rewardpool
 	var pool *rewardpool.Pool
 	var lastRequestID uint64
 
-	// 1. Parse the WAL file to find the latest snapshot and subsequent logs.
-	logItems, err := wal.ParseWAL(walPath, formatter)
-	if err != nil && !os.IsNotExist(err) {
-		return nil, 0, fmt.Errorf("failed to parse WAL: %w", err)
+	// 1. Unroll the WAL chain to get all log entries.
+	allLogItems, processedWalFiles, err := unrollWALChain(walPath, formatter)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to unroll WAL chain: %w", err)
 	}
 
 	// 2. Determine the starting point for recovery.
@@ -124,8 +127,8 @@ func RecoverPoolFromConfig(snapshotPath, walPath string, initialPool *rewardpool
 
 	// Find the last snapshot in the WAL.
 	lastSnapshotIdx := -1
-	for i := len(logItems) - 1; i >= 0; i-- {
-		if s, ok := logItems[i].(*types.WalLogSnapshotItem); ok {
+	for i := len(allLogItems) - 1; i >= 0; i-- {
+		if s, ok := allLogItems[i].(*types.WalLogSnapshotItem); ok {
 			snapshotToLoad = s.Path
 			lastSnapshotIdx = i
 			break
@@ -134,11 +137,11 @@ func RecoverPoolFromConfig(snapshotPath, walPath string, initialPool *rewardpool
 
 	if lastSnapshotIdx != -1 {
 		// If a snapshot was found in the WAL, replay logs that came after it.
-		logsToReplay = logItems[lastSnapshotIdx+1:]
+		logsToReplay = allLogItems[lastSnapshotIdx+1:]
 	} else {
 		// No snapshot in the WAL, so use the standalone snapshotPath and replay all WAL entries.
 		snapshotToLoad = snapshotPath
-		logsToReplay = logItems
+		logsToReplay = allLogItems
 	}
 
 	// 3. Load the initial state from the chosen snapshot.
@@ -184,15 +187,63 @@ func RecoverPoolFromConfig(snapshotPath, walPath string, initialPool *rewardpool
 		}
 	}
 
-	// 5. Clean up old WAL file. The actor will create a new one on startup.
-	if _, err := os.Stat(walPath); err == nil {
-		if err := os.Remove(walPath); err != nil {
-			// Log this error but don't fail the recovery.
-			if utils.GetLogger() != nil {
-				utils.GetLogger().Error("failed to remove old WAL file", "path", walPath, "error", err)
+	// 5. Clean up old WAL files.
+	for _, path := range processedWalFiles {
+		if _, err := os.Stat(path); err == nil {
+			if err := os.Remove(path); err != nil {
+				// Log this error but don't fail the recovery.
+				if utils.GetLogger() != nil {
+					utils.GetLogger().Error("failed to remove old WAL file", "path", path, "error", err)
+				}
 			}
 		}
 	}
 
 	return pool, lastRequestID, nil
+}
+
+// unrollWALChain reads a chain of WAL files starting from startPath and returns all log entries.
+func unrollWALChain(startPath string, formatter types.LogFormatter) ([]types.WalLogEntry, []string, error) {
+	var allEntries []types.WalLogEntry
+	var processedFiles []string
+	walQueue := []string{startPath}
+
+	for len(walQueue) > 0 {
+		currentPath := walQueue[0]
+		walQueue = walQueue[1:]
+
+		// Avoid processing the same file twice in case of a loop (should not happen in normal operation)
+		isProcessed := false
+		for _, p := range processedFiles {
+			if p == currentPath {
+				isProcessed = true
+				break
+			}
+		}
+		if isProcessed {
+			continue
+		}
+
+		entries, hdr, err := wal.ParseWAL(currentPath, formatter)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue // A file in the chain might not exist, which is acceptable.
+			}
+			return nil, nil, fmt.Errorf("error parsing WAL file %s: %w", currentPath, err)
+		}
+
+		if entries != nil {
+			allEntries = append(allEntries, entries...)
+		}
+		processedFiles = append(processedFiles, currentPath)
+
+		if hdr != nil && hdr.Status == types.WALStatusClosed {
+			nextPathBytes := bytes.Trim(hdr.NextWALPath[:], "\x00")
+			if len(nextPathBytes) > 0 {
+				walQueue = append(walQueue, string(nextPathBytes))
+			}
+		}
+	}
+
+	return allEntries, processedFiles, nil
 }

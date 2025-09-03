@@ -1,8 +1,13 @@
 package wal
 
 import (
+	"bytes"
+	"encoding/binary"
+	"fmt"
+	"io"
+	"os"
+
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
-	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/utils"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/formatter"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/storage"
 )
@@ -74,11 +79,6 @@ func (w *WAL) LogSnapshot(item types.WalLogSnapshotItem) error {
 	return nil
 }
 
-func (w *WAL) LogRotate(item types.WalLogRotateItem) error {
-	w.buffer = append(w.buffer, &item)
-	return nil
-}
-
 func (w *WAL) Close() error {
 	return w.storage.Close()
 }
@@ -91,12 +91,54 @@ func (w *WAL) Rotate(path string) error {
 	return w.storage.Rotate(path)
 }
 
-// ParseWAL reads the WAL log file and returns a slice of WalLogEntry
-func ParseWAL(path string, format types.LogFormatter) ([]types.WalLogEntry, error) {
-	data, err := utils.ReadFileContent(path)
+// ParseWAL reads the WAL log file, decodes its content, and returns the log entries and the header.
+func ParseWAL(path string, format types.LogFormatter) ([]types.WalLogEntry, *types.WALHeader, error) {
+	f, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		if os.IsNotExist(err) {
+			return nil, nil, nil // Return empty if file doesn't exist
+		}
+		return nil, nil, err
+	}
+	defer f.Close()
+
+	// Read header
+	hdrBytes := make([]byte, types.WALHeaderSize)
+	
+	// Use io.ReadFull to ensure we read the whole header
+	n, err := io.ReadFull(f, hdrBytes)
+	if err != nil {
+		if err == io.EOF || err == io.ErrUnexpectedEOF {
+			// File is smaller than a header, so it's empty/invalid
+			return nil, nil, nil
+		}
+		return nil, nil, fmt.Errorf("failed to read WAL header (read %d bytes): %w", n, err)
 	}
 
-	return format.Decode(data)
+	var hdr types.WALHeader
+	if err := binary.Read(bytes.NewReader(hdrBytes), binary.LittleEndian, &hdr); err != nil {
+		return nil, nil, fmt.Errorf("failed to decode WAL header: %w", err)
+	}
+
+	// Basic validation
+	if hdr.Magic != types.WALMagic {
+		return nil, nil, fmt.Errorf("invalid WAL magic number")
+	}
+
+	// Read data
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return nil, &hdr, fmt.Errorf("failed to read WAL data: %w", err)
+	}
+
+	if len(data) == 0 {
+		return []types.WalLogEntry{}, &hdr, nil
+	}
+
+	entries, err := format.Decode(data)
+	if err != nil {
+		return nil, &hdr, err
+	}
+
+	return entries, &hdr, nil
 }

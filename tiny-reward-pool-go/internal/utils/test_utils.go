@@ -36,7 +36,7 @@ func (w *MockWAL) Size() (int64, error)                            { return 0, n
 func (m *MockWAL) LogDraw(item types.WalLogDrawItem) error         { return nil }
 func (m *MockWAL) LogUpdate(item types.WalLogUpdateItem) error     { return nil }
 func (m *MockWAL) LogSnapshot(item types.WalLogSnapshotItem) error { return nil }
-func (m *MockWAL) LogRotate(item types.WalLogRotateItem) error     { return nil }
+
 func (m *MockWAL) Close() error                                    { return nil }
 func (m *MockWAL) Flush() error                                    { return nil }
 func (m *MockWAL) Rotate(path string) error                        { return nil }

@@ -1,60 +1,78 @@
 package storage_test
 
 import (
+	"io"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/storage"
 )
 
 func TestFileStorage(t *testing.T) {
-	path := "test.log"
-	defer os.Remove(path)
+	tempDir := t.TempDir()
+	path := filepath.Join(tempDir, "test.log")
 
 	// Test NewFileStorage
 	fs, err := storage.NewFileStorage(path)
-	assert.NoError(t, err)
-	assert.NotNil(t, fs)
+	require.NoError(t, err)
+	require.NotNil(t, fs)
 
 	// Test Write
 	data := []byte("hello world")
 	err = fs.Write(data)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Test Flush
 	err = fs.Flush()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Verify content
-	content, err := os.ReadFile(path)
-	assert.NoError(t, err)
+	file, err := os.Open(path)
+	require.NoError(t, err)
+	_, err = file.Seek(types.WALHeaderSize, io.SeekStart)
+	require.NoError(t, err)
+	content, err := io.ReadAll(file)
+	require.NoError(t, err)
+	file.Close()
 	assert.Equal(t, data, content)
 
 	// Test Rotate
-	achivedPath := "test_achived.log"
-	defer os.Remove(achivedPath)
+	achivedPath := filepath.Join(tempDir, "test_achived.log")
 	err = fs.Rotate(achivedPath)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Verify content of the old, rotated file
-	archivedContent, err := os.ReadFile(achivedPath)
-	assert.NoError(t, err)
+	archivedFile, err := os.Open(achivedPath)
+	require.NoError(t, err)
+	_, err = archivedFile.Seek(types.WALHeaderSize, io.SeekStart)
+	require.NoError(t, err)
+	archivedContent, err := io.ReadAll(archivedFile)
+	require.NoError(t, err)
+	archivedFile.Close()
 	assert.Equal(t, data, archivedContent)
 
 	// Write to the new file at the original path
 	newData := []byte("hello new world")
 	err = fs.Write(newData)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = fs.Flush()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Verify new file content at the original path
-	newContent, err := os.ReadFile(path)
-	assert.NoError(t, err)
+	newFile, err := os.Open(path)
+	require.NoError(t, err)
+	_, err = newFile.Seek(types.WALHeaderSize, io.SeekStart)
+	require.NoError(t, err)
+	newContent, err := io.ReadAll(newFile)
+	require.NoError(t, err)
+	newFile.Close()
 	assert.Equal(t, newData, newContent)
 
 	// Test Close
 	err = fs.Close()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
