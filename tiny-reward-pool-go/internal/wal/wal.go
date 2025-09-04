@@ -22,7 +22,11 @@ var _ types.WAL = (*WAL)(nil)
 
 // Size returns the current size of the WAL content.
 func (w *WAL) Size() (int64, error) {
-	return w.storage.Size()
+	val, err := w.storage.Size()
+	if err != nil {
+		return 0, err
+	}
+	return val - types.WALHeaderSize, nil
 }
 
 func (w *WAL) Flush() error {
@@ -104,7 +108,7 @@ func ParseWAL(path string, format types.LogFormatter) ([]types.WalLogEntry, *typ
 
 	// Read header
 	hdrBytes := make([]byte, types.WALHeaderSize)
-	
+
 	// Use io.ReadFull to ensure we read the whole header
 	n, err := io.ReadFull(f, hdrBytes)
 	if err != nil {
