@@ -1,18 +1,22 @@
 {
     "task": "brainstorm then create a planning for next task",
-    "save_to": "create _ai/task_15.md",
+    "save_to": "create _ai/task_15.md iter_2",
+    "resources": {
+        "task_15.md": "./_ai/task_15.md"
+    },
     "target": {
-        "goal": "enhance wal file structure. it should have <Header><Data><Footer>",
+        "goal": "continue enhance wal file structure",
         "note": [
-            "total size of wal file in config should be respected. especially for mmap",
-            "fixed size for header and footer. Let propose a power of 2 file size for read and write efficient, reserve for future fields",
-            "header: for now contain version",
-            "footer: for now contain internal/types/types.go:WalLogRotateItem. better to delete this struct and move this into footer",
-            "modify existing modules and test adapt with this"
+            "Now we have header for each wal",
+            "simplify wal rotate. should be continuous number 000, 001, .... so one",
+            "header only need to store the wal no. no need previous or next path ( can be computed )",
+            "rework on rotate. should keep old file, move to new one",
+            "remove utils GenRotatedWALPath",
+            "simplify the recovery process. base on path -> search for latest uncomplete wal -> recovery -> continue to use it until full"
         ]
     },
     "steps": {
         "1": "read current source code",
-        "2": "create implement planning in new task _ai/task_15.md"
+        "2": "create implement planning in new task _ai/task_15.md iter_2"
     }
 }

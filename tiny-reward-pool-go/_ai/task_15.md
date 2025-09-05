@@ -70,7 +70,62 @@
     *   After implementing the code changes from steps 1-6, run `make check` to fix all compilation errors and warnings before proceeding to the testing phase.
 
 8.  **Update Tests:**
-    *   Update tests in `wal/`, `wal/storage/`, `recovery/`, and `actor/` packages to reflect the new header-only logic.
+    *   Update tests in `wal/`, `wal/storage/`, `recovery/`, and `actor/` to reflect the new header-only logic.
     *   Add a specific test for chained recovery across multiple rotated WAL files.
     *   Add a test for crash recovery (reading a WAL with `Status: Open` and ensuring logs are read correctly).
 
+---
+
+## Iter 2
+
+### Plan
+
+1.  **Update `internal/types/types.go`**:
+    *   Modify `WALHeader` struct: remove `NextWALPath` and add `SeqNo uint64`.
+    *   Add new constant `WALBaseName = "wal"`.
+
+2.  **Update `internal/utils/utils.go`**:
+    *   Remove `GenRotatedWALPath` function.
+    *   Add `GetWALFiles() ([]string, error)` to scan `walDir`, find files matching `wal.ddd`, and return them sorted numerically.
+    *   Add `GenNextWALPath() (string, uint64, error)` to determine the next sequence number and return the new path and sequence number.
+
+3.  **Update `internal/wal/storage/*.go`**:
+    *   Update `New...Storage` functions to accept a `seqNo uint64` and write it to the `WALHeader` on creation.
+    *   Remove `Rotate` method from the `Storage` interface.
+    *   Rename `Finalize` to `FinalizeAndClose` and simplify it to only update the header status to `Closed` before closing the file. The `isRotated` and `nextPath` parameters will be removed.
+    *   The `Close` method will now just call `FinalizeAndClose`.
+
+4.  **Update `internal/wal/wal.go`**:
+    *   Remove the `Rotate` method.
+    *   Update `NewWAL` to accept the `seqNo` and pass it to the storage constructor.
+    *   The `Close` method will call `storage.FinalizeAndClose()`.
+
+5.  **Update `internal/actor/actor.go`**:
+    *   Rewrite `handleWALFull` logic:
+        1.  Call `a.ctx.WAL.Close()` to finalize the current full WAL.
+        2.  Use `a.ctx.Utils.GenNextWALPath()` to get the path and sequence number for the new WAL.
+        3.  Create a new `WAL` instance using the new path and sequence number.
+        4.  Replace the old WAL instance in the actor's context: `a.ctx.WAL = newWAL`.
+        5.  Proceed with creating a snapshot and replaying pending logs to the new WAL instance.
+
+6.  **Update `internal/recovery/recovery.go`**:
+    *   Remove the `unrollWALChain` function.
+    *   Rewrite `RecoverPool` and `RecoverPoolFromConfig`:
+        1.  Use the new `utils.GetWALFiles()` to get a sorted list of all WAL files.
+        2.  Iterate through the files, parsing each one and appending its logs to a single list.
+        3.  After collecting all logs, find the last snapshot and determine which logs to replay.
+        4.  Load the snapshot and replay the necessary logs.
+        5.  The logic for deleting old WAL files must be removed.
+        6.  The recovery process should also return the path of the last WAL file, so the application can continue using it. If the last file is full, a new one should be created.
+
+7.  **Update `cmd/cli/main.go`**:
+    *   The main application logic needs to be updated to handle the new return values from `recovery.RecoverPool`. It will receive the last WAL path and must decide whether to continue with it or create a new one if it's full.
+
+8.  **Build and Verify (`make check`):**
+    *   After implementing the code changes from steps 1-6, run `make check` to fix all compilation errors and warnings before proceeding to the testing phase.
+
+9.  **Update Tests**:
+    *   Update unit and integration tests across `wal/`, `actor/`, and `recovery/` packages to align with the new sequential WAL file management.
+    *   Add specific tests for the WAL file scanning and sorting logic in `utils`.
+    *   Add tests to verify the recovery process correctly replays logs from a sequence of WAL files.
+    *   Ensure tests for the WAL rotation in the actor correctly create the next sequential file.
