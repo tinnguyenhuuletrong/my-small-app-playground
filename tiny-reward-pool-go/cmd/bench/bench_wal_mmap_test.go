@@ -25,14 +25,14 @@ func BenchmarkPoolDrawWithMmapWALChannel(b *testing.B) {
 	const walSize = 64 * 1024 * 1024
 
 	jsonFormatter := walformatter.NewStringLineFormatter()
-	fileStorage, err := walstorage.NewFileMMapStorage(walPath, walstorage.FileMMapStorageOps{
+	fileStorage, err := walstorage.NewFileMMapStorage(walPath, 0, walstorage.FileMMapStorageOps{
 		MMapFileSizeInBytes: walSize,
 	})
 	if err != nil {
 		b.Fatalf("failed to create file storage: %v", err)
 	}
 
-	w, err := wal.NewWAL(walPath, jsonFormatter, fileStorage)
+	w, err := wal.NewWAL(walPath, 0, jsonFormatter, fileStorage)
 	if err != nil {
 		b.Fatalf("failed to create mmap WAL: %v", err)
 	}

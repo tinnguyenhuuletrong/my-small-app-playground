@@ -8,6 +8,7 @@ import (
 
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/replay"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
+	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal"
 )
 
 // RewardProcessorActor encapsulates the state and behavior of the reward processing.
@@ -211,19 +212,32 @@ func (a *RewardProcessorActor) handleWALFull() error {
 	a.pendingLogs = a.pendingLogs[:0]
 	a.ctx.WAL.Reset() // Clear the unflushed buffer in the WAL
 
-	// 2. Rotate WAL file
-	rotatedPath := a.ctx.Utils.GenRotatedWALPath()
-	if rotatedPath != nil {
-		if err := a.ctx.WAL.Rotate(*rotatedPath); err != nil {
-			if logger := a.ctx.Utils.GetLogger(); logger != nil {
-				logger.Error("Failed to rotate WAL.", "error", err)
-			}
-			// This is a critical failure, can't proceed.
-			return err
+	// 2. Finalize the old WAL
+	if err := a.ctx.WAL.Close(); err != nil {
+		if logger := a.ctx.Utils.GetLogger(); logger != nil {
+			logger.Error("Failed to finalize old WAL.", "error", err)
 		}
+		return err
 	}
 
-	// 3. Create and log a snapshot to the new WAL
+	// 3. Create a new WAL
+	newPath, newSeqNo, err := a.ctx.Utils.GenNextWALPath()
+	if err != nil {
+		if logger := a.ctx.Utils.GetLogger(); logger != nil {
+			logger.Error("Failed to generate new WAL path.", "error", err)
+		}
+		return err
+	}
+	newWAL, err := wal.NewWAL(newPath, newSeqNo, nil, nil) // Using default formatter and storage
+	if err != nil {
+		if logger := a.ctx.Utils.GetLogger(); logger != nil {
+			logger.Error("Failed to create new WAL.", "error", err)
+		}
+		return err
+	}
+	a.ctx.WAL = newWAL
+
+	// 4. Create and log a snapshot to the new WAL
 	if err := a.snapshot(); err != nil {
 		// Also a critical failure.
 		return err
@@ -236,10 +250,10 @@ func (a *RewardProcessorActor) handleWALFull() error {
 		return err
 	}
 
-	// 4. Re-apply and re-log the preserved operations
+	// 5. Re-apply and re-log the preserved operations
 	a.replayAndRelog(logsToReplay)
 
-	// 5. Final flush attempt on the new WAL
+	// 6. Final flush attempt on the new WAL
 	if err := a.ctx.WAL.Flush(); err != nil {
 		if logger := a.ctx.Utils.GetLogger(); logger != nil {
 			logger.Error("CRITICAL: Flush failed even after WAL rotation. Data may be lost.", "error", err)

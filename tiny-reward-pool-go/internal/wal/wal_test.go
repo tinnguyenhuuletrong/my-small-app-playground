@@ -1,7 +1,6 @@
 package wal_test
 
 import (
-	
 	"path/filepath"
 	"testing"
 
@@ -18,7 +17,7 @@ func TestWAL_JSON(t *testing.T) {
 	walPath := filepath.Join(tempDir, "test.wal")
 
 	// Create a new WAL with JSON formatter
-	w, err := wal.NewWAL(walPath, formatter.NewJSONFormatter(), nil)
+	w, err := wal.NewWAL(walPath, 0, formatter.NewJSONFormatter(), nil)
 	require.NoError(t, err)
 
 	// Log some entries
@@ -70,7 +69,7 @@ func TestWAL_StringLine(t *testing.T) {
 	walPath := filepath.Join(tempDir, "test.wal")
 
 	// Create a new WAL with StringLine formatter
-	w, err := wal.NewWAL(walPath, formatter.NewStringLineFormatter(), nil)
+	w, err := wal.NewWAL(walPath, 0, formatter.NewStringLineFormatter(), nil)
 	require.NoError(t, err)
 
 	// Log some entries
@@ -99,71 +98,17 @@ func TestWAL_StringLine(t *testing.T) {
 	assert.Equal(t, drawItem.RequestID, parsedDrawItem.RequestID)
 }
 
-func TestWAL_Rotate(t *testing.T) {
-	tempDir := t.TempDir()
-	walPath := filepath.Join(tempDir, "test.wal")
-	archivePath := filepath.Join(tempDir, "test.wal.rotated")
-
-	// Create a new WAL
-	w, err := wal.NewWAL(walPath, formatter.NewJSONFormatter(), nil)
-	require.NoError(t, err)
-
-	// Log an entry and flush
-	drawItem := types.WalLogDrawItem{
-		WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw},
-		RequestID:       1,
-		ItemID:          "item1",
-		Success:         true,
-	}
-	w.LogDraw(drawItem)
-	err = w.Flush()
-	require.NoError(t, err)
-
-	// Rotate the WAL
-	err = w.Rotate(archivePath)
-	require.NoError(t, err)
-
-	// Check that the archived WAL exists and has a closed status
-	_, hdr, err := wal.ParseWAL(archivePath, formatter.NewJSONFormatter())
-	require.NoError(t, err)
-	require.NotNil(t, hdr)
-	assert.Equal(t, types.WALStatusClosed, hdr.Status)
-	assert.Contains(t, string(hdr.NextWALPath[:]), archivePath)
-
-	// Log another entry to the new WAL
-	updateItem := types.WalLogUpdateItem{
-		WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeUpdate},
-		ItemID:          "item2",
-		Quantity:        10,
-		Probability:     100,
-	}
-	w.LogUpdate(updateItem)
-	err = w.Flush()
-	require.NoError(t, err)
-	w.Close()
-
-	// Verify the content of the new WAL
-	entries, hdr, err := wal.ParseWAL(walPath, formatter.NewJSONFormatter())
-	require.NoError(t, err)
-	require.NotNil(t, hdr)
-	assert.Len(t, entries, 1)
-	assert.Equal(t, types.WALStatusClosed, hdr.Status)
-	parsedUpdateItem, ok := entries[0].(*types.WalLogUpdateItem)
-	require.True(t, ok)
-	assert.Equal(t, "item2", parsedUpdateItem.ItemID)
-}
-
 func TestWAL_Full(t *testing.T) {
 	tempDir := t.TempDir()
 	walPath := filepath.Join(tempDir, "test.wal")
 
 	// Create a file storage with a small capacity
 	// Capacity needs to be larger than header size
-	storage, err := storage.NewFileStorage(walPath, storage.FileStorageOpt{SizeFileInBytes: types.WALHeaderSize + 10})
+	storage, err := storage.NewFileStorage(walPath, 0, storage.FileStorageOpt{SizeFileInBytes: types.WALHeaderSize + 10})
 	require.NoError(t, err)
 
 	// Create a new WAL
-	w, err := wal.NewWAL(walPath, formatter.NewJSONFormatter(), storage)
+	w, err := wal.NewWAL(walPath, 0, formatter.NewJSONFormatter(), storage)
 	require.NoError(t, err)
 
 	// Log an entry that will exceed the capacity

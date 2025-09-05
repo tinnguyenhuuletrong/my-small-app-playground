@@ -21,7 +21,7 @@ type FileStorageOpt struct {
 	SizeFileInBytes int
 }
 
-func NewFileStorage(path string, ops ...FileStorageOpt) (*FileStorage, error) {
+func NewFileStorage(path string, seqNo uint64, ops ...FileStorageOpt) (*FileStorage, error) {
 	maxSize := math.MaxInt
 	for _, v := range ops {
 		if v.SizeFileInBytes > 0 {
@@ -49,6 +49,7 @@ func NewFileStorage(path string, ops ...FileStorageOpt) (*FileStorage, error) {
 			Magic:   types.WALMagic,
 			Version: types.WALVersion1,
 			Status:  types.WALStatusOpen,
+			SeqNo:   seqNo,
 		}
 		if err := binary.Write(f, binary.LittleEndian, &hdr); err != nil {
 			f.Close()
@@ -90,7 +91,7 @@ func (s *FileStorage) Flush() error {
 	return s.file.Sync()
 }
 
-func (s *FileStorage) finalize(isRotated bool, nextPath string) error {
+func (s *FileStorage) FinalizeAndClose() error {
 	if err := s.file.Sync(); err != nil {
 		return err
 	}
@@ -106,51 +107,17 @@ func (s *FileStorage) finalize(isRotated bool, nextPath string) error {
 		Status:  types.WALStatusClosed,
 	}
 
-	if isRotated {
-		copy(hdr.NextWALPath[:], nextPath)
-	}
-
 	if err := binary.Write(s.file, binary.LittleEndian, &hdr); err != nil {
 		return err
 	}
 
-	return s.file.Sync()
-}
+	if err := s.file.Sync(); err != nil {
+        return err
+    }
 
-func (s *FileStorage) Close() error {
-	if err := s.finalize(false, ""); err != nil {
-		// Log or handle error, but still try to close the file
-		s.file.Close()
-		return err
-	}
 	return s.file.Close()
 }
 
-func (s *FileStorage) Rotate(archivePath string) error {
-	originalPath := s.file.Name()
-
-	// Finalize and close the current file
-	if err := s.finalize(true, archivePath); err != nil {
-		s.file.Close() // still try to close
-		return err
-	}
-	if err := s.file.Close(); err != nil {
-		return err
-	}
-
-	// Rename the old file to the new path (archive it).
-	if err := os.Rename(originalPath, archivePath); err != nil {
-		return err
-	}
-
-	// Create a new storage object for the new file
-	newStorage, err := NewFileStorage(originalPath, FileStorageOpt{SizeFileInBytes: s.capacity})
-	if err != nil {
-		return err
-	}
-
-	// Replace the current storage's state with the new one
-	*s = *newStorage
-
-	return nil
+func (s *FileStorage) Close() error {
+	return s.FinalizeAndClose()
 }

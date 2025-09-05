@@ -37,10 +37,9 @@ func (m *MockWAL) LogDraw(item types.WalLogDrawItem) error         { return nil 
 func (m *MockWAL) LogUpdate(item types.WalLogUpdateItem) error     { return nil }
 func (m *MockWAL) LogSnapshot(item types.WalLogSnapshotItem) error { return nil }
 
-func (m *MockWAL) Close() error                                    { return nil }
-func (m *MockWAL) Flush() error                                    { return nil }
-func (m *MockWAL) Rotate(path string) error                        { return nil }
-func (m *MockWAL) Reset()                                          {}
+func (m *MockWAL) Close() error { return nil }
+func (m *MockWAL) Flush() error { return nil }
+func (m *MockWAL) Reset()       {}
 
 // MockUtils is a mock implementation of the types.Utils interface for testing.
 type MockUtils struct{}
@@ -51,10 +50,14 @@ func (m *MockUtils) GetLogger() *slog.Logger {
 	return nil // No logging in tests
 }
 
-func (m *MockUtils) GenRotatedWALPath() *string {
+func (m *MockUtils) GenSnapshotPath() *string {
 	return nil // Not used in this test
 }
 
-func (m *MockUtils) GenSnapshotPath() *string {
-	return nil // Not used in this test
+func (m *MockUtils) GetWALFiles() ([]string, error) {
+	return []string{}, nil
+}
+
+func (m *MockUtils) GenNextWALPath() (string, uint64, error) {
+	return "/tmp/wal.000", 0, nil
 }

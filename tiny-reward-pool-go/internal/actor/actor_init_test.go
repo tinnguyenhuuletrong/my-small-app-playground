@@ -63,12 +63,16 @@ func (m *mockUtilsForInit) GetLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 }
 
-func (m *mockUtilsForInit) GenRotatedWALPath() *string {
-	return nil
-}
-
 func (m *mockUtilsForInit) GenSnapshotPath() *string {
 	return &m.snapshotPath
+}
+
+func (m *mockUtilsForInit) GetWALFiles() ([]string, error) {
+	return []string{}, nil
+}
+
+func (m *mockUtilsForInit) GenNextWALPath() (string, uint64, error) {
+	return "/tmp/wal.000", 0, nil
 }
 
 func TestSystem_InitialSnapshotOnEmptyWAL(t *testing.T) {
@@ -155,7 +159,7 @@ func TestSystem_InitialSnapshotOnEmptyWAL(t *testing.T) {
 func TestSystem_StartWithNonSizableWAL(t *testing.T) {
 	// 1. Setup
 	// Use the original mockWAL which does not have the Size() method
-	wal := &mockWAL{size: 10}
+	wal := &mockWalWithSize{size: 10}
 	pool := &mockPoolForInit{}
 	mockUtils := &mockUtilsForInit{}
 	ctx := &types.Context{

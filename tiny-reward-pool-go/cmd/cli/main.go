@@ -88,7 +88,6 @@ func setup(cfg config.YAMLConfig) (*actor.System, *tui.ChannelWriter, error) {
 	baseDir := "."
 	tmpDir := baseDir + "/" + cfg.WorkingDir
 	snapshotPath := tmpDir + "/snapshot.json"
-	walPath := tmpDir + "/wal.log"
 
 	// Create tmpDir if not exists
 	if _, err := os.Stat(tmpDir); os.IsNotExist(err) {
@@ -113,18 +112,29 @@ func setup(cfg config.YAMLConfig) (*actor.System, *tui.ChannelWriter, error) {
 	// Create a pool from the config
 	initialPool := rewardpool.CreatePoolFromConfig(cfg.Pool)
 
-	pool, lastRequestID, err := recovery.RecoverPoolFromConfig(snapshotPath, walPath, initialPool, walFormatter, utils)
+	pool, lastRequestID, lastWalPath, err := recovery.RecoverPoolFromConfig(snapshotPath, initialPool, walFormatter, utils)
 	if err != nil {
 		return nil, nil, fmt.Errorf("recovery failed: %w", err)
 	}
 
-	fileStorage, err := walstorage.NewFileMMapStorage(walPath, walstorage.FileMMapStorageOps{
+	var w types.WAL
+	var seqNo uint64
+	if lastWalPath == "" {
+		var newWalPath string
+		newWalPath, seqNo, err = utils.GenNextWALPath()
+		if err != nil {
+			return nil, nil, fmt.Errorf("error generating new WAL path: %w", err)
+		}
+		lastWalPath = newWalPath
+	}
+
+	fileStorage, err := walstorage.NewFileMMapStorage(lastWalPath, seqNo, walstorage.FileMMapStorageOps{
 		MMapFileSizeInBytes: int64(cfg.WAL.MaxFileSizeKB * 1024), // From KB to Bytes
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("error creating file storage: %w", err)
 	}
-	w, err := wal.NewWAL(walPath, walFormatter, fileStorage)
+	w, err = wal.NewWAL(lastWalPath, seqNo, walFormatter, fileStorage)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error opening WAL: %w", err)
 	}

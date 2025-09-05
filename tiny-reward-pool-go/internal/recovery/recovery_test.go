@@ -17,11 +17,14 @@ import (
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/storage"
 )
 
-func setupTestPaths(t *testing.T) (string, string, string) {
+func setupTestPaths(t *testing.T) (string, string, string, string) {
 	tempDir := t.TempDir()
 	snapshotPath := filepath.Join(tempDir, "test_snapshot.json")
-	walPath := filepath.Join(tempDir, "test_wal.log")
+	walDir := filepath.Join(tempDir, "wal")
+	walPath := filepath.Join(walDir, "wal.000")
 	configPath := filepath.Join(tempDir, "test_config.json")
+
+	require.NoError(t, os.MkdirAll(walDir, 0755))
 
 	// Create a dummy config
 	f, err := os.Create(configPath)
@@ -30,14 +33,14 @@ func setupTestPaths(t *testing.T) (string, string, string) {
 	require.NoError(t, err)
 	f.Close()
 
-	return snapshotPath, walPath, configPath
+	return snapshotPath, walPath, configPath, walDir
 }
 
 func TestRecoverPool_Basic(t *testing.T) {
-	snapshotPath, walPath, configPath := setupTestPaths(t)
+	snapshotPath, walPath, configPath, walDir := setupTestPaths(t)
 
 	// Create a valid WAL file using the WAL writer
-	w, err := wal.NewWAL(walPath, formatter.NewJSONFormatter(), nil)
+	w, err := wal.NewWAL(walPath, 0, formatter.NewJSONFormatter(), nil)
 	require.NoError(t, err)
 
 	// Create a snapshot and log it
@@ -61,7 +64,7 @@ func TestRecoverPool_Basic(t *testing.T) {
 
 	// Now, recover
 	jsonFormatter := formatter.NewJSONFormatter()
-	recoveredPool, lastRequestID, err := recovery.RecoverPool(snapshotPath, walPath, configPath, jsonFormatter, &utils.MockUtils{})
+	recoveredPool, lastRequestID, _, err := recovery.RecoverPool(snapshotPath, configPath, jsonFormatter, utils.NewDefaultUtils(walDir, "", 0, nil))
 	require.NoError(t, err)
 
 	assert.Equal(t, uint64(12), lastRequestID)
@@ -69,13 +72,13 @@ func TestRecoverPool_Basic(t *testing.T) {
 }
 
 func TestRecoverPool_MMap(t *testing.T) {
-	snapshotPath, walPath, configPath := setupTestPaths(t)
+	snapshotPath, walPath, configPath, walDir := setupTestPaths(t)
 
 	// Write WAL using mmap storage
 	jsonFormatter := formatter.NewJSONFormatter()
-	mmapStorage, err := storage.NewFileMMapStorage(walPath)
+	mmapStorage, err := storage.NewFileMMapStorage(walPath, 0)
 	require.NoError(t, err)
-	w, err := wal.NewWAL(walPath, jsonFormatter, mmapStorage)
+	w, err := wal.NewWAL(walPath, 0, jsonFormatter, mmapStorage)
 	require.NoError(t, err)
 
 	// Create a snapshot and log it
@@ -97,7 +100,7 @@ func TestRecoverPool_MMap(t *testing.T) {
 	require.NoError(t, w.Close())
 
 	// Now, recover
-	recoveredPool, lastRequestID, err := recovery.RecoverPool(snapshotPath, walPath, configPath, jsonFormatter, &utils.MockUtils{})
+	recoveredPool, lastRequestID, _, err := recovery.RecoverPool(snapshotPath, configPath, jsonFormatter, utils.NewDefaultUtils(walDir, "", 0, nil))
 	require.NoError(t, err)
 
 	assert.Equal(t, uint64(22), lastRequestID)

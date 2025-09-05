@@ -29,7 +29,7 @@ type FileMMapStorageOps struct {
 	MMapFileSizeInBytes int64
 }
 
-func NewFileMMapStorage(path string, opts ...FileMMapStorageOps) (*FileMMapStorage, error) {
+func NewFileMMapStorage(path string, seqNo uint64, opts ...FileMMapStorageOps) (*FileMMapStorage, error) {
 	sizeMapInBytes := defaultMmapFileSize
 	for _, val := range opts {
 		if val.MMapFileSizeInBytes > 0 {
@@ -79,6 +79,7 @@ func NewFileMMapStorage(path string, opts ...FileMMapStorageOps) (*FileMMapStora
 			Magic:   types.WALMagic,
 			Version: types.WALVersion1,
 			Status:  types.WALStatusOpen,
+			SeqNo:   seqNo,
 		}
 		var buf bytes.Buffer
 		if err := binary.Write(&buf, binary.LittleEndian, &hdr); err != nil {
@@ -113,7 +114,11 @@ func (s *FileMMapStorage) Flush() error {
 	return s.mmap.Flush()
 }
 
-func (s *FileMMapStorage) finalize(isRotated bool, nextPath string) error {
+func (s *FileMMapStorage) FinalizeAndClose() error {
+	if s.mmap == nil {
+		return nil
+	}
+
 	if err := s.mmap.Flush(); err != nil {
 		return err
 	}
@@ -124,8 +129,10 @@ func (s *FileMMapStorage) finalize(isRotated bool, nextPath string) error {
 		Status:  types.WALStatusClosed,
 	}
 
-	if isRotated {
-		copy(hdr.NextWALPath[:], nextPath)
+	// Read the original SeqNo from the header before overwriting
+	var originalHdr types.WALHeader
+	if err := binary.Read(bytes.NewReader(s.mmap[:types.WALHeaderSize]), binary.LittleEndian, &originalHdr); err == nil {
+		hdr.SeqNo = originalHdr.SeqNo
 	}
 
 	var buf bytes.Buffer
@@ -134,60 +141,23 @@ func (s *FileMMapStorage) finalize(isRotated bool, nextPath string) error {
 	}
 	copy(s.mmap, buf.Bytes())
 
-	return s.mmap.Flush()
-}
-
-func (s *FileMMapStorage) Close() error {
-	if s.mmap != nil {
-		if err := s.finalize(false, ""); err != nil {
-			s.mmap.Unmap()
-			s.file.Close()
-			return err
-		}
-		if err := s.mmap.Unmap(); err != nil {
-			s.file.Close()
-			return err
-		}
-		// Truncate the file to the actual size of the data written.
-		if err := s.file.Truncate(s.offset); err != nil {
-			s.file.Close()
-			return err
-		}
-	}
-	if s.file != nil {
-		return s.file.Close()
-	}
-	return nil
-}
-
-func (s *FileMMapStorage) Rotate(archivePath string) error {
-	// Finalize and close current file
-	if err := s.finalize(true, archivePath); err != nil {
-		s.mmap.Unmap()
-		s.file.Close()
+	if err := s.mmap.Flush(); err != nil {
 		return err
 	}
+
 	if err := s.mmap.Unmap(); err != nil {
 		s.file.Close()
 		return err
 	}
-	if err := s.file.Close(); err != nil {
+
+	if err := s.file.Truncate(s.offset); err != nil {
+		s.file.Close()
 		return err
 	}
 
-	// Rename old file to the new archive path
-	if err := os.Rename(s.path, archivePath); err != nil {
-		return err
-	}
+	return s.file.Close()
+}
 
-	// Re-initialize the storage at the original path
-	newStorage, err := NewFileMMapStorage(s.path, FileMMapStorageOps{MMapFileSizeInBytes: s.sizeMapInBytes})
-	if err != nil {
-		return fmt.Errorf("failed to re-initialize mmap storage after rotate: %w", err)
-	}
-
-	// Update the current storage instance with the new one
-	*s = *newStorage
-
-	return nil
+func (s *FileMMapStorage) Close() error {
+	return s.FinalizeAndClose()
 }

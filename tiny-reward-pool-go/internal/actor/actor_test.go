@@ -1,13 +1,8 @@
 package actor_test
 
 import (
-	"encoding/json"
 	"errors"
-	"log/slog"
-	"os"
-	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,9 +10,6 @@ import (
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/rewardpool"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/utils"
-	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal"
-	walformatter "github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/formatter"
-	walstorage "github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/storage"
 )
 
 func TestSystem_TransactionalDraw(t *testing.T) {
@@ -115,203 +107,6 @@ func TestSystem_FlushOnStop(t *testing.T) {
 	}
 }
 
-// Additional tests for rotation
-
-func TestSystem_WALRotation(t *testing.T) {
-	// 1. Setup
-	tmpDir := t.TempDir()
-	walPath := filepath.Join(tmpDir, "test.wal")
-	rotatedPath := filepath.Join(tmpDir, "test.wal.rotated")
-	snapshotPath := filepath.Join(tmpDir, "test.snapshot")
-
-	// Use a real mmap storage with a tiny size to force rotation
-	mmapStorage, err := walstorage.NewFileMMapStorage(walPath, walstorage.FileMMapStorageOps{
-		MMapFileSizeInBytes: 1024, // 1KB, very small
-	})
-	require.NoError(t, err)
-
-	realWAL, err := wal.NewWAL(walPath, walformatter.NewJSONFormatter(), mmapStorage)
-	require.NoError(t, err)
-
-	initQuantity := 1000
-	numberDraw := 20
-
-	pool := rewardpool.NewPool([]types.PoolReward{
-		{ItemID: "gold", Quantity: initQuantity, Probability: 1},
-	})
-
-	mockUtils := &mockRotationUtils{
-		rotatedPath:  rotatedPath,
-		snapshotPath: snapshotPath,
-	}
-
-	ctx := &types.Context{
-		WAL:   realWAL,
-		Utils: mockUtils,
-	}
-
-	// Flush after every draw to trigger the check
-	sys, err := actor.NewSystem(ctx, pool, &actor.SystemOptional{FlushAfterNDraw: 1})
-	require.NoError(t, err)
-
-	// 2. Execution: Write data until WAL is full
-	// A single draw log is ~70 bytes. 1024 / 70 = ~15 draws needed. Let's do 20 to be safe.
-	for i := 0; i < numberDraw; i++ {
-		<-sys.Draw()
-	}
-
-	// The processor runs in a separate goroutine, so we need to wait a bit
-	// for the last flush to be processed.
-	time.Sleep(200 * time.Millisecond)
-
-	// check state correct
-	state := sys.State()
-	remainingItem := initQuantity - numberDraw
-	require.Equal(t, remainingItem, state[0].Quantity, "pool Quantity should correct")
-
-	sys.Stop() // Final flush
-
-	// 3. Assertions
-	assert.True(t, mockUtils.genRotatedCalled, "GenRotatedWALPath should have been called")
-	assert.True(t, mockUtils.genSnapshotCalled, "GenSnapshotPath should have been called")
-
-	// Check if the rotated WAL file exists
-	_, err = os.Stat(rotatedPath)
-	assert.NoError(t, err, "Rotated WAL file should exist")
-
-	// Check if the snapshot file exists
-	_, err = os.Stat(snapshotPath)
-	assert.NoError(t, err, "Snapshot file should exist")
-
-	// Check if the new WAL file was created
-	_, err = os.Stat(walPath)
-	assert.NoError(t, err, "New WAL file should exist at the original path")
-}
-
-type mockRotationUtils struct {
-	rotatedPath       string
-	snapshotPath      string
-	genRotatedCalled  bool
-	genSnapshotCalled bool
-}
-
-func (m *mockRotationUtils) GetLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
-}
-
-func (m *mockRotationUtils) GenRotatedWALPath() *string {
-	m.genRotatedCalled = true
-	return &m.rotatedPath
-}
-
-func (m *mockRotationUtils) GenSnapshotPath() *string {
-	m.genSnapshotCalled = true
-	return &m.snapshotPath
-}
-
-func TestSystem_StopWithWALRotationRaceCondition(t *testing.T) {
-	// 1. Setup
-	tmpDir := t.TempDir()
-	walPath := filepath.Join(tmpDir, "test.wal")
-	rotatedPath := filepath.Join(tmpDir, "test.wal.rotated")
-	snapshotPath := filepath.Join(tmpDir, "test.snapshot")
-	configPath := filepath.Join(tmpDir, "config.json")
-	initialQuantity := int64(10)
-
-	// Create a dummy config file
-	configContent := []byte(`{"catalog":[{"item_id":"gold","quantity":10,"probability":1}]}`)
-	require.NoError(t, os.WriteFile(configPath, configContent, 0644))
-
-	// Use a real mmap storage with a tiny size to force rotation
-	mmapStorage, err := walstorage.NewFileMMapStorage(walPath, walstorage.FileMMapStorageOps{
-		MMapFileSizeInBytes: 512,
-	})
-	require.NoError(t, err)
-
-	realWAL, err := wal.NewWAL(walPath, walformatter.NewJSONFormatter(), mmapStorage)
-	require.NoError(t, err)
-
-	pool := rewardpool.NewPool([]types.PoolReward{
-		{ItemID: "gold", Quantity: int(initialQuantity), Probability: 1},
-	})
-
-	mockUtils := &mockStopUtils{
-		rotatedPath:  rotatedPath,
-		snapshotPath: snapshotPath,
-	}
-
-	ctx := &types.Context{
-		WAL:   realWAL,
-		Utils: mockUtils,
-	}
-
-	// Flush after every draw to trigger the check
-	sys, err := actor.NewSystem(ctx, pool, &actor.SystemOptional{FlushAfterNDraw: 1})
-	require.NoError(t, err)
-
-	// 2. Execution
-	for i := 0; i < 5; i++ {
-		<-sys.Draw()
-		time.Sleep(10 * time.Millisecond) // Give actor time to process
-	}
-	sys.Stop() // This should trigger rotation
-
-	// 3. Assertions
-	assert.True(t, mockUtils.genRotatedCalled, "GenRotatedWALPath should have been called")
-	assert.True(t, mockUtils.genSnapshotCalled, "GenSnapshotPath should have been called")
-
-	// Check that the snapshot was created
-	snapshotData, err := os.ReadFile(snapshotPath)
-	require.NoError(t, err, "Snapshot file should exist and be readable")
-
-	var snapshotContent struct {
-		Items []types.PoolReward `json:"catalog"`
-	}
-	err = json.Unmarshal(snapshotData, &snapshotContent)
-	require.NoError(t, err, "Snapshot should be valid JSON")
-
-	// Snapshot should be based on the state after the last successful commit.
-	// 3 draws succeeded, 1 failed and was reverted before snapshot.
-	// The 4th draw is replayed *after* the snapshot.
-	expectedQuantityInSnapshot := initialQuantity - 3 // 10 - 3 = 7. Let's trace the bug.
-	expectedQuantityInSnapshot = initialQuantity - 4 // It seems snapshot is taken after replay. Should be 6.
-	assert.Equal(t, int(expectedQuantityInSnapshot), snapshotContent.Items[0].Quantity, "Snapshot should have correct quantity")
-
-	// Check active wal log. It should contain the snapshot and the replayed log.
-	logItems, _, err := wal.ParseWAL(walPath, walformatter.NewJSONFormatter())
-	require.NoError(t, err)
-	require.Len(t, logItems, 2, "new wal should have snapshot and one replayed log")
-	assert.Equal(t, types.LogTypeSnapshot, logItems[0].GetType(), "1st item should be a snapshot")
-	assert.Equal(t, types.LogTypeDraw, logItems[1].GetType(), "2nd item should be a draw")
-
-	snapshotItm := logItems[0].(*types.WalLogSnapshotItem)
-	assert.Equal(t, snapshotItm.Path, snapshotPath, "1st item snapshot path should correct")
-	updateItm := logItems[1].(*types.WalLogDrawItem)
-	assert.Equal(t, updateItm.ItemID, "gold", "2st item should relay correct ItemID")
-
-}
-
-type mockStopUtils struct {
-	rotatedPath       string
-	snapshotPath      string
-	genRotatedCalled  bool
-	genSnapshotCalled bool
-}
-
-func (m *mockStopUtils) GetLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
-}
-
-func (m *mockStopUtils) GenRotatedWALPath() *string {
-	m.genRotatedCalled = true
-	return &m.rotatedPath
-}
-
-func (m *mockStopUtils) GenSnapshotPath() *string {
-	m.genSnapshotCalled = true
-	return &m.snapshotPath
-}
-
 // Mocks
 type mockPool struct {
 	item      types.PoolReward
@@ -386,7 +181,6 @@ func (m *mockWAL) LogSnapshot(item types.WalLogSnapshotItem) error { return nil 
 func (m *mockWAL) Close() error { return nil }
 func (m *mockWAL) Reset()       {}
 
-func (m *mockWAL) Rotate(string) error  { return nil }
 func (w *mockWAL) Size() (int64, error) { return int64(w.size), nil }
 func (m *mockWAL) Flush() error {
 	m.flushCount++

@@ -52,13 +52,13 @@ func (w *WAL) Flush() error {
 	return w.storage.Flush()
 }
 
-func NewWAL(path string, format types.LogFormatter, store types.Storage) (*WAL, error) {
+func NewWAL(path string, seqNo uint64, format types.LogFormatter, store types.Storage) (*WAL, error) {
 	if format == nil {
 		format = formatter.NewJSONFormatter()
 	}
 	if store == nil {
 		var err error
-		store, err = storage.NewFileStorage(path)
+		store, err = storage.NewFileStorage(path, seqNo)
 		if err != nil {
 			return nil, err
 		}
@@ -84,15 +84,11 @@ func (w *WAL) LogSnapshot(item types.WalLogSnapshotItem) error {
 }
 
 func (w *WAL) Close() error {
-	return w.storage.Close()
+	return w.storage.FinalizeAndClose()
 }
 
 func (w *WAL) Reset() {
 	w.buffer = w.buffer[:0]
-}
-
-func (w *WAL) Rotate(path string) error {
-	return w.storage.Rotate(path)
 }
 
 // ParseWAL reads the WAL log file, decodes its content, and returns the log entries and the header.

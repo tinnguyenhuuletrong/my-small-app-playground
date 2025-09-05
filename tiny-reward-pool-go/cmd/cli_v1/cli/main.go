@@ -26,22 +26,33 @@ func main() {
 	defaultConfigPath := baseDir + "/samples/config.json"
 	tmpDir := baseDir + "/tmp"
 	snapshotPath := tmpDir + "/snapshot.json"
-	walPath := tmpDir + "/wal.log"
 
 	utils := utils.NewDefaultUtils(tmpDir, tmpDir, slog.LevelDebug, nil)
 
 	// walFormatter := walformatter.NewJSONFormatter()
 	walFormatter := walformatter.NewStringLineFormatter()
-	pool, lastRequestID, err := recovery.RecoverPool(snapshotPath, walPath, defaultConfigPath, walFormatter, utils)
+	pool, lastRequestID, lastWalPath, err := recovery.RecoverPool(snapshotPath, defaultConfigPath, walFormatter, utils)
 	if err != nil {
 		fmt.Println("Recovery failed:", err)
 		os.Exit(1)
 	}
 
+	var w types.WAL
+	var seqNo uint64
+	if lastWalPath == "" {
+		var newWalPath string
+		newWalPath, seqNo, err = utils.GenNextWALPath()
+		if err != nil {
+			fmt.Println("Error generating new WAL path:", err)
+			os.Exit(1)
+		}
+		lastWalPath = newWalPath
+	}
+
 	// fileStorage, err := walstorage.NewFileMMapStorage(walPath, walstorage.FileMMapStorageOps{
 	// 	MMapFileSizeInBytes: 1024 * 0.5, // 0.5 Kb
 	// })
-	fileStorage, err := walstorage.NewFileStorage(walPath, walstorage.FileStorageOpt{
+	fileStorage, err := walstorage.NewFileStorage(lastWalPath, seqNo, walstorage.FileStorageOpt{
 		// SizeFileInBytes: 1024 * 1024 * 0.5, // 0.5 MB
 		SizeFileInBytes: int(math.Round(1024 * 0.2)), // 0.5 Kb
 	})
@@ -49,7 +60,7 @@ func main() {
 		fmt.Println("Error creating file storage:", err)
 		os.Exit(1)
 	}
-	w, err := wal.NewWAL(walPath, walFormatter, fileStorage)
+	w, err = wal.NewWAL(lastWalPath, seqNo, walFormatter, fileStorage)
 	if err != nil {
 		fmt.Println("Error opening WAL:", err)
 		os.Exit(1)
@@ -136,9 +147,9 @@ func main() {
 						break
 					}
 				}
-				errr := sys.UpdateItem("gold", currentGold.Quantity+10, currentGold.Probability)
-				if errr != nil {
-					fmt.Printf("Failed to update gold: %v\n", errr)
+				err := sys.UpdateItem("gold", currentGold.Quantity+10, currentGold.Probability)
+				if err != nil {
+					fmt.Printf("Failed to update gold: %v\n", err)
 				} else {
 					fmt.Println("--- Gold updated. New pool state: ---")
 					fmt.Println(sys.State())
@@ -163,9 +174,9 @@ func main() {
 				}
 				silverProbToggle = !silverProbToggle
 
-				errr := sys.UpdateItem("silver", currentSilver.Quantity, newProb)
-				if errr != nil {
-					fmt.Printf("Failed to update silver: %v\n", errr)
+				err := sys.UpdateItem("silver", currentSilver.Quantity, newProb)
+				if err != nil {
+					fmt.Printf("Failed to update silver: %v\n", err)
 				} else {
 					fmt.Println("--- Silver updated. New pool state: ---")
 					fmt.Println(sys.State())

@@ -13,20 +13,21 @@ const (
 
 // WALHeader defines the structure of the WAL file header.
 type WALHeader struct {
-	Magic       uint32
-	Version     uint32
-	Status      uint32
-	NextWALPath [200]byte
-	Padding     [44]byte // To make the total size 256 bytes
+	Magic   uint32
+	Version uint32
+	Status  uint32
+	SeqNo   uint64
+	Padding [236]byte // To make the total size 256 bytes
 }
 
 // WAL file constants
 const (
-	WALMagic      uint32 = 0x746E776C // "tnwl" in little-endian
-	WALVersion1   uint32 = 1
-	WALHeaderSize        = 256
+	WALMagic        uint32 = 0x746E776C // "tnwl" in little-endian
+	WALVersion1     uint32 = 1
+	WALHeaderSize          = 256
 	WALStatusOpen   uint32 = 0
 	WALStatusClosed uint32 = 1
+	WALBaseName            = "wal"
 )
 
 // LogError defines the type of a WAL log error.
@@ -141,9 +142,9 @@ type Storage interface {
 	Flush() error
 	Close() error
 
-	// Finalize current file and move to archivePath.
+	// FinalizeAndClose current file and move to archivePath.
 	// Then reset and continue to use the current one
-	Rotate(archivePath string) error
+	FinalizeAndClose() error
 
 	// Size returns the current size of the storage.
 	Size() (int64, error)
@@ -160,8 +161,6 @@ type WAL interface {
 	Flush() error
 	// Close closes the WAL file
 	Close() error
-	// Rotate file
-	Rotate(path string) error
 	// Reset buffer
 	Reset()
 	// Size returns the current size of the WAL content.
@@ -182,8 +181,9 @@ type Context struct {
 // Utils provides an interface for environment-specific operations like logging and path generation.
 type Utils interface {
 	GetLogger() *slog.Logger
-	GenRotatedWALPath() *string // Path for the archived WAL. nil means skip archiving.
 	GenSnapshotPath() *string   // Path for the new snapshot. nil means skip snapshotting.
+	GetWALFiles() ([]string, error)
+	GenNextWALPath() (string, uint64, error)
 }
 
 // ItemSelector defines the contract for selecting items from a reward pool.
