@@ -25,13 +25,12 @@ func main() {
 	baseDir := "."
 	defaultConfigPath := baseDir + "/samples/config.json"
 	tmpDir := baseDir + "/tmp"
-	snapshotPath := tmpDir + "/snapshot.json"
 
 	utils := utils.NewDefaultUtils(tmpDir, tmpDir, slog.LevelDebug, nil)
 
 	// walFormatter := walformatter.NewJSONFormatter()
 	walFormatter := walformatter.NewStringLineFormatter()
-	pool, lastRequestID, lastWalPath, err := recovery.RecoverPool(snapshotPath, defaultConfigPath, walFormatter, utils)
+	pool, lastRequestID, lastWalPath, err := recovery.RecoverPool(defaultConfigPath, walFormatter, utils)
 	if err != nil {
 		fmt.Println("Recovery failed:", err)
 		os.Exit(1)

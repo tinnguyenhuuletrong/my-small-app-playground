@@ -13,7 +13,7 @@ import (
 
 // RecoverPool loads the pool state from a snapshot and replays any subsequent WAL entries.
 // It returns the recovered pool, the last used request ID, the path of the last WAL file, and any error that occurred.
-func RecoverPool(snapshotPath, configPath string, formatter types.LogFormatter, utils types.Utils) (*rewardpool.Pool, uint64, string, error) {
+func RecoverPool(configPath string, formatter types.LogFormatter, utils types.Utils) (*rewardpool.Pool, uint64, string, error) {
 	var pool *rewardpool.Pool
 	var lastRequestID uint64
 
@@ -23,64 +23,68 @@ func RecoverPool(snapshotPath, configPath string, formatter types.LogFormatter, 
 		return nil, 0, "", fmt.Errorf("failed to get WAL files: %w", err)
 	}
 
-	// 2. Parse all WAL files to get all log entries.
-	var allLogItems []types.WalLogEntry
-	for _, walFile := range walFiles {
-		entries, _, err := wal.ParseWAL(walFile, formatter)
-		if err != nil {
-			return nil, 0, "", fmt.Errorf("error parsing WAL file %s: %w", walFile, err)
-		}
-		allLogItems = append(allLogItems, entries...)
-	}
-
-	// 3. Determine the starting point for recovery.
-	var snapshotToLoad string
+	var lastWalPath string
 	var logsToReplay []types.WalLogEntry
+	var snapshotToLoad string // Initialize to empty
 
-	// Find the last snapshot in the combined WAL entries.
-	lastSnapshotIdx := -1
-	for i := len(allLogItems) - 1; i >= 0; i-- {
-		if s, ok := allLogItems[i].(*types.WalLogSnapshotItem); ok {
-			snapshotToLoad = s.Path
-			lastSnapshotIdx = i
-			break
+	if len(walFiles) > 0 {
+		lastWalPath = walFiles[len(walFiles)-1]
+
+		// Parse only the latest WAL file
+		entries, _, err := wal.ParseWAL(lastWalPath, formatter)
+		if err != nil {
+			return nil, 0, "", fmt.Errorf("error parsing latest WAL file %s: %w", lastWalPath, err)
+		}
+
+		if len(entries) == 0 {
+			// Latest WAL is empty or only contains header, indicate no WAL to continue from
+			lastWalPath = ""
+		} else {
+			// The first entry must be a snapshot
+			snapshotLog, ok := entries[0].(*types.WalLogSnapshotItem)
+			if !ok {
+				return nil, 0, "", fmt.Errorf("first entry in WAL %s is not a snapshot", lastWalPath)
+			}
+			snapshotToLoad = snapshotLog.Path
+			logsToReplay = entries[1:] // Replay logs after the initial snapshot
 		}
 	}
 
-	if lastSnapshotIdx != -1 {
-		// If a snapshot was found in the WAL, replay logs that came after it.
-		logsToReplay = allLogItems[lastSnapshotIdx+1:]
-	} else {
-		// No snapshot in the WAL, so use the standalone snapshotPath and replay all WAL entries.
-		snapshotToLoad = snapshotPath
-		logsToReplay = allLogItems
-	}
-
-	// 4. Load the initial state from the chosen snapshot.
+	// 2. Load the initial state from the chosen snapshot or config.
 	pool = rewardpool.NewPool([]types.PoolReward{}) // Create an empty pool.
 
 	// Attempt to load from the determined snapshot path.
-	if _, err := os.Stat(snapshotToLoad); err == nil {
-		file, err := os.Open(snapshotToLoad)
-		if err != nil {
-			return nil, 0, "", fmt.Errorf("failed to open snapshot file %s: %w", snapshotToLoad, err)
+	if snapshotToLoad != "" {
+		if _, err := os.Stat(snapshotToLoad); err == nil {
+			file, err := os.Open(snapshotToLoad)
+			if err != nil {
+				return nil, 0, "", fmt.Errorf("failed to open snapshot file %s: %w", snapshotToLoad, err)
+			}
+			defer file.Close()
+
+			var snap types.PoolSnapshot
+			if err := json.NewDecoder(file).Decode(&snap); err != nil {
+				return nil, 0, "", fmt.Errorf("failed to decode snapshot %s: %w", snapshotToLoad, err)
+			}
+
+			// Load the pool state and the last request ID from the snapshot.
+			pool.LoadSnapshot(&snap)
+			lastRequestID = snap.LastRequestID
+
+		} else if !os.IsNotExist(err) {
+			// Handle other errors from Stat, like permission issues.
+			return nil, 0, "", fmt.Errorf("failed to stat snapshot file %s: %w", snapshotToLoad, err)
+		} else {
+			// Snapshot file not found, fall back to initial config
+			loadedPool, cfgErr := rewardpool.CreatePoolFromConfigPath(configPath)
+			if cfgErr != nil {
+				return nil, 0, "", fmt.Errorf("failed to load from config after missing snapshot: %w", cfgErr)
+			}
+			pool = loadedPool
+			lastRequestID = 0 // No snapshot, so request ID starts from 0.
 		}
-		defer file.Close()
-
-		var snap types.PoolSnapshot
-		if err := json.NewDecoder(file).Decode(&snap); err != nil {
-			return nil, 0, "", fmt.Errorf("failed to decode snapshot %s: %w", snapshotToLoad, err)
-		}
-
-		// Load the pool state and the last request ID from the snapshot.
-		pool.LoadSnapshot(&snap)
-		lastRequestID = snap.LastRequestID
-
-	} else if !os.IsNotExist(err) {
-		// Handle other errors from Stat, like permission issues.
-		return nil, 0, "", fmt.Errorf("failed to stat snapshot file %s: %w", snapshotToLoad, err)
 	} else {
-		// Snapshot doesn't exist, fall back to the initial config file.
+		// No snapshot path from WAL, fall back to initial config
 		loadedPool, cfgErr := rewardpool.CreatePoolFromConfigPath(configPath)
 		if cfgErr != nil {
 			return nil, 0, "", fmt.Errorf("failed to load from config after missing snapshot: %w", cfgErr)
@@ -89,7 +93,7 @@ func RecoverPool(snapshotPath, configPath string, formatter types.LogFormatter, 
 		lastRequestID = 0 // No snapshot, so request ID starts from 0.
 	}
 
-	// 5. Replay logs to bring the pool to its most recent state.
+	// 3. Replay logs to bring the pool to its most recent state.
 	if len(logsToReplay) > 0 {
 		replay.ReplayLogs(pool, logsToReplay)
 
@@ -103,9 +107,8 @@ func RecoverPool(snapshotPath, configPath string, formatter types.LogFormatter, 
 		}
 	}
 
-	var lastWalPath string
-	if len(walFiles) > 0 {
-		lastWalPath = walFiles[len(walFiles)-1]
+	if logger := utils.GetLogger(); logger != nil {
+		logger.Info(fmt.Sprintf("Recovered state: lastWalPath=%s, lastRequestID=%d, logsReplayed=%d", lastWalPath, lastRequestID, len(logsToReplay)))
 	}
 
 	return pool, lastRequestID, lastWalPath, nil
@@ -113,7 +116,7 @@ func RecoverPool(snapshotPath, configPath string, formatter types.LogFormatter, 
 
 // RecoverPoolFromConfig loads the pool state from a snapshot and replays any subsequent WAL entries.
 // It returns the recovered pool, the last used request ID, the path of the last WAL file, and any error that occurred.
-func RecoverPoolFromConfig(snapshotPath string, initialPool *rewardpool.Pool, formatter types.LogFormatter, utils types.Utils) (*rewardpool.Pool, uint64, string, error) {
+func RecoverPoolFromConfig(initialPool *rewardpool.Pool, formatter types.LogFormatter, utils types.Utils) (*rewardpool.Pool, uint64, string, error) {
 	var pool *rewardpool.Pool
 	var lastRequestID uint64
 
@@ -123,69 +126,69 @@ func RecoverPoolFromConfig(snapshotPath string, initialPool *rewardpool.Pool, fo
 		return nil, 0, "", fmt.Errorf("failed to get WAL files: %w", err)
 	}
 
-	// 2. Parse all WAL files to get all log entries.
-	var allLogItems []types.WalLogEntry
-	for _, walFile := range walFiles {
-		entries, _, err := wal.ParseWAL(walFile, formatter)
-		if err != nil {
-			return nil, 0, "", fmt.Errorf("error parsing WAL file %s: %w", walFile, err)
-		}
-		allLogItems = append(allLogItems, entries...)
-	}
-
-	// 3. Determine the starting point for recovery.
-	var snapshotToLoad string
+	var lastWalPath string
 	var logsToReplay []types.WalLogEntry
+	var snapshotToLoad string // Initialize to empty
 
-	// Find the last snapshot in the WAL.
-	lastSnapshotIdx := -1
-	for i := len(allLogItems) - 1; i >= 0; i-- {
-		if s, ok := allLogItems[i].(*types.WalLogSnapshotItem); ok {
-			snapshotToLoad = s.Path
-			lastSnapshotIdx = i
-			break
+	if len(walFiles) > 0 {
+		lastWalPath = walFiles[len(walFiles)-1]
+
+		// Parse only the latest WAL file
+		entries, _, err := wal.ParseWAL(lastWalPath, formatter)
+		if err != nil {
+			return nil, 0, "", fmt.Errorf("error parsing latest WAL file %s: %w", lastWalPath, err)
+		}
+
+		if len(entries) == 0 {
+			// Latest WAL is empty or only contains header, indicate no WAL to continue from
+			lastWalPath = ""
+		} else {
+			// The first entry must be a snapshot
+			snapshotLog, ok := entries[0].(*types.WalLogSnapshotItem)
+			if !ok {
+				return nil, 0, "", fmt.Errorf("first entry in WAL %s is not a snapshot", lastWalPath)
+			}
+			snapshotToLoad = snapshotLog.Path
+			logsToReplay = entries[1:] // Replay logs after the initial snapshot
 		}
 	}
 
-	if lastSnapshotIdx != -1 {
-		// If a snapshot was found in the WAL, replay logs that came after it.
-		logsToReplay = allLogItems[lastSnapshotIdx+1:]
-	} else {
-		// No snapshot in the WAL, so use the standalone snapshotPath and replay all WAL entries.
-		snapshotToLoad = snapshotPath
-		logsToReplay = allLogItems
-	}
-
-	// 4. Load the initial state from the chosen snapshot.
-	pool = rewardpool.NewPool([]types.PoolReward{}) // Create an empty pool.
+	// 2. Load the initial state from the chosen snapshot or initialPool.
+	pool = initialPool
 
 	// Attempt to load from the determined snapshot path.
-	if _, err := os.Stat(snapshotToLoad); err == nil {
-		file, err := os.Open(snapshotToLoad)
-		if err != nil {
-			return nil, 0, "", fmt.Errorf("failed to open snapshot file %s: %w", snapshotToLoad, err)
+	if snapshotToLoad != "" {
+		if _, err := os.Stat(snapshotToLoad); err == nil {
+			file, err := os.Open(snapshotToLoad)
+			if err != nil {
+				return nil, 0, "", fmt.Errorf("failed to open snapshot file %s: %w", snapshotToLoad, err)
+			}
+			defer file.Close()
+
+			var snap types.PoolSnapshot
+			if err := json.NewDecoder(file).Decode(&snap); err != nil {
+				return nil, 0, "", fmt.Errorf("failed to decode snapshot %s: %w", snapshotToLoad, err)
+			}
+
+			// Load the pool state and the last request ID from the snapshot.
+			pool.LoadSnapshot(&snap)
+			lastRequestID = snap.LastRequestID
+
+		} else if !os.IsNotExist(err) {
+			// Handle other errors from Stat, like permission issues.
+			return nil, 0, "", fmt.Errorf("failed to stat snapshot file %s: %w", snapshotToLoad, err)
+		} else {
+			// Snapshot file not found, fall back to initialPool
+			pool = initialPool
+			lastRequestID = 0 // No snapshot, so request ID starts from 0.
 		}
-		defer file.Close()
-
-		var snap types.PoolSnapshot
-		if err := json.NewDecoder(file).Decode(&snap); err != nil {
-			return nil, 0, "", fmt.Errorf("failed to decode snapshot %s: %w", snapshotToLoad, err)
-		}
-
-		// Load the pool state and the last request ID from the snapshot.
-		pool.LoadSnapshot(&snap)
-		lastRequestID = snap.LastRequestID
-
-	} else if !os.IsNotExist(err) {
-		// Handle other errors from Stat, like permission issues.
-		return nil, 0, "", fmt.Errorf("failed to stat snapshot file %s: %w", snapshotToLoad, err)
 	} else {
-		// Snapshot doesn't exist, fall back to the initial config file.
+		// No snapshot path from WAL, fall back to initialPool
 		pool = initialPool
 		lastRequestID = 0 // No snapshot, so request ID starts from 0.
 	}
 
-	// 5. Replay logs to bring the pool to its most recent state.
+	// 3. Replay logs to bring the pool to its most recent state.
 	if len(logsToReplay) > 0 {
 		replay.ReplayLogs(pool, logsToReplay)
 
@@ -199,9 +202,8 @@ func RecoverPoolFromConfig(snapshotPath string, initialPool *rewardpool.Pool, fo
 		}
 	}
 
-	var lastWalPath string
-	if len(walFiles) > 0 {
-		lastWalPath = walFiles[len(walFiles)-1]
+	if logger := utils.GetLogger(); logger != nil {
+		logger.Info(fmt.Sprintf("Recovered state: lastWalPath=%s, lastRequestID=%d, logsReplayed=%d", lastWalPath, lastRequestID, len(logsToReplay)))
 	}
 
 	return pool, lastRequestID, lastWalPath, nil

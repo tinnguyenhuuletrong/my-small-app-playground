@@ -64,7 +64,7 @@ func TestRecoverPool_Basic(t *testing.T) {
 
 	// Now, recover
 	jsonFormatter := formatter.NewJSONFormatter()
-	recoveredPool, lastRequestID, _, err := recovery.RecoverPool(snapshotPath, configPath, jsonFormatter, utils.NewDefaultUtils(walDir, "", 0, nil))
+	recoveredPool, lastRequestID, _, err := recovery.RecoverPool(configPath, jsonFormatter, utils.NewDefaultUtils(walDir, "", 0, nil))
 	require.NoError(t, err)
 
 	assert.Equal(t, uint64(12), lastRequestID)
@@ -100,7 +100,7 @@ func TestRecoverPool_MMap(t *testing.T) {
 	require.NoError(t, w.Close())
 
 	// Now, recover
-	recoveredPool, lastRequestID, _, err := recovery.RecoverPool(snapshotPath, configPath, jsonFormatter, utils.NewDefaultUtils(walDir, "", 0, nil))
+	recoveredPool, lastRequestID, _, err := recovery.RecoverPool(configPath, jsonFormatter, utils.NewDefaultUtils(walDir, "", 0, nil))
 	require.NoError(t, err)
 
 	assert.Equal(t, uint64(22), lastRequestID)

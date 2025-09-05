@@ -82,7 +82,7 @@ func TestActor_RestoreRequestID(t *testing.T) {
 	func() {
 		// Recover the pool and last request ID
 		mockUtils := &mockUtilsForRestoreTest{snapshotPath: snapshotPath, walDir: walDir}
-		recoveredPool, recoveredRequestID, _, err := recovery.RecoverPool(snapshotPath, configPath, formatter.NewJSONFormatter(), mockUtils)
+		recoveredPool, recoveredRequestID, _, err := recovery.RecoverPool(configPath, formatter.NewJSONFormatter(), mockUtils)
 		require.NoError(t, err)
 		require.Equal(t, uint64(5), recoveredRequestID)
 

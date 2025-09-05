@@ -87,7 +87,6 @@ func setup(cfg config.YAMLConfig) (*actor.System, *tui.ChannelWriter, error) {
 	// Setup paths
 	baseDir := "."
 	tmpDir := baseDir + "/" + cfg.WorkingDir
-	snapshotPath := tmpDir + "/snapshot.json"
 
 	// Create tmpDir if not exists
 	if _, err := os.Stat(tmpDir); os.IsNotExist(err) {
@@ -112,7 +111,7 @@ func setup(cfg config.YAMLConfig) (*actor.System, *tui.ChannelWriter, error) {
 	// Create a pool from the config
 	initialPool := rewardpool.CreatePoolFromConfig(cfg.Pool)
 
-	pool, lastRequestID, lastWalPath, err := recovery.RecoverPoolFromConfig(snapshotPath, initialPool, walFormatter, utils)
+	pool, lastRequestID, lastWalPath, err := recovery.RecoverPoolFromConfig(initialPool, walFormatter, utils)
 	if err != nil {
 		return nil, nil, fmt.Errorf("recovery failed: %w", err)
 	}
