@@ -13,11 +13,12 @@ const (
 
 // WALHeader defines the structure of the WAL file header.
 type WALHeader struct {
-	Magic   uint32
-	Version uint32
-	Status  uint32
-	SeqNo   uint64
-	Padding [236]byte // To make the total size 256 bytes
+	Magic      uint32
+	Version    uint32
+	Status     uint32
+	SeqNo      uint64
+	DataLength uint64
+	Padding    [228]byte // To make the total size 256 bytes
 }
 
 // WAL file constants

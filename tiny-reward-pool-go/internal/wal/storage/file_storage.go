@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bytes"
 	"encoding/binary"
 	"io"
 	"math"
@@ -101,10 +102,23 @@ func (s *FileStorage) FinalizeAndClose() error {
 		return err
 	}
 
+	// Read the original header to preserve SeqNo
+	originalHdrBytes := make([]byte, types.WALHeaderSize)
+	_, err := s.file.ReadAt(originalHdrBytes, 0)
+	if err != nil {
+		return err
+	}
+	var originalHdr types.WALHeader
+	if err := binary.Read(bytes.NewReader(originalHdrBytes), binary.LittleEndian, &originalHdr); err != nil {
+		return err
+	}
+
 	hdr := types.WALHeader{
-		Magic:   types.WALMagic,
-		Version: types.WALVersion1,
-		Status:  types.WALStatusClosed,
+		Magic:      types.WALMagic,
+		Version:    types.WALVersion1,
+		Status:     types.WALStatusClosed,
+		SeqNo:      originalHdr.SeqNo,
+		DataLength: uint64(s.usage - types.WALHeaderSize),
 	}
 
 	if err := binary.Write(s.file, binary.LittleEndian, &hdr); err != nil {

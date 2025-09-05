@@ -126,7 +126,8 @@ func ParseWAL(path string, format types.LogFormatter) ([]types.WalLogEntry, *typ
 	}
 
 	// Read data
-	data, err := io.ReadAll(f)
+	data := make([]byte, hdr.DataLength)
+	_, err = io.ReadFull(f, data)
 	if err != nil {
 		return nil, &hdr, fmt.Errorf("failed to read WAL data: %w", err)
 	}

@@ -146,11 +146,22 @@ func setup(cfg config.YAMLConfig) (*actor.System, *tui.ChannelWriter, error) {
 
 	walStreamer := walstream.NewNoOpStreamer()
 
+	walFactory := func(path string, seqNo uint64) (types.WAL, error) {
+		fileStorage, err := walstorage.NewFileMMapStorage(path, seqNo, walstorage.FileMMapStorageOps{
+			MMapFileSizeInBytes: int64(cfg.WAL.MaxFileSizeKB * 1024), // From KB to Bytes
+		})
+		if err != nil {
+			return nil, fmt.Errorf("error creating file storage: %w", err)
+		}
+		return wal.NewWAL(path, seqNo, walFormatter, fileStorage)
+	}
+
 	sys, err := actor.NewSystem(ctx, pool, &actor.SystemOptional{
 		FlushAfterNDraw:   cfg.WAL.FlushAfterNDraw,
 		RequestBufferSize: cfg.WAL.MaxRequestBuffer,
 		LastRequestID:     lastRequestID,
 		WALStreamer:       walStreamer,
+		WALFactory:        walFactory,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("system startup error: %w", err)

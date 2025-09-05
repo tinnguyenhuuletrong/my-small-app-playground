@@ -8,7 +8,6 @@ import (
 
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/replay"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
-	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal"
 )
 
 // RewardProcessorActor encapsulates the state and behavior of the reward processing.
@@ -21,6 +20,7 @@ type RewardProcessorActor struct {
 	pendingLogs      []types.WalLogEntry
 	requestID        uint64
 	streamingChannel chan<- types.WalLogEntry
+	walFactory       func(path string, seqNo uint64) (types.WAL, error)
 }
 
 // Init performs the initial setup for the actor, like creating an initial
@@ -47,7 +47,7 @@ func (a *RewardProcessorActor) Init() error {
 }
 
 // NewRewardProcessorActor creates a new actor instance.
-func NewRewardProcessorActor(ctx *types.Context, pool types.RewardPool, mailboxSize, flushAfterNDraw int, requestID uint64) *RewardProcessorActor {
+func NewRewardProcessorActor(ctx *types.Context, pool types.RewardPool, mailboxSize, flushAfterNDraw int, requestID uint64, walFactory func(path string, seqNo uint64) (types.WAL, error)) *RewardProcessorActor {
 	return &RewardProcessorActor{
 		ctx:              ctx,
 		pool:             pool,
@@ -56,6 +56,7 @@ func NewRewardProcessorActor(ctx *types.Context, pool types.RewardPool, mailboxS
 		pendingLogs:      make([]types.WalLogEntry, 0, flushAfterNDraw*2),
 		requestID:        requestID,
 		streamingChannel: nil,
+		walFactory:       walFactory,
 	}
 }
 
@@ -228,7 +229,7 @@ func (a *RewardProcessorActor) handleWALFull() error {
 		}
 		return err
 	}
-	newWAL, err := wal.NewWAL(newPath, newSeqNo, nil, nil) // Using default formatter and storage
+	newWAL, err := a.walFactory(newPath, newSeqNo)
 	if err != nil {
 		if logger := a.ctx.Utils.GetLogger(); logger != nil {
 			logger.Error("Failed to create new WAL.", "error", err)

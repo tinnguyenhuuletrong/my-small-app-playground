@@ -89,7 +89,13 @@ func NewFileMMapStorage(path string, seqNo uint64, opts ...FileMMapStorageOps) (
 		copy(s.mmap, buf.Bytes())
 		s.offset = int64(types.WALHeaderSize)
 	} else {
-		s.offset = currentSize
+		// Existing file, read header to restore offset
+		var hdr types.WALHeader
+		if err := binary.Read(bytes.NewReader(m[:types.WALHeaderSize]), binary.LittleEndian, &hdr); err != nil {
+			s.Close()
+			return nil, fmt.Errorf("failed to read WAL header from existing file: %w", err)
+		}
+		s.offset = int64(types.WALHeaderSize + hdr.DataLength)
 	}
 
 	return s, nil
@@ -124,9 +130,10 @@ func (s *FileMMapStorage) FinalizeAndClose() error {
 	}
 
 	hdr := types.WALHeader{
-		Magic:   types.WALMagic,
-		Version: types.WALVersion1,
-		Status:  types.WALStatusClosed,
+		Magic:      types.WALMagic,
+		Version:    types.WALVersion1,
+		Status:     types.WALStatusClosed,
+		DataLength: uint64(s.offset - types.WALHeaderSize),
 	}
 
 	// Read the original SeqNo from the header before overwriting
@@ -146,11 +153,6 @@ func (s *FileMMapStorage) FinalizeAndClose() error {
 	}
 
 	if err := s.mmap.Unmap(); err != nil {
-		s.file.Close()
-		return err
-	}
-
-	if err := s.file.Truncate(s.offset); err != nil {
 		s.file.Close()
 		return err
 	}

@@ -2,6 +2,8 @@ package actor_test
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -107,6 +109,48 @@ func TestSystem_FlushOnStop(t *testing.T) {
 	}
 }
 
+func TestSystem_WALRotation_WithCustomFactory(t *testing.T) {
+	tempDir := t.TempDir()
+	walDir := filepath.Join(tempDir, "wal")
+	require.NoError(t, os.MkdirAll(walDir, 0755))
+
+	pool := rewardpool.NewPool([]types.PoolReward{{ItemID: "gold", Quantity: 100, Probability: 1}})
+
+	var createdWALs []*mockWAL
+	walFactory := func(path string, seqNo uint64) (types.WAL, error) {
+		w := &mockWAL{size: 10, flushFail: true} // flushFail to trigger rotation
+		createdWALs = append(createdWALs, w)
+		return w, nil
+	}
+
+	// Create the initial WAL using the factory
+	initialWAL, err := walFactory("", 0) // Path and seqNo don't matter for mock
+	require.NoError(t, err)
+
+	ctx := &types.Context{WAL: initialWAL, Utils: utils.NewDefaultUtils(walDir, "", 0, nil)}
+	sys, err := actor.NewSystem(ctx, pool, &actor.SystemOptional{
+		FlushAfterNDraw: 1,
+		WALFactory:      walFactory,
+	})
+	require.NoError(t, err)
+
+	// The first WAL is created by NewSystem
+	ctx.WAL = createdWALs[0]
+
+	require.NoError(t, err)
+
+	// The first WAL is created by NewSystem
+	ctx.WAL = createdWALs[0]
+
+	// This draw will cause the WAL to be full and trigger rotation
+	<-sys.Draw()
+
+	// Check that a new WAL was created by the factory
+	assert.Len(t, createdWALs, 2, "A new WAL should have been created")
+
+	sys.Stop()
+}
+
 // Mocks
 type mockPool struct {
 	item      types.PoolReward
@@ -148,7 +192,7 @@ func (m *mockPool) ApplyDrawLog(itemID string) {
 }
 
 func (m *mockPool) Load(cfg types.ConfigPool) error                               { return nil }
-func (m *mockPool) LoadSnapshot(snapshot *types.PoolSnapshot) error             { return nil }
+func (m *mockPool) LoadSnapshot(snapshot *types.PoolSnapshot) error               { return nil }
 func (m *mockPool) CreateSnapshot() (*types.PoolSnapshot, error)                  { return &types.PoolSnapshot{}, nil }
 func (m *mockPool) ApplyUpdateLog(itemID string, quantity int, probability int64) {}
 func (m *mockPool) UpdateItem(itemID string, quantity int, probability int64) error {
@@ -185,7 +229,7 @@ func (w *mockWAL) Size() (int64, error) { return int64(w.size), nil }
 func (m *mockWAL) Flush() error {
 	m.flushCount++
 	if m.flushFail {
-		return errors.New("simulated WAL flush error")
+		return types.ErrWALFull
 	}
 	return nil
 }

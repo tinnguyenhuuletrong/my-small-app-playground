@@ -6,6 +6,9 @@ BIN=bin/tiny-reward-pool-cli
 run:
 	go run $(CLI) -config samples/config.yaml
 
+run_debug:
+	dlv debug --headless --listen=:2345 $(CLI) -- -config samples/config.yaml
+
 build:
 	go build -o $(BIN) $(CLI)
 

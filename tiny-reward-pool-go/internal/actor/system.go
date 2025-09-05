@@ -6,6 +6,9 @@ import (
 	"sync"
 
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
+	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal"
+	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/formatter"
+	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/storage"
 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/walstream"
 )
 
@@ -24,6 +27,7 @@ type SystemOptional struct {
 	RequestBufferSize int
 	LastRequestID     uint64
 	WALStreamer       walstream.WALStreamer
+	WALFactory        func(path string, seqNo uint64) (types.WAL, error)
 }
 
 // NewSystem creates, starts, and returns a new actor system.
@@ -41,7 +45,21 @@ func NewSystem(ctx *types.Context, pool types.RewardPool, opt *SystemOptional) (
 		lastRequestID = opt.LastRequestID
 	}
 
-	processorActor := NewRewardProcessorActor(ctx, pool, bufSize, flushN, lastRequestID)
+	var walFactory func(path string, seqNo uint64) (types.WAL, error)
+	if opt != nil && opt.WALFactory != nil {
+		walFactory = opt.WALFactory
+	} else {
+		// Default WALFactory
+		walFactory = func(path string, seqNo uint64) (types.WAL, error) {
+			fileStorage, err := storage.NewFileStorage(path, seqNo)
+			if err != nil {
+				return nil, err
+			}
+			return wal.NewWAL(path, seqNo, formatter.NewJSONFormatter(), fileStorage)
+		}
+	}
+
+	processorActor := NewRewardProcessorActor(ctx, pool, bufSize, flushN, lastRequestID, walFactory)
 	if err := processorActor.Init(); err != nil {
 		// If init fails, we must ensure the WAL is closed if it was opened.
 		processorActor.ctx.WAL.Close()
