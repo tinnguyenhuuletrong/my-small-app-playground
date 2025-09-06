@@ -1,107 +1,85 @@
-# Gemini Code Assistant Context
+# Project Quick Summary
 
-This document provides context for the Gemini Code Assistant to understand and effectively assist with the development of this project.
+## Goal
 
-## Project Overview
+- High-performance, in-memory Reward Pool Service in Go
+- Implements PRD requirements: reward pool, WAL, config, CLI, gRPC service, and robust processing model
 
-This project is a high-performance, in-memory Reward Pool Service written in Go. It's designed for rapid and reliable reward distribution, featuring a robust logging and snapshotting mechanism to ensure data integrity and fast recovery.
+## Recent Updates (Sep 2025)
 
-The core of the service is a single-threaded, transactional processing model that ensures low-latency and high-throughput for reward distribution. A Write-Ahead Log (WAL) is implemented for deterministic recovery, with support for in-memory buffering and batch flushing to optimize I/O performance. The system enforces a strict WAL-first recovery model, where every WAL file must begin with a snapshot, ensuring a consistent and reliable state restoration.
+- **Task_15:** Enhanced WAL file structure and recovery process.
+  - **WAL Header:** Implemented a `<Header><Data>` layout for WAL files. The header contains metadata such as a magic number, version, status (`Open`/`Closed`), and a sequence number.
+  - **Sequential WAL Files:** WAL rotation now creates sequential files (e.g., `wal.000`, `wal.001`, `wal.002`) instead of timestamped files. This simplifies WAL management.
+  - **Simplified Recovery:** The recovery logic now scans the working directory for all `wal.xxx` files, sorts them numerically, and replays them in order to restore the state.
+  - **Snapshot Integrity:** Snapshots now include a `SHA256` hash of the item catalog to ensure data integrity.
+- **Task_14:** Added a gRPC service and support for unlimited quantity items.
+  - **gRPC Service:** Implemented a gRPC service in `pkg/rewardpool-grpc-service` that exposes `GetState` and `Draw` methods. The service can be enabled and configured in `config.yaml`.
+  - **Unlimited Quantity:** Added support for reward items with unlimited quantity by setting the `quantity` field to `-1`. The core logic in `rewardpool` and `selector` has been updated to handle this.
+  - **New Tools:** Added `k6` for gRPC benchmarking and `protoc` for protobuf code generation.
+- **Task_13:** Evolved the application into a configurable service with an interactive TUI.
+  - **YAML Configuration:** Moved from hardcoded paths and JSON to a `config.yaml`-based setup, allowing configuration of the working directory, reward pool, and WAL parameters (`max_file_size_kb`, `max_request_buffer_size`, `formatter`, `flush_after_n_draw`).
+  - **Interactive TUI:** Replaced the basic CLI with a full-featured, interactive terminal user interface (TUI) built with `bubbletea`.
+  - **Live Dashboard:** The TUI provides a live-updating dashboard with a bar chart showing item quantities, a history of commands, and a debug log view.
+  - **REPL-like Commands:** The TUI supports commands like `draw`, `update`, `status`, `help`, and `reload`, providing administrative control over the running service.
+  - **Archived Old CLI:** The previous CLI demo was archived to `cmd/cli_v1`.
+- **Task_12:** Implemented persistent request IDs and a WAL streaming mechanism.
+  - **Persistent Request ID:** The `requestID` is now persistent across restarts. It is saved as part of the pool snapshot and correctly restored from both the snapshot and the WAL, ensuring it is always unique and increasing.
+  - **WAL Streaming for Replication:** Introduced a new `internal/walstream` module and a dedicated `StreamingActor` to asynchronously stream WAL entries to a target, laying the groundwork for replica synchronization. This is designed to be non-blocking.
+- **Task_11:** Made the WAL the source of truth by introducing multiple log types and re-architecting the recovery and actor systems.
+  - **Enhanced WAL:** The WAL now supports multiple log types (`LogTypeUpdate`, `LogTypeSnapshot`, `LogTypeRotate`) beyond just `LogTypeDraw`, with a polymorphic `WalLogEntry` interface.
+  - **Item Updates:** The system now supports transactional updates to item quantity and probability via the actor model.
+  - **`replay` Module:** Created a new `internal/replay` module to centralize WAL replay logic, removing duplication from `recovery` and `actor` modules.
+  - **WAL-Driven Recovery:** The recovery process is now strictly driven by the WAL. It requires the WAL to start with a snapshot, loads the state from it, and then replays subsequent logs.
+  - **Robust WAL Rotation:** The actor's `flush` logic now gracefully handles `ErrWALFull` by preserving pending operations, reverting state, creating a snapshot, rotating the WAL, and then re-applying the pending operations to the new WAL file, preventing data loss.
+- **Task_09:** Refactored WAL architecture for extensibility and reliability.
+  - Moved WAL log format to JSON Lines (JSONL) with typed `WalLogItem`/`WalLogDrawItem` and `LogType`/`LogError` enums.
+  - Introduced `LogFormatter` (JSON, StringLine) and `Storage` (File, FileMMap) interfaces; `WAL` now composes these.
+- **Task_08:** Fixed a critical bug in the reward distribution logic. Refactored the `ItemSelector` implementations (`FenwickTreeSelector` and `PrefixSumSelector`) to correctly use `Probability` for weighted selection and `Quantity` for availability.
 
-The project is structured into several internal modules, including `config`, `processing`, `recovery`, `replay`, `rewardpool`, `selector`, `types`, `utils`, and `wal`. A command-line interface (CLI) demo is provided in the `cmd/cli` directory, which showcases the usage of all modules, including graceful shutdown, periodic snapshotting, and WAL rotation. A gRPC service is also available in the `pkg/rewardpool-grpc-service` directory, providing programmatic access to the reward pool.
+## Modules & Structure
 
-The project uses Go modules for dependency management, with `github.com/edsrzf/mmap-go` being a key dependency for memory-mapped file I/O in the WAL implementation.
+- `internal/config`: Loads and parses the `config.yaml` file.
+- `internal/actor`: Contains the core `RewardProcessorActor` for state management and the `StreamingActor` for WAL replication.
+- `internal/walstream`: Defines the `WALStreamer` interface and provides `NoOpStreamer` and `LogStreamer` implementations.
+- `internal/rewardpool`: Manages the reward items, now with snapshotting logic that includes the `last_request_id`.
+- `internal/recovery`: Recovers state from snapshots and WAL files, now also restoring the `last_request_id`.
+- `pkg/rewardpool-grpc-service`: The gRPC service implementation.
+- `cmd/cli`: The new interactive TUI application.
+  - `tui/model.go`: The main `bubbletea` model, handling UI state, commands, and rendering.
+- `cmd/cli_v1`: The archived, non-interactive CLI.
+- `samples/config.yaml`: The central configuration file for the application.
 
-## Building and Running
+## Key Features
 
-The project uses a `Makefile` for common development tasks.
+- **Sequential WAL:** WAL files are created sequentially (`wal.000`, `wal.001`, etc.) with headers for metadata, improving traceability and recovery.
+- **Snapshot Integrity:** Snapshots include a `SHA256` hash for verifying data integrity.
+- **gRPC Service:** Exposes `GetState` and `Draw` methods for programmatic access.
+- **Unlimited Quantity:** Supports reward items with unlimited quantity.
+- **YAML Configuration:** All major settings are now managed in a single `config.yaml` file.
+- **Interactive TUI:** A rich, interactive terminal interface for managing and observing the reward pool in real-time.
+- **Persistent Request IDs:** Guarantees that request IDs are unique and monotonically increasing even after restarts.
+- **WAL Streaming:** Asynchronously streams WAL logs to an external target, enabling real-time replication.
+- **WAL-First Principle:** Two-phase commit ensures WAL is written before in-memory state is mutated.
+- **Pluggable WAL:** Formatters (JSONL, StringLine) and storages (File, MMap) are interchangeable via interfaces.
+- **Auto Rotation & Snapshotting:** The processor automatically handles WAL file rotation and snapshot creation when the WAL is full.
 
-*   **Check compile errors / warnining:**
-    ```sh
-    make check
-    ```
+## Testing and Verification
 
-*   **Build the CLI binary:**
-    ```sh
-    make build
-    ```
+- **Check syntax:** Run `make check` to check source and report compile errors / warining.
+- **Unit Tests:** Run `make test` to execute all unit tests.
+- **Distribution Test:** Run `make distribution_test` to verify that the reward distribution is correct according to the configured probabilities.
+- **Benchmarks:** Run `make bench` to run all benchmark tests.
+- **Proto Generation:** Run `make proto-gen` to generate Go code from `.proto` files.
+- **gRPC Benchmarking:** Run `make bench-grpc` to run the k6 load test for the gRPC service.
 
-*   **Run the CLI demo:**
-    ```sh
-    make run
-    ```
+## Example Usage
 
-*   **Run all unit tests:**
-    ```sh
-    make test
-    ```
+- Configure the service in `samples/config.yaml`.
+- Run `make run` to start the interactive TUI.
+- Use commands like `h` (help), `d` (draw), and `u` (update) within the TUI.
 
-*   **Generate Go code from .proto files:**
-    ```sh
-    make proto-gen
-    ```
+## Next Steps
 
-*   **Run gRPC benchmark:**
-    ```sh
-    make bench-grpc
-    ```
-
-## Development Conventions
-
-*   **Configuration:** The application is configured via a central `samples/config.yaml` file.
-*   **gRPC Service:** A gRPC service is defined in `pkg/rewardpool-grpc-service` and can be enabled via the configuration file. It provides `GetState` and `Draw` methods.
-*   **Unlimited Quantity:** The system supports reward items with unlimited quantity by setting the `quantity` field to `-1`.
-*   **Interactive TUI:** The primary interface is an interactive terminal application built with `bubbletea`, located in `cmd/cli`.
-*   **Persistent Request IDs:** The actor model ensures that `requestID` is persistent across restarts by saving it in snapshots and recovering it from the WAL.
-*   **WAL Streaming:** A `walstream` module with a dedicated `StreamingActor` provides asynchronous, non-blocking streaming of WAL entries for replication.
-*   **Modular Design:** The project follows a modular design, with clear separation of concerns between different packages.
-*   **Interfaces:** Interfaces are used to define contracts between different modules, promoting testability and loose coupling. A key example is the `ItemSelector` interface, which abstracts the underlying data structure for weighted random item selection. The `PoolReward.Probability` field has been updated to `int64` to align with the `ItemSelector` module's requirements. Implementations include `FenwickTreeSelector` and `PrefixSumSelector`.
-*   **Testing:** Unit tests are provided for all key modules, and the project includes benchmark tests for performance-critical components like the WAL and gRPC service.
-*   **Dependency Injection:** The `Context` struct is used for dependency injection, and the `rewardpool.Pool` accepts an `ItemSelector` to allow for different selection strategies.
-*   **Concurrency and Transactional Integrity:** A single-threaded processing model with a dedicated goroutine and buffered channels is used to handle state changes. The `Actor.Draw` method now returns a channel (`<-chan DrawResponse`) for a more idiomatic and developer-friendly API. To ensure data integrity and adhere to the WAL-first principle, the system uses a two-phase commit process, with the `ItemSelector` being the source of truth for all reward item states (quantity and probability):
-    1.  **Stage:** An operation (like a draw or item update) is first staged in memory. For draws, the `ItemSelector` immediately decrements the item's quantity in its internal state to prevent over-draws during the transaction. The selection is based on the item's `Probability`, while availability is checked against its `Quantity`.
-    2.  **Log:** The operation is written to the Write-Ahead Log's in-memory buffer. The WAL now supports multiple log types, including draws, item updates, and snapshots.
-    3.  **Commit/Revert:** When the WAL's buffer is flushed to disk, if the write is successful, the staged operations are committed (e.g., `CommitDraw`). Since the selector's state was already updated, this step finalizes the transaction. If the write fails, the operation is reverted (`RevertDraw`), and the `ItemSelector` is updated to restore the item's original state, ensuring consistency.
-*   **WAL Rotation and Snapshots:** The system ensures that no data is lost when the WAL file becomes full. The process is driven by the `actor` and follows these steps:
-    1.  **Detect Full WAL:** When a WAL flush fails with `ErrWALFull`, the rotation process begins.
-    2.  **Preserve and Revert:** All pending (un-flushed) operations are preserved in a temporary list. The actor then reverts the in-memory state of the `ItemSelector` to match the last successfully written state in the WAL.
-    3.  **Snapshot:** A new snapshot of the consistent, reverted state is created and saved to disk.
-    4.  **Rotate and Initialize:** The full WAL is archived, and a new, empty WAL file is created. The first entry written to this new WAL *must* be a `WalLogSnapshotItem` pointing to the newly created snapshot.
-    5.  **Replay and Re-log:** The preserved pending operations are then re-staged in the `ItemSelector` and re-logged to the new WAL's in-memory buffer.
-    6.  **Final Flush:** The buffer is flushed to the new WAL file, securing the re-logged operations. This robust process guarantees that every WAL file is a self-contained, recoverable unit starting with a complete snapshot.
-*   **Error Handling:** Errors are handled explicitly, and the CLI demo includes error handling for recovery and WAL operations.
-*   **Logging:** The CLI demo includes basic logging to the console to provide visibility into the system's state and operations.
-
-## AI Agent Working Procedure
-
-The AI agent's workflow is designed to be systematic, iterative, and well-documented, ensuring context is maintained and tasks are completed efficiently.
-
-**1. Onboarding & Context Gathering:**
-
-*   **Primary Directive:** Before starting any task, the agent must first read the entire `_ai/doc/` directory to understand the project's goals, architecture, and established workflow.
-*   **Key Documents:**
-    *   `_ai/doc/requirement.md`: The Product Requirements Document (PRD) that defines the project's features and constraints. All work must align with this document.
-    *   `_ai/doc/working_flow.md`: The high-level guide on how to approach tasks.
-    *   `_ai/doc/agent_note.md`: A quick summary and handover note from the previous agent to get up to speed on the latest project state.
-    *   `_ai/doc/bench.md`: A summary of performance benchmarks, which informs decisions related to performance-critical code.
-
-**2. Task Execution (Iterative Development):**
-
-The development process is broken down into tasks, which are documented in files like `_ai/task_01.md`, `_ai/task_02.md`, etc.
-
-*   **Task Structure:** Each task is composed of one or more iterations (`Iter`).
-*   **The Iteration Cycle (Plan -> Do -> Document):**
-    1.  **Review Previous Work:** Read the current task file to understand the overall `Target` and the `Problem` identified in the previous iteration.
-    2.  **Formulate a `Plan`:** Based on the target and previous problems, create a clear and concise plan for the current iteration. This plan should be documented under the `Plan` section for the current `Iter`.
-    3.  **Implement the Plan:** Execute the plan by writing or modifying the Go code and corresponding tests. The agent must adhere to the project's existing structure and conventions.
-    4.  **Verify with Tests:** After implementation, run the project's tests to ensure all changes are correct and have not introduced regressions. The primary command for this is `go test ./...`. For benchmarks, use `make bench`.
-    5.  **Document the `Result`:** Once the implementation is complete and verified, document the outcome under the `Result` section of the current iteration.
-    6.  **Identify `Problem`s:** If any limitations, bugs, or areas for improvement are found, document them in the `Problem` section. This sets the stage for the next iteration.
-
-**3. Core Principles:**
-
-*   **Iterative Refinement:** The agent works in small, incremental steps. Problems found in one iteration are addressed in the plan for the next.
-*   **Compile-Driven:** Use `make check` after finish an implementation. Make sure fix all compile errors / warning before do a test `make test`
-*   **Test-Driven:** Every functional component or module must be accompanied by unit tests.
-*   **Documentation is a Priority:** The agent is responsible for keeping the `_ai` directory updated. This includes filling out the `Plan`, `Result`, and `Problem` sections for each iteration and updating benchmark documents when relevant.
-*   **Performance-Aware:** When working on performance-sensitive areas, the agent should create and run benchmarks, analyze the results, and use the data to guide implementation choices.
+- Add more advanced TUI features, such as filtering and searching the command history.
+- Explore more sophisticated WAL streaming backends like Kafka or gRPC streams.
+- Enhance configuration validation and error handling.

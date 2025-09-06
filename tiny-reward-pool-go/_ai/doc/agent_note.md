@@ -5,8 +5,13 @@
 - High-performance, in-memory Reward Pool Service in Go
 - Implements PRD requirements: reward pool, WAL, config, CLI, gRPC service, and robust processing model
 
-## Recent Updates (Aug 2025)
+## Recent Updates (Sep 2025)
 
+- **Task_15:** Enhanced WAL file structure and recovery process.
+  - **WAL Header:** Implemented a `<Header><Data>` layout for WAL files. The header contains metadata such as a magic number, version, status (`Open`/`Closed`), and a sequence number.
+  - **Sequential WAL Files:** WAL rotation now creates sequential files (e.g., `wal.000`, `wal.001`, `wal.002`) instead of timestamped files. This simplifies WAL management.
+  - **Simplified Recovery:** The recovery logic now scans the working directory for all `wal.xxx` files, sorts them numerically, and replays them in order to restore the state.
+  - **Snapshot Integrity:** Snapshots now include a `SHA256` hash of the item catalog to ensure data integrity.
 - **Task_14:** Added a gRPC service and support for unlimited quantity items.
   - **gRPC Service:** Implemented a gRPC service in `pkg/rewardpool-grpc-service` that exposes `GetState` and `Draw` methods. The service can be enabled and configured in `config.yaml`.
   - **Unlimited Quantity:** Added support for reward items with unlimited quantity by setting the `quantity` field to `-1`. The core logic in `rewardpool` and `selector` has been updated to handle this.
@@ -46,6 +51,8 @@
 
 ## Key Features
 
+- **Sequential WAL:** WAL files are created sequentially (`wal.000`, `wal.001`, etc.) with headers for metadata, improving traceability and recovery.
+- **Snapshot Integrity:** Snapshots include a `SHA256` hash for verifying data integrity.
 - **gRPC Service:** Exposes `GetState` and `Draw` methods for programmatic access.
 - **Unlimited Quantity:** Supports reward items with unlimited quantity.
 - **YAML Configuration:** All major settings are now managed in a single `config.yaml` file.

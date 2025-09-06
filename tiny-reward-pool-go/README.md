@@ -6,6 +6,8 @@ A high-performance, in-memory Reward Pool Service written in Go. Designed for ra
 
 ## Features
 - In-memory reward pool with configurable item catalog via YAML.
+- **Sequential WAL:** WAL files are created sequentially (`wal.000`, `wal.001`, etc.) with headers for metadata, improving traceability and recovery.
+- **Snapshot Integrity:** Snapshots include a `SHA256` hash for verifying data integrity.
 - **gRPC Service**: Exposes `GetState` and `Draw` methods for programmatic access.
 - **Unlimited Quantity**: Supports reward items with unlimited quantity.
 - Interactive Terminal UI (TUI) for real-time monitoring and administration.
@@ -68,7 +70,7 @@ You can use `grpcurl` to interact with the service. See `_ai/ref/note_grpcurl.md
 - `samples/config.yaml`: The main configuration file.
 
 ## Documentation
-- See `_ai/doc/agent_note.md` for a quick project summary and onboarding.
+- See `GEMINI.md` for a quick project summary and onboarding.
 
 ---
 MIT License

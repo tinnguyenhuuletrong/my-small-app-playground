@@ -1,0 +1,2786 @@
+diff --git a/tiny-reward-pool-go/.vscode/launch.json b/tiny-reward-pool-go/.vscode/launch.json
+new file mode 100644
+index 0000000..3a7bc89
+--- /dev/null
++++ b/tiny-reward-pool-go/.vscode/launch.json
+@@ -0,0 +1,30 @@
++{
++    // Use IntelliSense to learn about possible attributes.
++    // Hover to view descriptions of existing attributes.
++    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
++    "version": "0.2.0",
++    "configurations": [
++        {
++            "name": "Launch Main CLI",
++            "type": "go",
++            "request": "launch",
++            "mode": "auto",
++            "cwd": "${workspaceFolder}",
++            "program": "cmd/cli/main.go",
++            "args": [
++                "-config",
++                "samples/config.yaml"
++            ]
++        },
++        {
++            "name": "Attach to CLI",
++            "type": "go",
++            "debugAdapter": "dlv-dap",
++            "request": "attach",
++            "mode": "remote", // or "remote" for remote processes
++            // "processId": "${command:pickProcess}", // or specify a fixed PID
++            "port": 2345,
++            "host": "127.0.0.1"
++        }
++    ]
++}
+\ No newline at end of file
+diff --git a/tiny-reward-pool-go/Makefile b/tiny-reward-pool-go/Makefile
+index e696e37..30d157f 100644
+--- a/tiny-reward-pool-go/Makefile
++++ b/tiny-reward-pool-go/Makefile
+@@ -6,6 +6,9 @@ BIN=bin/tiny-reward-pool-cli
+ run:
+ 	go run $(CLI) -config samples/config.yaml
+ 
++run_debug:
++	dlv debug --headless --listen=:2345 $(CLI) -- -config samples/config.yaml
++
+ build:
+ 	go build -o $(BIN) $(CLI)
+ 
+diff --git a/tiny-reward-pool-go/_ai/doc/cmd_template/do_planning.json b/tiny-reward-pool-go/_ai/doc/cmd_template/do_planning.json
+index f020230..b6d7fa3 100644
+--- a/tiny-reward-pool-go/_ai/doc/cmd_template/do_planning.json
++++ b/tiny-reward-pool-go/_ai/doc/cmd_template/do_planning.json
+@@ -1,13 +1,22 @@
+ {
+-    "task": "create a planning for next task",
+-    "save_to": "create _ai/task_14.md iter 2",
++    "task": "brainstorm then create a planning for next task",
++    "save_to": "create _ai/task_15.md iter_2",
++    "resources": {
++        "task_15.md": "./_ai/task_15.md"
++    },
+     "target": {
+-        "goal": [{
+-            "target": "support PoolReward unlimited Quantity amount"
+-        }]
++        "goal": "continue enhance wal file structure",
++        "note": [
++            "Now we have header for each wal",
++            "simplify wal rotate. should be continuous number 000, 001, .... so one",
++            "header only need to store the wal no. no need previous or next path ( can be computed )",
++            "rework on rotate. should keep old file, move to new one",
++            "remove utils GenRotatedWALPath",
++            "simplify the recovery process. base on path -> search for latest uncomplete wal -> recovery -> continue to use it until full"
++        ]
+     },
+     "steps": {
+         "1": "read current source code",
+-        "2": "create a task + planning"
++        "2": "create implement planning in new task _ai/task_15.md iter_2"
+     }
+ }
+\ No newline at end of file
+diff --git a/tiny-reward-pool-go/_ai/task_15.md b/tiny-reward-pool-go/_ai/task_15.md
+new file mode 100644
+index 0000000..9751faf
+--- /dev/null
++++ b/tiny-reward-pool-go/_ai/task_15.md
+@@ -0,0 +1,131 @@
++# Task 15: Enhance WAL File Structure
++
++## Target
++
++- Enhance WAL file structure to have a `<Header><Data>` layout.
++- The header will contain all metadata, including version, status, and rotation information.
++- The total size of the WAL file in the config should be respected.
++- The existing recovery resilience model (fail-stop on parse error) is acceptable for this task.
++
++---
++
++## Iter 1
++
++### Plan
++
++1.  **Define Header Structure in `internal/types/types.go`:**
++    *   Add the `WALHeader` struct to the `types.go` file.
++    *   **`WALHeader` struct (fixed at 256 bytes):**
++        *   `Magic uint32` (To identify it as our WAL file).
++        *   `Version uint32`.
++        *   `Status uint32` (`WALStatusOpen`, `WALStatusClosed`).
++        *   `NextWALPath [200]byte` (Fixed-size array for the path, used on rotation).
++        *   `Padding` for future use and to ensure the total size is 256 bytes.
++    *   Define constants for the fixed `HeaderSize`, magic numbers, and statuses within the `types` package.
++
++2.  **Update `internal/types/types.go`:**
++    *   Remove the `WalLogRotateItem` struct.
++    *   Remove the `LogRotate` method from the `WAL` interface.
++
++3.  **Modify Storage Layer (`internal/wal/storage/*.go`):**
++    *   **`New...Storage`:**
++        *   On file creation, write the initial `WALHeader` with `Status: WALStatusOpen`.
++        *   The write `offset` must start after the header (`HeaderSize`).
++        *   `CanWrite` must account for the header reservation. For `mmap`, the data area is `total_size - HeaderSize`.
++    *   **Add `Finalize(isRotated bool, nextPath string)` to `Storage` interface:**
++        *   This method will handle the finalization sequence.
++        *   Logic:
++            1.  Flush any pending data to disk.
++            2.  Seek back to the beginning of the file (offset 0).
++            3.  Rewrite the `WALHeader`, updating the `Status` to `WALStatusClosed` and setting `NextWALPath` if `isRotated` is true.
++            4.  Flush the header write to disk.
++    *   **`Rotate` and `Close` methods:**
++        *   The `Rotate` method will call `Finalize`, then close and rename the file.
++        *   The `Close` method will call `Finalize` and then close the file.
++
++4.  **Modify `internal/wal/wal.go`:**
++    *   The `Rotate(path string)` method will call `storage.Rotate(path)`.
++    *   The `Close()` method will call `storage.Close()`.
++    *   The `LogRotate` method is removed.
++    *   **Update `ParseWAL` function:**
++        1.  It will now accept a file path.
++        2.  It will open the file, read the `WALHeader` to get `HeaderSize`.
++        3.  It will read the rest of the file content from `HeaderSize` to the end.
++        4.  It will pass this data slice to `formatter.Decode`.
++
++5.  **Modify `internal/actor/actor.go`:**
++    *   No significant changes are expected here. The actor will continue to call `a.ctx.WAL.Rotate()` and `a.ctx.WAL.Close()`, and the WAL layer will abstract the new finalization logic.
++
++6.  **Modify Recovery Logic (`internal/recovery/recovery.go`):**
++    *   **Update `RecoverPool`'s main loop:**
++        1.  Start with the primary WAL path and create a queue of paths to process.
++        2.  Loop while the queue is not empty:
++            a. Dequeue a path. Open the WAL file.
++            b. Read its `WALHeader`.
++            c. Parse the data section using the updated `wal.ParseWAL`. If parsing fails, the entire recovery fails.
++            d. Replay the successfully parsed logs.
++            e. Check `Header.Status`. If it's `Closed` and `NextWALPath` is set, enqueue the next path.
++
++7.  **Build and Verify (`make check`):**
++    *   After implementing the code changes from steps 1-6, run `make check` to fix all compilation errors and warnings before proceeding to the testing phase.
++
++8.  **Update Tests:**
++    *   Update tests in `wal/`, `wal/storage/`, `recovery/`, and `actor/` to reflect the new header-only logic.
++    *   Add a specific test for chained recovery across multiple rotated WAL files.
++    *   Add a test for crash recovery (reading a WAL with `Status: Open` and ensuring logs are read correctly).
++
++---
++
++## Iter 2
++
++### Plan
++
++1.  **Update `internal/types/types.go`**:
++    *   Modify `WALHeader` struct: remove `NextWALPath` and add `SeqNo uint64`.
++    *   Add new constant `WALBaseName = "wal"`.
++
++2.  **Update `internal/utils/utils.go`**:
++    *   Remove `GenRotatedWALPath` function.
++    *   Add `GetWALFiles() ([]string, error)` to scan `walDir`, find files matching `wal.ddd`, and return them sorted numerically.
++    *   Add `GenNextWALPath() (string, uint64, error)` to determine the next sequence number and return the new path and sequence number.
++
++3.  **Update `internal/wal/storage/*.go`**:
++    *   Update `New...Storage` functions to accept a `seqNo uint64` and write it to the `WALHeader` on creation.
++    *   Remove `Rotate` method from the `Storage` interface.
++    *   Rename `Finalize` to `FinalizeAndClose` and simplify it to only update the header status to `Closed` before closing the file. The `isRotated` and `nextPath` parameters will be removed.
++    *   The `Close` method will now just call `FinalizeAndClose`.
++
++4.  **Update `internal/wal/wal.go`**:
++    *   Remove the `Rotate` method.
++    *   Update `NewWAL` to accept the `seqNo` and pass it to the storage constructor.
++    *   The `Close` method will call `storage.FinalizeAndClose()`.
++
++5.  **Update `internal/actor/actor.go`**:
++    *   Rewrite `handleWALFull` logic:
++        1.  Call `a.ctx.WAL.Close()` to finalize the current full WAL.
++        2.  Use `a.ctx.Utils.GenNextWALPath()` to get the path and sequence number for the new WAL.
++        3.  Create a new `WAL` instance using the new path and sequence number.
++        4.  Replace the old WAL instance in the actor's context: `a.ctx.WAL = newWAL`.
++        5.  Proceed with creating a snapshot and replaying pending logs to the new WAL instance.
++
++6.  **Update `internal/recovery/recovery.go`**:
++    *   Remove the `unrollWALChain` function.
++    *   Rewrite `RecoverPool` and `RecoverPoolFromConfig`:
++        1.  Use the new `utils.GetWALFiles()` to get a sorted list of all WAL files.
++        2.  Iterate through the files, parsing each one and appending its logs to a single list.
++        3.  After collecting all logs, find the last snapshot and determine which logs to replay.
++        4.  Load the snapshot and replay the necessary logs.
++        5.  The logic for deleting old WAL files must be removed.
++        6.  The recovery process should also return the path of the last WAL file, so the application can continue using it. If the last file is full, a new one should be created.
++
++7.  **Update `cmd/cli/main.go`**:
++    *   The main application logic needs to be updated to handle the new return values from `recovery.RecoverPool`. It will receive the last WAL path and must decide whether to continue with it or create a new one if it's full.
++
++8.  **Build and Verify (`make check`):**
++    *   After implementing the code changes from steps 1-6, run `make check` to fix all compilation errors and warnings before proceeding to the testing phase.
++
++9.  **Update Tests**:
++    *   Update unit and integration tests across `wal/`, `actor/`, and `recovery/` packages to align with the new sequential WAL file management.
++    *   Add specific tests for the WAL file scanning and sorting logic in `utils`.
++    *   Add tests to verify the recovery process correctly replays logs from a sequence of WAL files.
++    *   Ensure tests for the WAL rotation in the actor correctly create the next sequential file.
+\ No newline at end of file
+diff --git a/tiny-reward-pool-go/cmd/bench/bench_wal_mmap_test.go b/tiny-reward-pool-go/cmd/bench/bench_wal_mmap_test.go
+index aa1ddd4..de9bc17 100644
+--- a/tiny-reward-pool-go/cmd/bench/bench_wal_mmap_test.go
++++ b/tiny-reward-pool-go/cmd/bench/bench_wal_mmap_test.go
+@@ -25,14 +25,14 @@ func BenchmarkPoolDrawWithMmapWALChannel(b *testing.B) {
+ 	const walSize = 64 * 1024 * 1024
+ 
+ 	jsonFormatter := walformatter.NewStringLineFormatter()
+-	fileStorage, err := walstorage.NewFileMMapStorage(walPath, walstorage.FileMMapStorageOps{
++	fileStorage, err := walstorage.NewFileMMapStorage(walPath, 0, walstorage.FileMMapStorageOps{
+ 		MMapFileSizeInBytes: walSize,
+ 	})
+ 	if err != nil {
+ 		b.Fatalf("failed to create file storage: %v", err)
+ 	}
+ 
+-	w, err := wal.NewWAL(walPath, jsonFormatter, fileStorage)
++	w, err := wal.NewWAL(walPath, 0, jsonFormatter, fileStorage)
+ 	if err != nil {
+ 		b.Fatalf("failed to create mmap WAL: %v", err)
+ 	}
+@@ -83,4 +83,4 @@ func BenchmarkPoolDrawWithMmapWALChannel(b *testing.B) {
+ 	b.ReportMetric(float64(memStatsEnd.TotalAlloc-memStatsStart.TotalAlloc)/float64(b.N), "bytes/draw")
+ 	b.ReportMetric(float64(memStatsEnd.NumGC-memStatsStart.NumGC), "gc_count")
+ 	// b.ReportMetric(walSize, "wal_file_size")
+-}
++}
+\ No newline at end of file
+diff --git a/tiny-reward-pool-go/cmd/bench/bench_wal_test.go b/tiny-reward-pool-go/cmd/bench/bench_wal_test.go
+index 8239ae7..f44194f 100644
+--- a/tiny-reward-pool-go/cmd/bench/bench_wal_test.go
++++ b/tiny-reward-pool-go/cmd/bench/bench_wal_test.go
+@@ -23,11 +23,11 @@ func BenchmarkPoolDrawWithFileWALChannel(b *testing.B) {
+ 	_ = os.Remove(walPath)
+ 
+ 	jsonFormatter := walformatter.NewStringLineFormatter()
+-	fileStorage, err := walstorage.NewFileStorage(walPath)
++	fileStorage, err := walstorage.NewFileStorage(walPath, 0)
+ 	if err != nil {
+ 		b.Fatalf("failed to create file storage: %v", err)
+ 	}
+-	w, err := wal.NewWAL(walPath, jsonFormatter, fileStorage)
++	w, err := wal.NewWAL(walPath, 0, jsonFormatter, fileStorage)
+ 	if err != nil {
+ 		b.Fatalf("failed to create WAL: %v", err)
+ 	}
+@@ -79,4 +79,4 @@ func BenchmarkPoolDrawWithFileWALChannel(b *testing.B) {
+ 	b.ReportMetric(float64(memStatsEnd.NumGC-memStatsStart.NumGC), "gc_count")
+ 	b.ReportMetric(walSize/float64(b.N), "wal_bytes/draw")
+ 	b.ReportMetric(walSize, "wal_file_size")
+-}
++}
+\ No newline at end of file
+diff --git a/tiny-reward-pool-go/cmd/cli/main.go b/tiny-reward-pool-go/cmd/cli/main.go
+index 1b878a1..0837183 100644
+--- a/tiny-reward-pool-go/cmd/cli/main.go
++++ b/tiny-reward-pool-go/cmd/cli/main.go
+@@ -87,8 +87,6 @@ func setup(cfg config.YAMLConfig) (*actor.System, *tui.ChannelWriter, error) {
+ 	// Setup paths
+ 	baseDir := "."
+ 	tmpDir := baseDir + "/" + cfg.WorkingDir
+-	snapshotPath := tmpDir + "/snapshot.json"
+-	walPath := tmpDir + "/wal.log"
+ 
+ 	// Create tmpDir if not exists
+ 	if _, err := os.Stat(tmpDir); os.IsNotExist(err) {
+@@ -113,18 +111,29 @@ func setup(cfg config.YAMLConfig) (*actor.System, *tui.ChannelWriter, error) {
+ 	// Create a pool from the config
+ 	initialPool := rewardpool.CreatePoolFromConfig(cfg.Pool)
+ 
+-	pool, lastRequestID, err := recovery.RecoverPoolFromConfig(snapshotPath, walPath, initialPool, walFormatter, utils)
++	pool, lastRequestID, lastWalPath, err := recovery.RecoverPoolFromConfig(initialPool, walFormatter, utils)
+ 	if err != nil {
+ 		return nil, nil, fmt.Errorf("recovery failed: %w", err)
+ 	}
+ 
+-	fileStorage, err := walstorage.NewFileMMapStorage(walPath, walstorage.FileMMapStorageOps{
++	var w types.WAL
++	var seqNo uint64
++	if lastWalPath == "" {
++		var newWalPath string
++		newWalPath, seqNo, err = utils.GenNextWALPath()
++		if err != nil {
++			return nil, nil, fmt.Errorf("error generating new WAL path: %w", err)
++		}
++		lastWalPath = newWalPath
++	}
++
++	fileStorage, err := walstorage.NewFileMMapStorage(lastWalPath, seqNo, walstorage.FileMMapStorageOps{
+ 		MMapFileSizeInBytes: int64(cfg.WAL.MaxFileSizeKB * 1024), // From KB to Bytes
+ 	})
+ 	if err != nil {
+ 		return nil, nil, fmt.Errorf("error creating file storage: %w", err)
+ 	}
+-	w, err := wal.NewWAL(walPath, walFormatter, fileStorage)
++	w, err = wal.NewWAL(lastWalPath, seqNo, walFormatter, fileStorage)
+ 	if err != nil {
+ 		return nil, nil, fmt.Errorf("error opening WAL: %w", err)
+ 	}
+@@ -136,11 +145,22 @@ func setup(cfg config.YAMLConfig) (*actor.System, *tui.ChannelWriter, error) {
+ 
+ 	walStreamer := walstream.NewNoOpStreamer()
+ 
++	walFactory := func(path string, seqNo uint64) (types.WAL, error) {
++		fileStorage, err := walstorage.NewFileMMapStorage(path, seqNo, walstorage.FileMMapStorageOps{
++			MMapFileSizeInBytes: int64(cfg.WAL.MaxFileSizeKB * 1024), // From KB to Bytes
++		})
++		if err != nil {
++			return nil, fmt.Errorf("error creating file storage: %w", err)
++		}
++		return wal.NewWAL(path, seqNo, walFormatter, fileStorage)
++	}
++
+ 	sys, err := actor.NewSystem(ctx, pool, &actor.SystemOptional{
+ 		FlushAfterNDraw:   cfg.WAL.FlushAfterNDraw,
+ 		RequestBufferSize: cfg.WAL.MaxRequestBuffer,
+ 		LastRequestID:     lastRequestID,
+ 		WALStreamer:       walStreamer,
++		WALFactory:        walFactory,
+ 	})
+ 	if err != nil {
+ 		return nil, nil, fmt.Errorf("system startup error: %w", err)
+@@ -149,4 +169,4 @@ func setup(cfg config.YAMLConfig) (*actor.System, *tui.ChannelWriter, error) {
+ 
+ 	utils.GetLogger().Debug(fmt.Sprintf("Config: %+v", cfg))
+ 	return sys, writer, nil
+-}
++}
+\ No newline at end of file
+diff --git a/tiny-reward-pool-go/cmd/cli_v1/cli/main.go b/tiny-reward-pool-go/cmd/cli_v1/cli/main.go
+index e12cec1..fc5d1ea 100644
+--- a/tiny-reward-pool-go/cmd/cli_v1/cli/main.go
++++ b/tiny-reward-pool-go/cmd/cli_v1/cli/main.go
+@@ -25,23 +25,33 @@ func main() {
+ 	baseDir := "."
+ 	defaultConfigPath := baseDir + "/samples/config.json"
+ 	tmpDir := baseDir + "/tmp"
+-	snapshotPath := tmpDir + "/snapshot.json"
+-	walPath := tmpDir + "/wal.log"
+ 
+ 	utils := utils.NewDefaultUtils(tmpDir, tmpDir, slog.LevelDebug, nil)
+ 
+ 	// walFormatter := walformatter.NewJSONFormatter()
+ 	walFormatter := walformatter.NewStringLineFormatter()
+-	pool, lastRequestID, err := recovery.RecoverPool(snapshotPath, walPath, defaultConfigPath, walFormatter, utils)
++	pool, lastRequestID, lastWalPath, err := recovery.RecoverPool(defaultConfigPath, walFormatter, utils)
+ 	if err != nil {
+ 		fmt.Println("Recovery failed:", err)
+ 		os.Exit(1)
+ 	}
+ 
++	var w types.WAL
++	var seqNo uint64
++	if lastWalPath == "" {
++		var newWalPath string
++		newWalPath, seqNo, err = utils.GenNextWALPath()
++		if err != nil {
++			fmt.Println("Error generating new WAL path:", err)
++			os.Exit(1)
++		}
++		lastWalPath = newWalPath
++	}
++
+ 	// fileStorage, err := walstorage.NewFileMMapStorage(walPath, walstorage.FileMMapStorageOps{
+ 	// 	MMapFileSizeInBytes: 1024 * 0.5, // 0.5 Kb
+ 	// })
+-	fileStorage, err := walstorage.NewFileStorage(walPath, walstorage.FileStorageOpt{
++	fileStorage, err := walstorage.NewFileStorage(lastWalPath, seqNo, walstorage.FileStorageOpt{
+ 		// SizeFileInBytes: 1024 * 1024 * 0.5, // 0.5 MB
+ 		SizeFileInBytes: int(math.Round(1024 * 0.2)), // 0.5 Kb
+ 	})
+@@ -49,7 +59,7 @@ func main() {
+ 		fmt.Println("Error creating file storage:", err)
+ 		os.Exit(1)
+ 	}
+-	w, err := wal.NewWAL(walPath, walFormatter, fileStorage)
++	w, err = wal.NewWAL(lastWalPath, seqNo, walFormatter, fileStorage)
+ 	if err != nil {
+ 		fmt.Println("Error opening WAL:", err)
+ 		os.Exit(1)
+@@ -136,9 +146,9 @@ func main() {
+ 						break
+ 					}
+ 				}
+-				errr := sys.UpdateItem("gold", currentGold.Quantity+10, currentGold.Probability)
+-				if errr != nil {
+-					fmt.Printf("Failed to update gold: %v\n", errr)
++				err := sys.UpdateItem("gold", currentGold.Quantity+10, currentGold.Probability)
++				if err != nil {
++					fmt.Printf("Failed to update gold: %v\n", err)
+ 				} else {
+ 					fmt.Println("--- Gold updated. New pool state: ---")
+ 					fmt.Println(sys.State())
+@@ -163,9 +173,9 @@ func main() {
+ 				}
+ 				silverProbToggle = !silverProbToggle
+ 
+-				errr := sys.UpdateItem("silver", currentSilver.Quantity, newProb)
+-				if errr != nil {
+-					fmt.Printf("Failed to update silver: %v\n", errr)
++				err := sys.UpdateItem("silver", currentSilver.Quantity, newProb)
++				if err != nil {
++					fmt.Printf("Failed to update silver: %v\n", err)
+ 				} else {
+ 					fmt.Println("--- Silver updated. New pool state: ---")
+ 					fmt.Println(sys.State())
+@@ -183,4 +193,4 @@ func main() {
+ 
+ 	fmt.Println("[Pool state] ", pool.State())
+ 	fmt.Println("Shutdown complete.")
+-}
++}
+\ No newline at end of file
+diff --git a/tiny-reward-pool-go/internal/actor/actor.go b/tiny-reward-pool-go/internal/actor/actor.go
+index c08afc5..83ff192 100644
+--- a/tiny-reward-pool-go/internal/actor/actor.go
++++ b/tiny-reward-pool-go/internal/actor/actor.go
+@@ -5,7 +5,6 @@ import (
+ 	"encoding/json"
+ 	"fmt"
+ 	"os"
+-	"sync/atomic"
+ 
+ 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/replay"
+ 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
+@@ -21,6 +20,7 @@ type RewardProcessorActor struct {
+ 	pendingLogs      []types.WalLogEntry
+ 	requestID        uint64
+ 	streamingChannel chan<- types.WalLogEntry
++	walFactory       func(path string, seqNo uint64) (types.WAL, error)
+ }
+ 
+ // Init performs the initial setup for the actor, like creating an initial
+@@ -47,7 +47,7 @@ func (a *RewardProcessorActor) Init() error {
+ }
+ 
+ // NewRewardProcessorActor creates a new actor instance.
+-func NewRewardProcessorActor(ctx *types.Context, pool types.RewardPool, mailboxSize, flushAfterNDraw int, requestID uint64) *RewardProcessorActor {
++func NewRewardProcessorActor(ctx *types.Context, pool types.RewardPool, mailboxSize, flushAfterNDraw int, requestID uint64, walFactory func(path string, seqNo uint64) (types.WAL, error)) *RewardProcessorActor {
+ 	return &RewardProcessorActor{
+ 		ctx:              ctx,
+ 		pool:             pool,
+@@ -56,6 +56,7 @@ func NewRewardProcessorActor(ctx *types.Context, pool types.RewardPool, mailboxS
+ 		pendingLogs:      make([]types.WalLogEntry, 0, flushAfterNDraw*2),
+ 		requestID:        requestID,
+ 		streamingChannel: nil,
++		walFactory:       walFactory,
+ 	}
+ }
+ 
+@@ -105,7 +106,8 @@ func (a *RewardProcessorActor) handleMessage(msg interface{}) {
+ }
+ 
+ func (a *RewardProcessorActor) handleDraw(m DrawMessage) {
+-	reqID := atomic.AddUint64(&a.requestID, 1)
++	a.requestID += 1
++	reqID := a.requestID
+ 	item, err := a.pool.SelectItem(a.ctx)
+ 	var walErr error
+ 
+@@ -211,19 +213,32 @@ func (a *RewardProcessorActor) handleWALFull() error {
+ 	a.pendingLogs = a.pendingLogs[:0]
+ 	a.ctx.WAL.Reset() // Clear the unflushed buffer in the WAL
+ 
+-	// 2. Rotate WAL file
+-	rotatedPath := a.ctx.Utils.GenRotatedWALPath()
+-	if rotatedPath != nil {
+-		if err := a.ctx.WAL.Rotate(*rotatedPath); err != nil {
+-			if logger := a.ctx.Utils.GetLogger(); logger != nil {
+-				logger.Error("Failed to rotate WAL.", "error", err)
+-			}
+-			// This is a critical failure, can't proceed.
+-			return err
++	// 2. Finalize the old WAL
++	if err := a.ctx.WAL.Close(); err != nil {
++		if logger := a.ctx.Utils.GetLogger(); logger != nil {
++			logger.Error("Failed to finalize old WAL.", "error", err)
++		}
++		return err
++	}
++
++	// 3. Create a new WAL
++	newPath, newSeqNo, err := a.ctx.Utils.GenNextWALPath()
++	if err != nil {
++		if logger := a.ctx.Utils.GetLogger(); logger != nil {
++			logger.Error("Failed to generate new WAL path.", "error", err)
+ 		}
++		return err
++	}
++	newWAL, err := a.walFactory(newPath, newSeqNo)
++	if err != nil {
++		if logger := a.ctx.Utils.GetLogger(); logger != nil {
++			logger.Error("Failed to create new WAL.", "error", err)
++		}
++		return err
+ 	}
++	a.ctx.WAL = newWAL
+ 
+-	// 3. Create and log a snapshot to the new WAL
++	// 4. Create and log a snapshot to the new WAL
+ 	if err := a.snapshot(); err != nil {
+ 		// Also a critical failure.
+ 		return err
+@@ -236,10 +251,10 @@ func (a *RewardProcessorActor) handleWALFull() error {
+ 		return err
+ 	}
+ 
+-	// 4. Re-apply and re-log the preserved operations
++	// 5. Re-apply and re-log the preserved operations
+ 	a.replayAndRelog(logsToReplay)
+ 
+-	// 5. Final flush attempt on the new WAL
++	// 6. Final flush attempt on the new WAL
+ 	if err := a.ctx.WAL.Flush(); err != nil {
+ 		if logger := a.ctx.Utils.GetLogger(); logger != nil {
+ 			logger.Error("CRITICAL: Flush failed even after WAL rotation. Data may be lost.", "error", err)
+diff --git a/tiny-reward-pool-go/internal/actor/actor_init_test.go b/tiny-reward-pool-go/internal/actor/actor_init_test.go
+index 337de77..80a2e2e 100644
+--- a/tiny-reward-pool-go/internal/actor/actor_init_test.go
++++ b/tiny-reward-pool-go/internal/actor/actor_init_test.go
+@@ -63,14 +63,18 @@ func (m *mockUtilsForInit) GetLogger() *slog.Logger {
+ 	return slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+ }
+ 
+-func (m *mockUtilsForInit) GenRotatedWALPath() *string {
+-	return nil
+-}
+-
+ func (m *mockUtilsForInit) GenSnapshotPath() *string {
+ 	return &m.snapshotPath
+ }
+ 
++func (m *mockUtilsForInit) GetWALFiles() ([]string, error) {
++	return []string{}, nil
++}
++
++func (m *mockUtilsForInit) GenNextWALPath() (string, uint64, error) {
++	return "/tmp/wal.000", 0, nil
++}
++
+ func TestSystem_InitialSnapshotOnEmptyWAL(t *testing.T) {
+ 	tmpDir := t.TempDir()
+ 	snapshotPath := filepath.Join(tmpDir, "test.snapshot")
+@@ -155,7 +159,7 @@ func TestSystem_InitialSnapshotOnEmptyWAL(t *testing.T) {
+ func TestSystem_StartWithNonSizableWAL(t *testing.T) {
+ 	// 1. Setup
+ 	// Use the original mockWAL which does not have the Size() method
+-	wal := &mockWAL{size: 10}
++	wal := &mockWalWithSize{size: 10}
+ 	pool := &mockPoolForInit{}
+ 	mockUtils := &mockUtilsForInit{}
+ 	ctx := &types.Context{
+@@ -172,4 +176,4 @@ func TestSystem_StartWithNonSizableWAL(t *testing.T) {
+ 	require.NotNil(t, sys)
+ 	defer sys.Stop()
+ 	assert.False(t, pool.createSnapshotCalled, "Snapshot should not be created for non-sizable WAL")
+-}
+\ No newline at end of file
++}
+diff --git a/tiny-reward-pool-go/internal/actor/actor_restore_request_id_test.go b/tiny-reward-pool-go/internal/actor/actor_restore_request_id_test.go
+index d82cbf8..5cb291d 100644
+--- a/tiny-reward-pool-go/internal/actor/actor_restore_request_id_test.go
++++ b/tiny-reward-pool-go/internal/actor/actor_restore_request_id_test.go
+@@ -11,6 +11,7 @@ import (
+ 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/recovery"
+ 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/rewardpool"
+ 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
++	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/utils"
+ 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal"
+ 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/formatter"
+ 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/storage"
+@@ -18,24 +19,31 @@ import (
+ 
+ type mockUtilsForRestoreTest struct {
+ 	snapshotPath string
++	walDir       string
+ }
+ 
+ func (m *mockUtilsForRestoreTest) GetLogger() *slog.Logger {
+ 	return nil
+ }
+ 
+-func (m *mockUtilsForRestoreTest) GenRotatedWALPath() *string {
+-	return nil
+-}
+-
+ func (m *mockUtilsForRestoreTest) GenSnapshotPath() *string {
+ 	return &m.snapshotPath
+ }
+ 
++func (m *mockUtilsForRestoreTest) GetWALFiles() ([]string, error) {
++	return utils.NewDefaultUtils(m.walDir, "", slog.LevelDebug, nil).GetWALFiles()
++}
++
++func (m *mockUtilsForRestoreTest) GenNextWALPath() (string, uint64, error) {
++	return utils.NewDefaultUtils(m.walDir, "", slog.LevelDebug, nil).GenNextWALPath()
++}
++
+ func TestActor_RestoreRequestID(t *testing.T) {
+ 	// 1. Setup initial environment
+ 	tmpDir := t.TempDir()
+-	walPath := filepath.Join(tmpDir, "test.wal")
++	walDir := filepath.Join(tmpDir, "wal")
++	require.NoError(t, os.MkdirAll(walDir, 0755))
++	walPath := filepath.Join(walDir, "wal.000")
+ 	snapshotPath := filepath.Join(tmpDir, "test.snapshot")
+ 	configPath := filepath.Join(tmpDir, "config.json")
+ 
+@@ -48,12 +56,12 @@ func TestActor_RestoreRequestID(t *testing.T) {
+ 		pool, err := rewardpool.CreatePoolFromConfigPath(configPath)
+ 		require.NoError(t, err)
+ 
+-		fileStorage, err := storage.NewFileStorage(walPath)
++		fileStorage, err := storage.NewFileStorage(walPath, 0)
+ 		require.NoError(t, err)
+-		w, err := wal.NewWAL(walPath, formatter.NewJSONFormatter(), fileStorage)
++		w, err := wal.NewWAL(walPath, 0, formatter.NewJSONFormatter(), fileStorage)
+ 		require.NoError(t, err)
+ 
+-		mockUtils := &mockUtilsForRestoreTest{snapshotPath: snapshotPath}
++		mockUtils := &mockUtilsForRestoreTest{snapshotPath: snapshotPath, walDir: walDir}
+ 		ctx := &types.Context{WAL: w, Utils: mockUtils}
+ 
+ 		sys, err := actor.NewSystem(ctx, pool, &actor.SystemOptional{FlushAfterNDraw: 1})
+@@ -73,17 +81,17 @@ func TestActor_RestoreRequestID(t *testing.T) {
+ 	// 3. Second run: Recover the system and verify the request ID.
+ 	func() {
+ 		// Recover the pool and last request ID
+-		recoveredPool, recoveredRequestID, err := recovery.RecoverPool(snapshotPath, walPath, configPath, formatter.NewJSONFormatter(), &mockUtilsForRestoreTest{snapshotPath: snapshotPath})
++		mockUtils := &mockUtilsForRestoreTest{snapshotPath: snapshotPath, walDir: walDir}
++		recoveredPool, recoveredRequestID, _, err := recovery.RecoverPool(configPath, formatter.NewJSONFormatter(), mockUtils)
+ 		require.NoError(t, err)
+ 		require.Equal(t, uint64(5), recoveredRequestID)
+ 
+ 		// Create a new system with the recovered state
+-		fileStorage, err := storage.NewFileStorage(walPath)
++		fileStorage, err := storage.NewFileStorage(walPath, 0)
+ 		require.NoError(t, err)
+-		w, err := wal.NewWAL(walPath, formatter.NewJSONFormatter(), fileStorage)
++		w, err := wal.NewWAL(walPath, 0, formatter.NewJSONFormatter(), fileStorage)
+ 		require.NoError(t, err)
+ 
+-		mockUtils := &mockUtilsForRestoreTest{snapshotPath: snapshotPath}
+ 		ctx := &types.Context{WAL: w, Utils: mockUtils}
+ 
+ 		sys, err := actor.NewSystem(ctx, recoveredPool, &actor.SystemOptional{FlushAfterNDraw: 1})
+@@ -102,4 +110,4 @@ func TestActor_RestoreRequestID(t *testing.T) {
+ 
+ 		sys.Stop()
+ 	}()
+-}
+\ No newline at end of file
++}
+diff --git a/tiny-reward-pool-go/internal/actor/actor_test.go b/tiny-reward-pool-go/internal/actor/actor_test.go
+index c5efc23..b9808e8 100644
+--- a/tiny-reward-pool-go/internal/actor/actor_test.go
++++ b/tiny-reward-pool-go/internal/actor/actor_test.go
+@@ -1,13 +1,10 @@
+ package actor_test
+ 
+ import (
+-	"encoding/json"
+ 	"errors"
+-	"log/slog"
+ 	"os"
+ 	"path/filepath"
+ 	"testing"
+-	"time"
+ 
+ 	"github.com/stretchr/testify/assert"
+ 	"github.com/stretchr/testify/require"
+@@ -15,9 +12,6 @@ import (
+ 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/rewardpool"
+ 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
+ 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/utils"
+-	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal"
+-	walformatter "github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/formatter"
+-	walstorage "github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/storage"
+ )
+ 
+ func TestSystem_TransactionalDraw(t *testing.T) {
+@@ -115,199 +109,46 @@ func TestSystem_FlushOnStop(t *testing.T) {
+ 	}
+ }
+ 
+-// Additional tests for rotation
++func TestSystem_WALRotation_WithCustomFactory(t *testing.T) {
++	tempDir := t.TempDir()
++	walDir := filepath.Join(tempDir, "wal")
++	require.NoError(t, os.MkdirAll(walDir, 0755))
+ 
+-func TestSystem_WALRotation(t *testing.T) {
+-	// 1. Setup
+-	tmpDir := t.TempDir()
+-	walPath := filepath.Join(tmpDir, "test.wal")
+-	rotatedPath := filepath.Join(tmpDir, "test.wal.rotated")
+-	snapshotPath := filepath.Join(tmpDir, "test.snapshot")
+-
+-	// Use a real mmap storage with a tiny size to force rotation
+-	mmapStorage, err := walstorage.NewFileMMapStorage(walPath, walstorage.FileMMapStorageOps{
+-		MMapFileSizeInBytes: 1024, // 1KB, very small
+-	})
+-	require.NoError(t, err)
+-
+-	realWAL, err := wal.NewWAL(walPath, walformatter.NewJSONFormatter(), mmapStorage)
+-	require.NoError(t, err)
+-
+-	initQuantity := 1000
+-	numberDraw := 20
+-
+-	pool := rewardpool.NewPool([]types.PoolReward{
+-		{ItemID: "gold", Quantity: initQuantity, Probability: 1},
+-	})
++	pool := rewardpool.NewPool([]types.PoolReward{{ItemID: "gold", Quantity: 100, Probability: 1}})
+ 
+-	mockUtils := &mockRotationUtils{
+-		rotatedPath:  rotatedPath,
+-		snapshotPath: snapshotPath,
++	var createdWALs []*mockWAL
++	walFactory := func(path string, seqNo uint64) (types.WAL, error) {
++		w := &mockWAL{size: 10, flushFail: true} // flushFail to trigger rotation
++		createdWALs = append(createdWALs, w)
++		return w, nil
+ 	}
+ 
+-	ctx := &types.Context{
+-		WAL:   realWAL,
+-		Utils: mockUtils,
+-	}
+-
+-	// Flush after every draw to trigger the check
+-	sys, err := actor.NewSystem(ctx, pool, &actor.SystemOptional{FlushAfterNDraw: 1})
++	// Create the initial WAL using the factory
++	initialWAL, err := walFactory("", 0) // Path and seqNo don't matter for mock
+ 	require.NoError(t, err)
+ 
+-	// 2. Execution: Write data until WAL is full
+-	// A single draw log is ~70 bytes. 1024 / 70 = ~15 draws needed. Let's do 20 to be safe.
+-	for i := 0; i < numberDraw; i++ {
+-		<-sys.Draw()
+-	}
+-
+-	// The processor runs in a separate goroutine, so we need to wait a bit
+-	// for the last flush to be processed.
+-	time.Sleep(200 * time.Millisecond)
+-
+-	// check state correct
+-	state := sys.State()
+-	remainingItem := initQuantity - numberDraw
+-	require.Equal(t, remainingItem, state[0].Quantity, "pool Quantity should correct")
+-
+-	sys.Stop() // Final flush
+-
+-	// 3. Assertions
+-	assert.True(t, mockUtils.genRotatedCalled, "GenRotatedWALPath should have been called")
+-	assert.True(t, mockUtils.genSnapshotCalled, "GenSnapshotPath should have been called")
+-
+-	// Check if the rotated WAL file exists
+-	_, err = os.Stat(rotatedPath)
+-	assert.NoError(t, err, "Rotated WAL file should exist")
+-
+-	// Check if the snapshot file exists
+-	_, err = os.Stat(snapshotPath)
+-	assert.NoError(t, err, "Snapshot file should exist")
+-
+-	// Check if the new WAL file was created
+-	_, err = os.Stat(walPath)
+-	assert.NoError(t, err, "New WAL file should exist at the original path")
+-}
+-
+-type mockRotationUtils struct {
+-	rotatedPath       string
+-	snapshotPath      string
+-	genRotatedCalled  bool
+-	genSnapshotCalled bool
+-}
+-
+-func (m *mockRotationUtils) GetLogger() *slog.Logger {
+-	return slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+-}
+-
+-func (m *mockRotationUtils) GenRotatedWALPath() *string {
+-	m.genRotatedCalled = true
+-	return &m.rotatedPath
+-}
+-
+-func (m *mockRotationUtils) GenSnapshotPath() *string {
+-	m.genSnapshotCalled = true
+-	return &m.snapshotPath
+-}
+-
+-func TestSystem_StopWithWALRotationRaceCondition(t *testing.T) {
+-	// 1. Setup
+-	tmpDir := t.TempDir()
+-	walPath := filepath.Join(tmpDir, "test.wal")
+-	rotatedPath := filepath.Join(tmpDir, "test.wal.rotated")
+-	snapshotPath := filepath.Join(tmpDir, "test.snapshot")
+-	configPath := filepath.Join(tmpDir, "config.json")
+-	initialQuantity := int64(10)
+-
+-	// Create a dummy config file
+-	configContent := []byte(`{"catalog":[{"item_id":"gold","quantity":10,"probability":1}]}`)
+-	require.NoError(t, os.WriteFile(configPath, configContent, 0644))
+-
+-	// Use a real mmap storage with a tiny size to force rotation
+-	mmapStorage, err := walstorage.NewFileMMapStorage(walPath, walstorage.FileMMapStorageOps{
+-		MMapFileSizeInBytes: 150 * 2,
++	ctx := &types.Context{WAL: initialWAL, Utils: utils.NewDefaultUtils(walDir, "", 0, nil)}
++	sys, err := actor.NewSystem(ctx, pool, &actor.SystemOptional{
++		FlushAfterNDraw: 1,
++		WALFactory:      walFactory,
+ 	})
+ 	require.NoError(t, err)
+ 
+-	realWAL, err := wal.NewWAL(walPath, walformatter.NewJSONFormatter(), mmapStorage)
+-	require.NoError(t, err)
+-
+-	pool := rewardpool.NewPool([]types.PoolReward{
+-		{ItemID: "gold", Quantity: int(initialQuantity), Probability: 1},
+-	})
+-
+-	mockUtils := &mockStopUtils{
+-		rotatedPath:  rotatedPath,
+-		snapshotPath: snapshotPath,
+-	}
++	// The first WAL is created by NewSystem
++	ctx.WAL = createdWALs[0]
+ 
+-	ctx := &types.Context{
+-		WAL:   realWAL,
+-		Utils: mockUtils,
+-	}
+-
+-	// Flush after every draw to trigger the check
+-	sys, err := actor.NewSystem(ctx, pool, &actor.SystemOptional{FlushAfterNDraw: 1})
+ 	require.NoError(t, err)
+ 
+-	// 2. Execution
+-	<-sys.Draw()
+-	<-sys.Draw()
+-	time.Sleep(100 * time.Millisecond)
+-	<-sys.Draw()
+-	time.Sleep(100 * time.Millisecond)
+-	sys.Stop() // This will trigger rotation
+-
+-	// 3. Assertions
+-	assert.True(t, mockUtils.genRotatedCalled, "GenRotatedWALPath should have been called")
+-	assert.True(t, mockUtils.genSnapshotCalled, "GenSnapshotPath should have been called")
+-
+-	// Check that the snapshot was created
+-	snapshotData, err := os.ReadFile(snapshotPath)
+-	require.NoError(t, err, "Snapshot file should exist and be readable")
+-
+-	var snapshotContent struct {
+-		Items []types.PoolReward `json:"catalog"`
+-	}
+-	err = json.Unmarshal(snapshotData, &snapshotContent)
+-	require.NoError(t, err, "Snapshot should be valid JSON")
++	// The first WAL is created by NewSystem
++	ctx.WAL = createdWALs[0]
+ 
+-	// Snapshot should revert and apply remaining draw
+-	expectedQuantityAfterStop := initialQuantity - 2
+-	assert.Equal(t, int(expectedQuantityAfterStop), snapshotContent.Items[0].Quantity, "Snapshot should have pending")
+-
+-	// Check active wal log. It should
+-	//	- snapshot
+-	//	- 1 draw log
+-	logItems, err := wal.ParseWAL(walPath, walformatter.NewJSONFormatter())
+-	assert.Equal(t, logItems[0].GetType(), types.LogTypeSnapshot, "1st item should be a snapshot")
+-	assert.Equal(t, logItems[1].GetType(), types.LogTypeDraw, "2st item should be a draw")
+-
+-	snapshotItm := logItems[0].(*types.WalLogSnapshotItem)
+-	assert.Equal(t, snapshotItm.Path, snapshotPath, "1st item snapshot path should correct")
+-	updateItm := logItems[1].(*types.WalLogDrawItem)
+-	assert.Equal(t, updateItm.ItemID, "gold", "2st item should relay correct ItemID")
+-
+-}
+-
+-type mockStopUtils struct {
+-	rotatedPath       string
+-	snapshotPath      string
+-	genRotatedCalled  bool
+-	genSnapshotCalled bool
+-}
+-
+-func (m *mockStopUtils) GetLogger() *slog.Logger {
+-	return slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+-}
++	// This draw will cause the WAL to be full and trigger rotation
++	<-sys.Draw()
+ 
+-func (m *mockStopUtils) GenRotatedWALPath() *string {
+-	m.genRotatedCalled = true
+-	return &m.rotatedPath
+-}
++	// Check that a new WAL was created by the factory
++	assert.Len(t, createdWALs, 2, "A new WAL should have been created")
+ 
+-func (m *mockStopUtils) GenSnapshotPath() *string {
+-	m.genSnapshotCalled = true
+-	return &m.snapshotPath
++	sys.Stop()
+ }
+ 
+ // Mocks
+@@ -351,7 +192,7 @@ func (m *mockPool) ApplyDrawLog(itemID string) {
+ }
+ 
+ func (m *mockPool) Load(cfg types.ConfigPool) error                               { return nil }
+-func (m *mockPool) LoadSnapshot(snapshot *types.PoolSnapshot) error             { return nil }
++func (m *mockPool) LoadSnapshot(snapshot *types.PoolSnapshot) error               { return nil }
+ func (m *mockPool) CreateSnapshot() (*types.PoolSnapshot, error)                  { return &types.PoolSnapshot{}, nil }
+ func (m *mockPool) ApplyUpdateLog(itemID string, quantity int, probability int64) {}
+ func (m *mockPool) UpdateItem(itemID string, quantity int, probability int64) error {
+@@ -380,17 +221,15 @@ func (m *mockWAL) LogUpdate(item types.WalLogUpdateItem) error {
+ 	return nil
+ }
+ func (m *mockWAL) LogSnapshot(item types.WalLogSnapshotItem) error { return nil }
+-func (m *mockWAL) LogRotate(item types.WalLogRotateItem) error     { return nil }
+ 
+ func (m *mockWAL) Close() error { return nil }
+ func (m *mockWAL) Reset()       {}
+ 
+-func (m *mockWAL) Rotate(string) error  { return nil }
+ func (w *mockWAL) Size() (int64, error) { return int64(w.size), nil }
+ func (m *mockWAL) Flush() error {
+ 	m.flushCount++
+ 	if m.flushFail {
+-		return errors.New("simulated WAL flush error")
++		return types.ErrWALFull
+ 	}
+ 	return nil
+ }
+diff --git a/tiny-reward-pool-go/internal/actor/system.go b/tiny-reward-pool-go/internal/actor/system.go
+index c027319..0391fdf 100644
+--- a/tiny-reward-pool-go/internal/actor/system.go
++++ b/tiny-reward-pool-go/internal/actor/system.go
+@@ -6,6 +6,9 @@ import (
+ 	"sync"
+ 
+ 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
++	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal"
++	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/formatter"
++	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/storage"
+ 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/walstream"
+ )
+ 
+@@ -24,6 +27,7 @@ type SystemOptional struct {
+ 	RequestBufferSize int
+ 	LastRequestID     uint64
+ 	WALStreamer       walstream.WALStreamer
++	WALFactory        func(path string, seqNo uint64) (types.WAL, error)
+ }
+ 
+ // NewSystem creates, starts, and returns a new actor system.
+@@ -41,7 +45,21 @@ func NewSystem(ctx *types.Context, pool types.RewardPool, opt *SystemOptional) (
+ 		lastRequestID = opt.LastRequestID
+ 	}
+ 
+-	processorActor := NewRewardProcessorActor(ctx, pool, bufSize, flushN, lastRequestID)
++	var walFactory func(path string, seqNo uint64) (types.WAL, error)
++	if opt != nil && opt.WALFactory != nil {
++		walFactory = opt.WALFactory
++	} else {
++		// Default WALFactory
++		walFactory = func(path string, seqNo uint64) (types.WAL, error) {
++			fileStorage, err := storage.NewFileStorage(path, seqNo)
++			if err != nil {
++				return nil, err
++			}
++			return wal.NewWAL(path, seqNo, formatter.NewJSONFormatter(), fileStorage)
++		}
++	}
++
++	processorActor := NewRewardProcessorActor(ctx, pool, bufSize, flushN, lastRequestID, walFactory)
+ 	if err := processorActor.Init(); err != nil {
+ 		// If init fails, we must ensure the WAL is closed if it was opened.
+ 		processorActor.ctx.WAL.Close()
+diff --git a/tiny-reward-pool-go/internal/recovery/recovery.go b/tiny-reward-pool-go/internal/recovery/recovery.go
+index d4b1b6d..6bf4aae 100644
+--- a/tiny-reward-pool-go/internal/recovery/recovery.go
++++ b/tiny-reward-pool-go/internal/recovery/recovery.go
+@@ -12,74 +12,88 @@ import (
+ )
+ 
+ // RecoverPool loads the pool state from a snapshot and replays any subsequent WAL entries.
+-// It returns the recovered pool and the last used request ID.
+-func RecoverPool(snapshotPath, walPath, configPath string, formatter types.LogFormatter, utils types.Utils) (*rewardpool.Pool, uint64, error) {
++// It returns the recovered pool, the last used request ID, the path of the last WAL file, and any error that occurred.
++func RecoverPool(configPath string, formatter types.LogFormatter, utils types.Utils) (*rewardpool.Pool, uint64, string, error) {
+ 	var pool *rewardpool.Pool
+ 	var lastRequestID uint64
+ 
+-	// 1. Parse the WAL file to find the latest snapshot and subsequent logs.
+-	logItems, err := wal.ParseWAL(walPath, formatter)
+-	if err != nil && !os.IsNotExist(err) {
+-		return nil, 0, fmt.Errorf("failed to parse WAL: %w", err)
++	// 1. Get all WAL files, sorted by sequence number.
++	walFiles, err := utils.GetWALFiles()
++	if err != nil {
++		return nil, 0, "", fmt.Errorf("failed to get WAL files: %w", err)
+ 	}
+ 
+-	// 2. Determine the starting point for recovery.
+-	var snapshotToLoad string
++	var lastWalPath string
+ 	var logsToReplay []types.WalLogEntry
++	var snapshotToLoad string // Initialize to empty
+ 
+-	// Find the last snapshot in the WAL.
+-	lastSnapshotIdx := -1
+-	for i := len(logItems) - 1; i >= 0; i-- {
+-		if s, ok := logItems[i].(*types.WalLogSnapshotItem); ok {
+-			snapshotToLoad = s.Path
+-			lastSnapshotIdx = i
+-			break
++	if len(walFiles) > 0 {
++		lastWalPath = walFiles[len(walFiles)-1]
++
++		// Parse only the latest WAL file
++		entries, _, err := wal.ParseWAL(lastWalPath, formatter)
++		if err != nil {
++			return nil, 0, "", fmt.Errorf("error parsing latest WAL file %s: %w", lastWalPath, err)
+ 		}
+-	}
+ 
+-	if lastSnapshotIdx != -1 {
+-		// If a snapshot was found in the WAL, replay logs that came after it.
+-		logsToReplay = logItems[lastSnapshotIdx+1:]
+-	} else {
+-		// No snapshot in the WAL, so use the standalone snapshotPath and replay all WAL entries.
+-		snapshotToLoad = snapshotPath
+-		logsToReplay = logItems
++		if len(entries) == 0 {
++			// Latest WAL is empty or only contains header, indicate no WAL to continue from
++			lastWalPath = ""
++		} else {
++			// The first entry must be a snapshot
++			snapshotLog, ok := entries[0].(*types.WalLogSnapshotItem)
++			if !ok {
++				return nil, 0, "", fmt.Errorf("first entry in WAL %s is not a snapshot", lastWalPath)
++			}
++			snapshotToLoad = snapshotLog.Path
++			logsToReplay = entries[1:] // Replay logs after the initial snapshot
++		}
+ 	}
+ 
+-	// 3. Load the initial state from the chosen snapshot.
++	// 2. Load the initial state from the chosen snapshot or config.
+ 	pool = rewardpool.NewPool([]types.PoolReward{}) // Create an empty pool.
+ 
+ 	// Attempt to load from the determined snapshot path.
+-	if _, err := os.Stat(snapshotToLoad); err == nil {
+-		file, err := os.Open(snapshotToLoad)
+-		if err != nil {
+-			return nil, 0, fmt.Errorf("failed to open snapshot file %s: %w", snapshotToLoad, err)
+-		}
+-		defer file.Close()
+-
+-		var snap types.PoolSnapshot
+-		if err := json.NewDecoder(file).Decode(&snap); err != nil {
+-			return nil, 0, fmt.Errorf("failed to decode snapshot %s: %w", snapshotToLoad, err)
+-		}
++	if snapshotToLoad != "" {
++		if _, err := os.Stat(snapshotToLoad); err == nil {
++			file, err := os.Open(snapshotToLoad)
++			if err != nil {
++				return nil, 0, "", fmt.Errorf("failed to open snapshot file %s: %w", snapshotToLoad, err)
++			}
++			defer file.Close()
+ 
+-		// Load the pool state and the last request ID from the snapshot.
+-		pool.LoadSnapshot(&snap)
+-		lastRequestID = snap.LastRequestID
++			var snap types.PoolSnapshot
++			if err := json.NewDecoder(file).Decode(&snap); err != nil {
++				return nil, 0, "", fmt.Errorf("failed to decode snapshot %s: %w", snapshotToLoad, err)
++			}
+ 
+-	} else if !os.IsNotExist(err) {
+-		// Handle other errors from Stat, like permission issues.
+-		return nil, 0, fmt.Errorf("failed to stat snapshot file %s: %w", snapshotToLoad, err)
++			// Load the pool state and the last request ID from the snapshot.
++			pool.LoadSnapshot(&snap)
++			lastRequestID = snap.LastRequestID
++
++		} else if !os.IsNotExist(err) {
++			// Handle other errors from Stat, like permission issues.
++			return nil, 0, "", fmt.Errorf("failed to stat snapshot file %s: %w", snapshotToLoad, err)
++		} else {
++			// Snapshot file not found, fall back to initial config
++			loadedPool, cfgErr := rewardpool.CreatePoolFromConfigPath(configPath)
++			if cfgErr != nil {
++				return nil, 0, "", fmt.Errorf("failed to load from config after missing snapshot: %w", cfgErr)
++			}
++			pool = loadedPool
++			lastRequestID = 0 // No snapshot, so request ID starts from 0.
++		}
+ 	} else {
+-		// Snapshot doesn't exist, fall back to the initial config file.
++		// No snapshot path from WAL, fall back to initial config
+ 		loadedPool, cfgErr := rewardpool.CreatePoolFromConfigPath(configPath)
+ 		if cfgErr != nil {
+-			return nil, 0, fmt.Errorf("failed to load from config after missing snapshot: %w", cfgErr)
++			return nil, 0, "", fmt.Errorf("failed to load from config after missing snapshot: %w", cfgErr)
+ 		}
+ 		pool = loadedPool
+ 		lastRequestID = 0 // No snapshot, so request ID starts from 0.
+ 	}
+ 
+-	// 4. Replay logs to bring the pool to its most recent state.
++	// 3. Replay logs to bring the pool to its most recent state.
+ 	if len(logsToReplay) > 0 {
+ 		replay.ReplayLogs(pool, logsToReplay)
+ 
+@@ -93,84 +107,88 @@ func RecoverPool(snapshotPath, walPath, configPath string, formatter types.LogFo
+ 		}
+ 	}
+ 
+-	// 5. Clean up old WAL file. The actor will create a new one on startup.
+-	if _, err := os.Stat(walPath); err == nil {
+-		if err := os.Remove(walPath); err != nil {
+-			// Log this error but don't fail the recovery.
+-			if utils.GetLogger() != nil {
+-				utils.GetLogger().Error("failed to remove old WAL file", "path", walPath, "error", err)
+-			}
+-		}
++	if logger := utils.GetLogger(); logger != nil {
++		logger.Info(fmt.Sprintf("Recovered state: lastWalPath=%s, lastRequestID=%d, logsReplayed=%d", lastWalPath, lastRequestID, len(logsToReplay)))
+ 	}
+ 
+-	return pool, lastRequestID, nil
++	return pool, lastRequestID, lastWalPath, nil
+ }
+ 
+ // RecoverPoolFromConfig loads the pool state from a snapshot and replays any subsequent WAL entries.
+-// It returns the recovered pool and the last used request ID.
+-func RecoverPoolFromConfig(snapshotPath, walPath string, initialPool *rewardpool.Pool, formatter types.LogFormatter, utils types.Utils) (*rewardpool.Pool, uint64, error) {
++// It returns the recovered pool, the last used request ID, the path of the last WAL file, and any error that occurred.
++func RecoverPoolFromConfig(initialPool *rewardpool.Pool, formatter types.LogFormatter, utils types.Utils) (*rewardpool.Pool, uint64, string, error) {
+ 	var pool *rewardpool.Pool
+ 	var lastRequestID uint64
+ 
+-	// 1. Parse the WAL file to find the latest snapshot and subsequent logs.
+-	logItems, err := wal.ParseWAL(walPath, formatter)
+-	if err != nil && !os.IsNotExist(err) {
+-		return nil, 0, fmt.Errorf("failed to parse WAL: %w", err)
++	// 1. Get all WAL files, sorted by sequence number.
++	walFiles, err := utils.GetWALFiles()
++	if err != nil {
++		return nil, 0, "", fmt.Errorf("failed to get WAL files: %w", err)
+ 	}
+ 
+-	// 2. Determine the starting point for recovery.
+-	var snapshotToLoad string
++	var lastWalPath string
+ 	var logsToReplay []types.WalLogEntry
++	var snapshotToLoad string // Initialize to empty
+ 
+-	// Find the last snapshot in the WAL.
+-	lastSnapshotIdx := -1
+-	for i := len(logItems) - 1; i >= 0; i-- {
+-		if s, ok := logItems[i].(*types.WalLogSnapshotItem); ok {
+-			snapshotToLoad = s.Path
+-			lastSnapshotIdx = i
+-			break
++	if len(walFiles) > 0 {
++		lastWalPath = walFiles[len(walFiles)-1]
++
++		// Parse only the latest WAL file
++		entries, _, err := wal.ParseWAL(lastWalPath, formatter)
++		if err != nil {
++			return nil, 0, "", fmt.Errorf("error parsing latest WAL file %s: %w", lastWalPath, err)
+ 		}
+-	}
+ 
+-	if lastSnapshotIdx != -1 {
+-		// If a snapshot was found in the WAL, replay logs that came after it.
+-		logsToReplay = logItems[lastSnapshotIdx+1:]
+-	} else {
+-		// No snapshot in the WAL, so use the standalone snapshotPath and replay all WAL entries.
+-		snapshotToLoad = snapshotPath
+-		logsToReplay = logItems
++		if len(entries) == 0 {
++			// Latest WAL is empty or only contains header, indicate no WAL to continue from
++			lastWalPath = ""
++		} else {
++			// The first entry must be a snapshot
++			snapshotLog, ok := entries[0].(*types.WalLogSnapshotItem)
++			if !ok {
++				return nil, 0, "", fmt.Errorf("first entry in WAL %s is not a snapshot", lastWalPath)
++			}
++			snapshotToLoad = snapshotLog.Path
++			logsToReplay = entries[1:] // Replay logs after the initial snapshot
++		}
+ 	}
+ 
+-	// 3. Load the initial state from the chosen snapshot.
+-	pool = rewardpool.NewPool([]types.PoolReward{}) // Create an empty pool.
++	// 2. Load the initial state from the chosen snapshot or initialPool.
++	pool = initialPool
+ 
+ 	// Attempt to load from the determined snapshot path.
+-	if _, err := os.Stat(snapshotToLoad); err == nil {
+-		file, err := os.Open(snapshotToLoad)
+-		if err != nil {
+-			return nil, 0, fmt.Errorf("failed to open snapshot file %s: %w", snapshotToLoad, err)
+-		}
+-		defer file.Close()
+-
+-		var snap types.PoolSnapshot
+-		if err := json.NewDecoder(file).Decode(&snap); err != nil {
+-			return nil, 0, fmt.Errorf("failed to decode snapshot %s: %w", snapshotToLoad, err)
+-		}
++	if snapshotToLoad != "" {
++		if _, err := os.Stat(snapshotToLoad); err == nil {
++			file, err := os.Open(snapshotToLoad)
++			if err != nil {
++				return nil, 0, "", fmt.Errorf("failed to open snapshot file %s: %w", snapshotToLoad, err)
++			}
++			defer file.Close()
+ 
+-		// Load the pool state and the last request ID from the snapshot.
+-		pool.LoadSnapshot(&snap)
+-		lastRequestID = snap.LastRequestID
++			var snap types.PoolSnapshot
++			if err := json.NewDecoder(file).Decode(&snap); err != nil {
++				return nil, 0, "", fmt.Errorf("failed to decode snapshot %s: %w", snapshotToLoad, err)
++			}
+ 
+-	} else if !os.IsNotExist(err) {
+-		// Handle other errors from Stat, like permission issues.
+-		return nil, 0, fmt.Errorf("failed to stat snapshot file %s: %w", snapshotToLoad, err)
++			// Load the pool state and the last request ID from the snapshot.
++			pool.LoadSnapshot(&snap)
++			lastRequestID = snap.LastRequestID
++
++		} else if !os.IsNotExist(err) {
++			// Handle other errors from Stat, like permission issues.
++			return nil, 0, "", fmt.Errorf("failed to stat snapshot file %s: %w", snapshotToLoad, err)
++		} else {
++			// Snapshot file not found, fall back to initialPool
++			pool = initialPool
++			lastRequestID = 0 // No snapshot, so request ID starts from 0.
++		}
+ 	} else {
+-		// Snapshot doesn't exist, fall back to the initial config file.
++		// No snapshot path from WAL, fall back to initialPool
+ 		pool = initialPool
+ 		lastRequestID = 0 // No snapshot, so request ID starts from 0.
+ 	}
+ 
+-	// 4. Replay logs to bring the pool to its most recent state.
++	// 3. Replay logs to bring the pool to its most recent state.
+ 	if len(logsToReplay) > 0 {
+ 		replay.ReplayLogs(pool, logsToReplay)
+ 
+@@ -184,15 +202,9 @@ func RecoverPoolFromConfig(snapshotPath, walPath string, initialPool *rewardpool
+ 		}
+ 	}
+ 
+-	// 5. Clean up old WAL file. The actor will create a new one on startup.
+-	if _, err := os.Stat(walPath); err == nil {
+-		if err := os.Remove(walPath); err != nil {
+-			// Log this error but don't fail the recovery.
+-			if utils.GetLogger() != nil {
+-				utils.GetLogger().Error("failed to remove old WAL file", "path", walPath, "error", err)
+-			}
+-		}
++	if logger := utils.GetLogger(); logger != nil {
++		logger.Info(fmt.Sprintf("Recovered state: lastWalPath=%s, lastRequestID=%d, logsReplayed=%d", lastWalPath, lastRequestID, len(logsToReplay)))
+ 	}
+ 
+-	return pool, lastRequestID, nil
++	return pool, lastRequestID, lastWalPath, nil
+ }
+diff --git a/tiny-reward-pool-go/internal/recovery/recovery_test.go b/tiny-reward-pool-go/internal/recovery/recovery_test.go
+index 69f084a..df55557 100644
+--- a/tiny-reward-pool-go/internal/recovery/recovery_test.go
++++ b/tiny-reward-pool-go/internal/recovery/recovery_test.go
+@@ -1,11 +1,14 @@
+-package recovery
++package recovery_test
+ 
+ import (
+ 	"encoding/json"
+ 	"os"
++	"path/filepath"
+ 	"testing"
+ 
+ 	"github.com/stretchr/testify/assert"
++	"github.com/stretchr/testify/require"
++	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/recovery"
+ 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/rewardpool"
+ 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
+ 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/utils"
+@@ -14,95 +17,91 @@ import (
+ 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/storage"
+ )
+ 
+-func TestRecoverPool_Basic(t *testing.T) {
+-	snapshotPath := "../../tmp/test_snapshot.json"
+-	walPath := "../../tmp/test_wal.log"
+-	configPath := "../../samples/test_config.json"
+-	defer os.Remove(snapshotPath)
+-	defer os.Remove(walPath)
+-	defer os.Remove(configPath)
++func setupTestPaths(t *testing.T) (string, string, string, string) {
++	tempDir := t.TempDir()
++	snapshotPath := filepath.Join(tempDir, "test_snapshot.json")
++	walDir := filepath.Join(tempDir, "wal")
++	walPath := filepath.Join(walDir, "wal.000")
++	configPath := filepath.Join(tempDir, "test_config.json")
++
++	require.NoError(t, os.MkdirAll(walDir, 0755))
+ 
+ 	// Create a dummy config
+ 	f, err := os.Create(configPath)
+-	assert.NoError(t, err)
++	require.NoError(t, err)
+ 	_, err = f.WriteString(`{"catalog": [{"item_id": "gold", "quantity": 100, "probability": 50}]}`)
+-	assert.NoError(t, err)
++	require.NoError(t, err)
+ 	f.Close()
+ 
+-	// Create a snapshot
++	return snapshotPath, walPath, configPath, walDir
++}
++
++func TestRecoverPool_Basic(t *testing.T) {
++	snapshotPath, walPath, configPath, walDir := setupTestPaths(t)
++
++	// Create a valid WAL file using the WAL writer
++	w, err := wal.NewWAL(walPath, 0, formatter.NewJSONFormatter(), nil)
++	require.NoError(t, err)
++
++	// Create a snapshot and log it
+ 	pool, err := rewardpool.CreatePoolFromConfigPath(configPath)
+-	assert.NoError(t, err)
++	require.NoError(t, err)
+ 	snap, err := pool.CreateSnapshot()
+-	assert.NoError(t, err)
++	require.NoError(t, err)
+ 	snap.LastRequestID = 10
++	// Manually create snapshot file for the log
+ 	sf, err := os.Create(snapshotPath)
+-	assert.NoError(t, err)
+-	assert.NoError(t, json.NewEncoder(sf).Encode(snap))
++	require.NoError(t, err)
++	require.NoError(t, json.NewEncoder(sf).Encode(snap))
+ 	sf.Close()
+ 
+-	// Create a WAL file
+-	wf, err := os.Create(walPath)
+-	assert.NoError(t, err)
+-	encoder := json.NewEncoder(wf)
+-	encoder.Encode(&types.WalLogSnapshotItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeSnapshot}, Path: snapshotPath})
+-	encoder.Encode(&types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 11, ItemID: "gold", Success: true})
+-	encoder.Encode(&types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 12, ItemID: "gold", Success: true})
+-	wf.Close()
++	require.NoError(t, w.LogSnapshot(types.WalLogSnapshotItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeSnapshot}, Path: snapshotPath}))
++	require.NoError(t, w.LogDraw(types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 11, ItemID: "gold", Success: true}))
++	require.NoError(t, w.LogDraw(types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 12, ItemID: "gold", Success: true}))
+ 
++	require.NoError(t, w.Flush())
++	require.NoError(t, w.Close())
++
++	// Now, recover
+ 	jsonFormatter := formatter.NewJSONFormatter()
+-	recoveredPool, lastRequestID, err := RecoverPool(snapshotPath, walPath, configPath, jsonFormatter, &utils.MockUtils{})
+-	assert.NoError(t, err)
++	recoveredPool, lastRequestID, _, err := recovery.RecoverPool(configPath, jsonFormatter, utils.NewDefaultUtils(walDir, "", 0, nil))
++	require.NoError(t, err)
+ 
+ 	assert.Equal(t, uint64(12), lastRequestID)
+ 	assert.Equal(t, 98, recoveredPool.GetItemRemaining("gold"))
+ }
+ 
+ func TestRecoverPool_MMap(t *testing.T) {
+-	snapshotPath := "../../tmp/test_snapshot_mmap.json"
+-	walPath := "../../tmp/test_wal_mmap.log"
+-	configPath := "../../samples/test_config_mmap.json"
+-	defer os.Remove(snapshotPath)
+-	defer os.Remove(walPath)
+-	defer os.Remove(configPath)
++	snapshotPath, walPath, configPath, walDir := setupTestPaths(t)
+ 
+-	// Create a dummy config
+-	f, err := os.Create(configPath)
+-	assert.NoError(t, err)
+-	_, err = f.WriteString(`{"catalog": [{"item_id": "gold", "quantity": 100, "probability": 50}]}`)
+-	assert.NoError(t, err)
+-	f.Close()
++	// Write WAL using mmap storage
++	jsonFormatter := formatter.NewJSONFormatter()
++	mmapStorage, err := storage.NewFileMMapStorage(walPath, 0)
++	require.NoError(t, err)
++	w, err := wal.NewWAL(walPath, 0, jsonFormatter, mmapStorage)
++	require.NoError(t, err)
+ 
+-	// Create a snapshot
++	// Create a snapshot and log it
+ 	pool, err := rewardpool.CreatePoolFromConfigPath(configPath)
+-	assert.NoError(t, err)
++	require.NoError(t, err)
+ 	snap, err := pool.CreateSnapshot()
+-	assert.NoError(t, err)
++	require.NoError(t, err)
+ 	snap.LastRequestID = 20
+ 	sf, err := os.Create(snapshotPath)
+-	assert.NoError(t, err)
+-	assert.NoError(t, json.NewEncoder(sf).Encode(snap))
++	require.NoError(t, err)
++	require.NoError(t, json.NewEncoder(sf).Encode(snap))
+ 	sf.Close()
+ 
+-	// Write WAL using mmap storage
+-	jsonFormatter := formatter.NewJSONFormatter()
+-	mmapStorage, err := storage.NewFileMMapStorage(walPath)
+-	assert.NoError(t, err)
+-	w, err := wal.NewWAL(walPath, jsonFormatter, mmapStorage)
+-	assert.NoError(t, err)
+-
+-	err = w.LogSnapshot(types.WalLogSnapshotItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeSnapshot}, Path: snapshotPath})
+-	assert.NoError(t, err)
+-	err = w.LogDraw(types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 21, ItemID: "gold", Success: true})
+-	assert.NoError(t, err)
+-	err = w.LogDraw(types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 22, ItemID: "gold", Success: true})
+-	assert.NoError(t, err)
+-	err = w.Flush()
+-	assert.NoError(t, err)
+-	err = w.Close()
+-	assert.NoError(t, err)
+-
+-	recoveredPool, lastRequestID, err := RecoverPool(snapshotPath, walPath, configPath, jsonFormatter, &utils.MockUtils{})
+-	assert.NoError(t, err)
++	require.NoError(t, w.LogSnapshot(types.WalLogSnapshotItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeSnapshot}, Path: snapshotPath}))
++	require.NoError(t, w.LogDraw(types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 21, ItemID: "gold", Success: true}))
++	require.NoError(t, w.LogDraw(types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 22, ItemID: "gold", Success: true}))
++
++	require.NoError(t, w.Flush())
++	require.NoError(t, w.Close())
++
++	// Now, recover
++	recoveredPool, lastRequestID, _, err := recovery.RecoverPool(configPath, jsonFormatter, utils.NewDefaultUtils(walDir, "", 0, nil))
++	require.NoError(t, err)
+ 
+ 	assert.Equal(t, uint64(22), lastRequestID)
+ 	assert.Equal(t, 98, recoveredPool.GetItemRemaining("gold"))
+diff --git a/tiny-reward-pool-go/internal/rewardpool/pool.go b/tiny-reward-pool-go/internal/rewardpool/pool.go
+index 7546b5c..d3300c6 100644
+--- a/tiny-reward-pool-go/internal/rewardpool/pool.go
++++ b/tiny-reward-pool-go/internal/rewardpool/pool.go
+@@ -1,8 +1,11 @@
+ package rewardpool
+ 
+ import (
++	"crypto/sha256"
++	"encoding/hex"
+ 	"encoding/json"
+ 	"os"
++	"sort"
+ 
+ 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/selector"
+ 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
+@@ -55,8 +58,26 @@ func (p *Pool) CreateSnapshot() (*types.PoolSnapshot, error) {
+ 	// Reflect item remaining
+ 	snapshot_catalog := p.selector.SnapshotCatalog()
+ 
++	// Create a sorted copy of the catalog for deterministic hashing
++	sortedCatalog := make([]types.PoolReward, len(snapshot_catalog))
++	copy(sortedCatalog, snapshot_catalog)
++	sort.Slice(sortedCatalog, func(i, j int) bool {
++		return sortedCatalog[i].ItemID < sortedCatalog[j].ItemID
++	})
++
++	// Calculate SHA256 hash for integrity checking
++	hash := sha256.New()
++	// Hash the sorted catalog data by converting to JSON for consistent hashing
++	catalogJSON, err := json.Marshal(sortedCatalog)
++	if err != nil {
++		return nil, err
++	}
++	hash.Write(catalogJSON)
++	sha256Hash := hex.EncodeToString(hash.Sum(nil))
++
+ 	snap := &types.PoolSnapshot{
+ 		Catalog: snapshot_catalog,
++		SHA256:  sha256Hash,
+ 	}
+ 	return snap, nil
+ }
+diff --git a/tiny-reward-pool-go/internal/rewardpool/pool_test.go b/tiny-reward-pool-go/internal/rewardpool/pool_test.go
+index a2446b4..57db1e1 100644
+--- a/tiny-reward-pool-go/internal/rewardpool/pool_test.go
++++ b/tiny-reward-pool-go/internal/rewardpool/pool_test.go
+@@ -99,9 +99,9 @@ func TestTransactionalDraw(t *testing.T) {
+ 
+ type mockSelectorForUpdate struct {
+ 	selector.FenwickTreeSelector
+-	updateCalled      bool
+-	updatedItemID     string
+-	updatedQuantity   int
++	updateCalled       bool
++	updatedItemID      string
++	updatedQuantity    int
+ 	updatedProbability int64
+ }
+ 
+@@ -198,4 +198,94 @@ func TestTransactionalDrawWithUnlimitedQuantity(t *testing.T) {
+ 	if pool.selector.GetItemRemaining("unlimited_item") != types.UnlimitedQuantity {
+ 		t.Errorf("Expected selector remaining unlimited_item to be %d after ApplyDrawLog, got %d", types.UnlimitedQuantity, pool.selector.GetItemRemaining("unlimited_item"))
+ 	}
+-}
+\ No newline at end of file
++}
++
++func TestPool_CreateSnapshot_WithSHA256(t *testing.T) {
++	// Test catalog with items in different orders
++	catalog1 := []types.PoolReward{
++		{ItemID: "gold", Quantity: 10, Probability: 50},
++		{ItemID: "silver", Quantity: 20, Probability: 30},
++		{ItemID: "bronze", Quantity: 30, Probability: 20},
++	}
++
++	catalog2 := []types.PoolReward{
++		{ItemID: "silver", Quantity: 20, Probability: 30},
++		{ItemID: "bronze", Quantity: 30, Probability: 20},
++		{ItemID: "gold", Quantity: 10, Probability: 50},
++	}
++
++	// Create pools with different catalog orders
++	pool1 := NewPool(catalog1)
++	pool2 := NewPool(catalog2)
++
++	// Create snapshots
++	snapshot1, err := pool1.CreateSnapshot()
++	require.NoError(t, err)
++	require.NotNil(t, snapshot1)
++
++	snapshot2, err := pool2.CreateSnapshot()
++	require.NoError(t, err)
++	require.NotNil(t, snapshot2)
++
++	// Verify SHA256 fields are present and not empty
++	assert.NotEmpty(t, snapshot1.SHA256)
++	assert.NotEmpty(t, snapshot2.SHA256)
++
++	// Verify that both snapshots have the same SHA256 hash (deterministic)
++	assert.Equal(t, snapshot1.SHA256, snapshot2.SHA256, "SHA256 hashes should be identical for catalogs with same data in different orders")
++
++	// Verify the original catalog order is preserved in the snapshot
++	assert.Equal(t, catalog1, snapshot1.Catalog, "Original catalog order should be preserved")
++	assert.Equal(t, catalog2, snapshot2.Catalog, "Original catalog order should be preserved")
++
++	// Test that the same catalog always produces the same hash
++	snapshot1Again, err := pool1.CreateSnapshot()
++	require.NoError(t, err)
++	assert.Equal(t, snapshot1.SHA256, snapshot1Again.SHA256, "Same catalog should always produce the same hash")
++
++	// Test with empty catalog
++	emptyPool := NewPool([]types.PoolReward{})
++	emptySnapshot, err := emptyPool.CreateSnapshot()
++	require.NoError(t, err)
++	assert.NotEmpty(t, emptySnapshot.SHA256, "Empty catalog should still produce a hash")
++	assert.Empty(t, emptySnapshot.Catalog, "Empty catalog should have empty catalog array")
++
++	// Test that different catalogs produce different hashes
++	differentCatalog := []types.PoolReward{
++		{ItemID: "gold", Quantity: 5, Probability: 50}, // Different quantity
++		{ItemID: "silver", Quantity: 20, Probability: 30},
++		{ItemID: "bronze", Quantity: 30, Probability: 20},
++	}
++	differentPool := NewPool(differentCatalog)
++	differentSnapshot, err := differentPool.CreateSnapshot()
++	require.NoError(t, err)
++	assert.NotEqual(t, snapshot1.SHA256, differentSnapshot.SHA256, "Different catalogs should produce different hashes")
++}
++
++func TestPool_CreateSnapshot_WithPendingDraws(t *testing.T) {
++	catalog := []types.PoolReward{
++		{ItemID: "gold", Quantity: 10, Probability: 50},
++		{ItemID: "silver", Quantity: 20, Probability: 30},
++	}
++	pool := NewPool(catalog)
++
++	ctx := &types.Context{
++		WAL:   &utils.MockWAL{},
++		Utils: &utils.MockUtils{},
++	}
++
++	// Select an item to create pending draws
++	_, err := pool.SelectItem(ctx)
++	require.NoError(t, err)
++
++	// Try to create snapshot with pending draws - should fail
++	_, err = pool.CreateSnapshot()
++	assert.Error(t, err)
++	assert.Equal(t, types.ErrPendingDrawsNotEmpty, err)
++
++	// Commit the draw and try again - should succeed
++	pool.CommitDraw()
++	snapshot, err := pool.CreateSnapshot()
++	require.NoError(t, err)
++	assert.NotEmpty(t, snapshot.SHA256)
++}
+diff --git a/tiny-reward-pool-go/internal/types/types.go b/tiny-reward-pool-go/internal/types/types.go
+index 3c06f96..a64a940 100644
+--- a/tiny-reward-pool-go/internal/types/types.go
++++ b/tiny-reward-pool-go/internal/types/types.go
+@@ -9,7 +9,26 @@ const (
+ 	LogTypeDraw LogType = iota + 1
+ 	LogTypeUpdate
+ 	LogTypeSnapshot
+-	LogTypeRotate
++)
++
++// WALHeader defines the structure of the WAL file header.
++type WALHeader struct {
++	Magic      uint32
++	Version    uint32
++	Status     uint32
++	SeqNo      uint64
++	DataLength uint64
++	Padding    [228]byte // To make the total size 256 bytes
++}
++
++// WAL file constants
++const (
++	WALMagic        uint32 = 0x746E776C // "tnwl" in little-endian
++	WALVersion1     uint32 = 1
++	WALHeaderSize          = 256
++	WALStatusOpen   uint32 = 0
++	WALStatusClosed uint32 = 1
++	WALBaseName            = "wal"
+ )
+ 
+ // LogError defines the type of a WAL log error.
+@@ -40,9 +59,15 @@ type PoolReward struct {
+ }
+ 
+ // PoolSnapshot represents the data structure for a snapshot of the reward pool.
++// The SHA256 field contains a hash of the catalog data for integrity checking.
++// The hash is calculated from the JSON representation of the catalog after sorting
++// all items by ItemID (alphabetically) to ensure deterministic hashing.
++// This means the same catalog data will always produce the same hash regardless
++// of the original order of items in the catalog.
+ type PoolSnapshot struct {
+ 	LastRequestID uint64       `json:"last_request_id"`
+ 	Catalog       []PoolReward `json:"catalog"`
++	SHA256        string       `json:"sha256"`
+ }
+ 
+ // WalLogEntry defines the interface for a WAL log entry.
+@@ -82,12 +107,7 @@ type WalLogSnapshotItem struct {
+ 	Path string `json:"path"`
+ }
+ 
+-// WalLogRotateItem represents a WAL log entry for a rotate operation
+-type WalLogRotateItem struct {
+-	WalLogEntryBase
+-	OldPath string `json:"old_path"`
+-	NewPath string `json:"new_path"`
+-}
++
+ 
+ // RewardPool interface
+ type RewardPool interface {
+@@ -123,9 +143,9 @@ type Storage interface {
+ 	Flush() error
+ 	Close() error
+ 
+-	// Finalize current file and move to archivePath.
++	// FinalizeAndClose current file and move to archivePath.
+ 	// Then reset and continue to use the current one
+-	Rotate(archivePath string) error
++	FinalizeAndClose() error
+ 
+ 	// Size returns the current size of the storage.
+ 	Size() (int64, error)
+@@ -137,14 +157,11 @@ type WAL interface {
+ 	LogDraw(item WalLogDrawItem) error
+ 	LogUpdate(item WalLogUpdateItem) error
+ 	LogSnapshot(item WalLogSnapshotItem) error
+-	LogRotate(item WalLogRotateItem) error
+ 
+ 	// Flush writes all buffered log entries to disk
+ 	Flush() error
+ 	// Close closes the WAL file
+ 	Close() error
+-	// Rotate file
+-	Rotate(path string) error
+ 	// Reset buffer
+ 	Reset()
+ 	// Size returns the current size of the WAL content.
+@@ -165,8 +182,9 @@ type Context struct {
+ // Utils provides an interface for environment-specific operations like logging and path generation.
+ type Utils interface {
+ 	GetLogger() *slog.Logger
+-	GenRotatedWALPath() *string // Path for the archived WAL. nil means skip archiving.
+ 	GenSnapshotPath() *string   // Path for the new snapshot. nil means skip snapshotting.
++	GetWALFiles() ([]string, error)
++	GenNextWALPath() (string, uint64, error)
+ }
+ 
+ // ItemSelector defines the contract for selecting items from a reward pool.
+diff --git a/tiny-reward-pool-go/internal/utils/test_utils.go b/tiny-reward-pool-go/internal/utils/test_utils.go
+index f35df9c..1753ed9 100644
+--- a/tiny-reward-pool-go/internal/utils/test_utils.go
++++ b/tiny-reward-pool-go/internal/utils/test_utils.go
+@@ -36,11 +36,10 @@ func (w *MockWAL) Size() (int64, error)                            { return 0, n
+ func (m *MockWAL) LogDraw(item types.WalLogDrawItem) error         { return nil }
+ func (m *MockWAL) LogUpdate(item types.WalLogUpdateItem) error     { return nil }
+ func (m *MockWAL) LogSnapshot(item types.WalLogSnapshotItem) error { return nil }
+-func (m *MockWAL) LogRotate(item types.WalLogRotateItem) error     { return nil }
+-func (m *MockWAL) Close() error                                    { return nil }
+-func (m *MockWAL) Flush() error                                    { return nil }
+-func (m *MockWAL) Rotate(path string) error                        { return nil }
+-func (m *MockWAL) Reset()                                          {}
++
++func (m *MockWAL) Close() error { return nil }
++func (m *MockWAL) Flush() error { return nil }
++func (m *MockWAL) Reset()       {}
+ 
+ // MockUtils is a mock implementation of the types.Utils interface for testing.
+ type MockUtils struct{}
+@@ -51,10 +50,14 @@ func (m *MockUtils) GetLogger() *slog.Logger {
+ 	return nil // No logging in tests
+ }
+ 
+-func (m *MockUtils) GenRotatedWALPath() *string {
++func (m *MockUtils) GenSnapshotPath() *string {
+ 	return nil // Not used in this test
+ }
+ 
+-func (m *MockUtils) GenSnapshotPath() *string {
+-	return nil // Not used in this test
++func (m *MockUtils) GetWALFiles() ([]string, error) {
++	return []string{}, nil
+ }
++
++func (m *MockUtils) GenNextWALPath() (string, uint64, error) {
++	return "/tmp/wal.000", 0, nil
++}
+\ No newline at end of file
+diff --git a/tiny-reward-pool-go/internal/utils/utils.go b/tiny-reward-pool-go/internal/utils/utils.go
+index dc00127..4d554c3 100644
+--- a/tiny-reward-pool-go/internal/utils/utils.go
++++ b/tiny-reward-pool-go/internal/utils/utils.go
+@@ -7,13 +7,15 @@ import (
+ 	"log/slog"
+ 	"os"
+ 	"path/filepath"
+-	"time"
++	"sort"
++	"strconv"
++	"strings"
+ 
+ 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
+ )
+ 
+ // DefaultUtils provides a default implementation for the types.Utils interface.
+-// It includes a standard logger and generates timestamp-based paths for WALs and snapshots.
++// It includes a standard logger and generates paths for WALs and snapshots.
+ 
+ type DefaultUtils struct {
+ 	logger      *slog.Logger
+@@ -41,18 +43,6 @@ func (u *DefaultUtils) GetLogger() *slog.Logger {
+ 	return u.logger
+ }
+ 
+-// GenRotatedWALPath generates a new path for an archived WAL file.
+-// The path is timestamped, e.g., "wal-20230101T150405.log".
+-// It returns a pointer to the path, or nil if path generation is disabled.
+-func (u *DefaultUtils) GenRotatedWALPath() *string {
+-	if u.walDir == "" {
+-		return nil
+-	}
+-	timestamp := time.Now().Format("20060102T150405")
+-	path := filepath.Join(u.walDir, fmt.Sprintf("wal-%s.log", timestamp))
+-	return &path
+-}
+-
+ // GenSnapshotPath generates a new path for a snapshot file.
+ // The path is fixed "snapshot.json".
+ // It returns a pointer to the path, or nil if path generation is disabled.
+@@ -64,6 +54,67 @@ func (u *DefaultUtils) GenSnapshotPath() *string {
+ 	return &path
+ }
+ 
++// GetWALFiles scans the WAL directory, finds all WAL files, and returns their paths sorted by sequence number.
++func (u *DefaultUtils) GetWALFiles() ([]string, error) {
++	if u.walDir == "" {
++		return []string{}, nil
++	}
++
++	files, err := os.ReadDir(u.walDir)
++	if err != nil {
++		return nil, fmt.Errorf("failed to read WAL directory: %w", err)
++	}
++
++	var walFiles []string
++	for _, file := range files {
++		if file.IsDir() {
++			continue
++		}
++		if strings.HasPrefix(file.Name(), types.WALBaseName+".") {
++			walFiles = append(walFiles, file.Name())
++		}
++	}
++
++	sort.Slice(walFiles, func(i, j int) bool {
++		extI := strings.TrimPrefix(filepath.Ext(walFiles[i]), ".")
++		extJ := strings.TrimPrefix(filepath.Ext(walFiles[j]), ".")
++		numI, _ := strconv.Atoi(extI)
++		numJ, _ := strconv.Atoi(extJ)
++		return numI < numJ
++	})
++
++	for i, file := range walFiles {
++		walFiles[i] = filepath.Join(u.walDir, file)
++	}
++
++	return walFiles, nil
++}
++
++// GenNextWALPath determines the next available WAL sequence number and returns the corresponding path.
++func (u *DefaultUtils) GenNextWALPath() (string, uint64, error) {
++	walFiles, err := u.GetWALFiles()
++	if err != nil {
++		return "", 0, err
++	}
++
++	if len(walFiles) == 0 {
++		path := filepath.Join(u.walDir, fmt.Sprintf("%s.%03d", types.WALBaseName, 0))
++		return path, 0, nil
++	}
++
++	lastFile := walFiles[len(walFiles)-1]
++	ext := strings.TrimPrefix(filepath.Ext(lastFile), ".")
++	lastSeq, err := strconv.ParseUint(ext, 10, 64)
++	if err != nil {
++		return "", 0, fmt.Errorf("invalid WAL file name format: %s", lastFile)
++	}
++
++	nextSeq := lastSeq + 1
++	path := filepath.Join(u.walDir, fmt.Sprintf("%s.%03d", types.WALBaseName, nextSeq))
++	return path, nextSeq, nil
++}
++
++
+ func ReadFileContent(path string) ([]byte, error) {
+ 	data, err := os.ReadFile(path)
+ 	if err != nil {
+@@ -72,4 +123,4 @@ func ReadFileContent(path string) ([]byte, error) {
+ 
+ 	// MMap remaining buffer
+ 	return bytes.TrimRight(data, "\x00"), nil
+-}
++}
+\ No newline at end of file
+diff --git a/tiny-reward-pool-go/internal/wal/formatter/json_formatter.go b/tiny-reward-pool-go/internal/wal/formatter/json_formatter.go
+index c500c6f..7eed96e 100644
+--- a/tiny-reward-pool-go/internal/wal/formatter/json_formatter.go
++++ b/tiny-reward-pool-go/internal/wal/formatter/json_formatter.go
+@@ -50,8 +50,7 @@ func (w *walLogEntryWrapper) UnmarshalJSON(data []byte) error {
+ 		entry = &types.WalLogUpdateItem{}
+ 	case types.LogTypeSnapshot:
+ 		entry = &types.WalLogSnapshotItem{}
+-	case types.LogTypeRotate:
+-		entry = &types.WalLogRotateItem{}
++	
+ 	default:
+ 		return fmt.Errorf("unknown log type: %d", tf.Type)
+ 	}
+diff --git a/tiny-reward-pool-go/internal/wal/formatter/string_line_formatter.go b/tiny-reward-pool-go/internal/wal/formatter/string_line_formatter.go
+index c59b73b..30860ed 100644
+--- a/tiny-reward-pool-go/internal/wal/formatter/string_line_formatter.go
++++ b/tiny-reward-pool-go/internal/wal/formatter/string_line_formatter.go
+@@ -27,8 +27,6 @@ func (f *StringLineFormatter) Encode(items []types.WalLogEntry) ([]byte, error)
+ 			sb.WriteString(fmt.Sprintf("%d,%s,%d,%d\n", item.GetType(), v.ItemID, v.Quantity, v.Probability))
+ 		case *types.WalLogSnapshotItem:
+ 			sb.WriteString(fmt.Sprintf("%d,%s\n", item.GetType(), v.Path))
+-		case *types.WalLogRotateItem:
+-			sb.WriteString(fmt.Sprintf("%d,%s,%s\n", item.GetType(), v.OldPath, v.NewPath))
+ 		}
+ 	}
+ 	return []byte(sb.String()), nil
+@@ -112,18 +110,8 @@ func (f *StringLineFormatter) Decode(data []byte) ([]types.WalLogEntry, error) {
+ 				},
+ 				Path: parts[1],
+ 			})
+-		case types.LogTypeRotate:
+-			if len(parts) != 3 {
+-				return nil, fmt.Errorf("invalid WAL log format for rotate: %s", line)
+-			}
+-			items = append(items, &types.WalLogRotateItem{
+-				WalLogEntryBase: types.WalLogEntryBase{
+-					Type: logType,
+-				},
+-				OldPath: parts[1],
+-				NewPath: parts[2],
+-			})
+ 		}
+ 	}
+ 	return items, nil
+-}
+\ No newline at end of file
++}
++
+diff --git a/tiny-reward-pool-go/internal/wal/storage/file_mmap_storage.go b/tiny-reward-pool-go/internal/wal/storage/file_mmap_storage.go
+index dab450a..30045ac 100644
+--- a/tiny-reward-pool-go/internal/wal/storage/file_mmap_storage.go
++++ b/tiny-reward-pool-go/internal/wal/storage/file_mmap_storage.go
+@@ -1,6 +1,8 @@
+ package storage
+ 
+ import (
++	"bytes"
++	"encoding/binary"
+ 	"fmt"
+ 	"os"
+ 
+@@ -27,7 +29,7 @@ type FileMMapStorageOps struct {
+ 	MMapFileSizeInBytes int64
+ }
+ 
+-func NewFileMMapStorage(path string, opts ...FileMMapStorageOps) (*FileMMapStorage, error) {
++func NewFileMMapStorage(path string, seqNo uint64, opts ...FileMMapStorageOps) (*FileMMapStorage, error) {
+ 	sizeMapInBytes := defaultMmapFileSize
+ 	for _, val := range opts {
+ 		if val.MMapFileSizeInBytes > 0 {
+@@ -46,14 +48,17 @@ func NewFileMMapStorage(path string, opts ...FileMMapStorageOps) (*FileMMapStora
+ 		return nil, err
+ 	}
+ 
+-	offset := info.Size()
++	currentSize := info.Size()
++	isNewFile := currentSize == 0
+ 
+-	if offset == 0 {
++	if isNewFile {
+ 		if err := f.Truncate(sizeMapInBytes); err != nil {
+ 			f.Close()
+ 			return nil, fmt.Errorf("failed to truncate file: %w", err)
+ 		}
+-		offset = 0
++	} else {
++		// If the file exists, use its size for the mapping
++		sizeMapInBytes = currentSize
+ 	}
+ 
+ 	m, err := mmap.Map(f, mmap.RDWR, 0)
+@@ -62,13 +67,38 @@ func NewFileMMapStorage(path string, opts ...FileMMapStorageOps) (*FileMMapStora
+ 		return nil, fmt.Errorf("failed to mmap file: %w", err)
+ 	}
+ 
+-	return &FileMMapStorage{
++	s := &FileMMapStorage{
+ 		file:           f,
+ 		mmap:           m,
+ 		path:           path,
+-		offset:         offset,
+ 		sizeMapInBytes: sizeMapInBytes,
+-	}, nil
++	}
++
++	if isNewFile {
++		hdr := types.WALHeader{
++			Magic:   types.WALMagic,
++			Version: types.WALVersion1,
++			Status:  types.WALStatusOpen,
++			SeqNo:   seqNo,
++		}
++		var buf bytes.Buffer
++		if err := binary.Write(&buf, binary.LittleEndian, &hdr); err != nil {
++			s.Close()
++			return nil, err
++		}
++		copy(s.mmap, buf.Bytes())
++		s.offset = int64(types.WALHeaderSize)
++	} else {
++		// Existing file, read header to restore offset
++		var hdr types.WALHeader
++		if err := binary.Read(bytes.NewReader(m[:types.WALHeaderSize]), binary.LittleEndian, &hdr); err != nil {
++			s.Close()
++			return nil, fmt.Errorf("failed to read WAL header from existing file: %w", err)
++		}
++		s.offset = int64(types.WALHeaderSize + hdr.DataLength)
++	}
++
++	return s, nil
+ }
+ 
+ func (s *FileMMapStorage) Write(data []byte) error {
+@@ -78,6 +108,7 @@ func (s *FileMMapStorage) Write(data []byte) error {
+ }
+ 
+ func (s *FileMMapStorage) CanWrite(size int) bool {
++	// For mmap, the capacity is the total length of the map.
+ 	return s.offset+int64(size) <= int64(len(s.mmap))
+ }
+ 
+@@ -89,38 +120,46 @@ func (s *FileMMapStorage) Flush() error {
+ 	return s.mmap.Flush()
+ }
+ 
+-func (s *FileMMapStorage) Close() error {
+-	if s.mmap != nil {
+-		if err := s.mmap.Unmap(); err != nil {
+-			return err
+-		}
+-		s.mmap = nil
++func (s *FileMMapStorage) FinalizeAndClose() error {
++	if s.mmap == nil {
++		return nil
++	}
++
++	if err := s.mmap.Flush(); err != nil {
++		return err
+ 	}
+-	if s.file != nil {
+-		return s.file.Close()
++
++	hdr := types.WALHeader{
++		Magic:      types.WALMagic,
++		Version:    types.WALVersion1,
++		Status:     types.WALStatusClosed,
++		DataLength: uint64(s.offset - types.WALHeaderSize),
++	}
++
++	// Read the original SeqNo from the header before overwriting
++	var originalHdr types.WALHeader
++	if err := binary.Read(bytes.NewReader(s.mmap[:types.WALHeaderSize]), binary.LittleEndian, &originalHdr); err == nil {
++		hdr.SeqNo = originalHdr.SeqNo
+ 	}
+-	return nil
+-}
+ 
+-func (s *FileMMapStorage) Rotate(archivePath string) error {
+-	// Unmap and close current file
+-	if err := s.Close(); err != nil {
++	var buf bytes.Buffer
++	if err := binary.Write(&buf, binary.LittleEndian, &hdr); err != nil {
+ 		return err
+ 	}
++	copy(s.mmap, buf.Bytes())
+ 
+-	// Rename old file to the new archive path
+-	if err := os.Rename(s.path, archivePath); err != nil {
++	if err := s.mmap.Flush(); err != nil {
+ 		return err
+ 	}
+ 
+-	// Re-initialize the storage at the original path
+-	newStorage, err := NewFileMMapStorage(s.path, FileMMapStorageOps{MMapFileSizeInBytes: s.sizeMapInBytes})
+-	if err != nil {
+-		return fmt.Errorf("failed to re-initialize mmap storage after rotate: %w", err)
++	if err := s.mmap.Unmap(); err != nil {
++		s.file.Close()
++		return err
+ 	}
+ 
+-	// Update the current storage instance with the new one
+-	*s = *newStorage
++	return s.file.Close()
++}
+ 
+-	return nil
++func (s *FileMMapStorage) Close() error {
++	return s.FinalizeAndClose()
+ }
+diff --git a/tiny-reward-pool-go/internal/wal/storage/file_mmap_storage_test.go b/tiny-reward-pool-go/internal/wal/storage/file_mmap_storage_test.go
+index 7f781a6..8d58693 100644
+--- a/tiny-reward-pool-go/internal/wal/storage/file_mmap_storage_test.go
++++ b/tiny-reward-pool-go/internal/wal/storage/file_mmap_storage_test.go
+@@ -5,57 +5,65 @@ import (
+ 	"testing"
+ 
+ 	"github.com/stretchr/testify/assert"
++	"github.com/stretchr/testify/require"
++	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
+ 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/storage"
+ )
+ 
+ func TestFileMMapStorage(t *testing.T) {
+ 	path := "test_mmap.log"
+-	achivedPath := "test_mmap_achived.log"
+ 	defer os.Remove(path)
+-	defer os.Remove(achivedPath)
+ 
+ 	// Test NewFileMMapStorage
+-	fs, err := storage.NewFileMMapStorage(path)
+-	assert.NoError(t, err)
+-	assert.NotNil(t, fs)
++	fs, err := storage.NewFileMMapStorage(path, 0)
++	require.NoError(t, err)
++	require.NotNil(t, fs)
+ 
+ 	// Write initial data
+ 	initialData := []byte("initial data")
+ 	err = fs.Write(initialData)
+-	assert.NoError(t, err)
++	require.NoError(t, err)
+ 	err = fs.Flush()
+-	assert.NoError(t, err)
++	require.NoError(t, err)
+ 
+ 	// Close the storage to ensure data is written to disk
+-	err = fs.Flush()
+-	assert.NoError(t, err)
++	err = fs.Close()
++	require.NoError(t, err)
+ 
+ 	// Verify original file content
+ 	originalContent, err := os.ReadFile(path)
+-	assert.NoError(t, err)
++	require.NoError(t, err)
+ 	assert.Contains(t, string(originalContent), string(initialData))
++}
++
++func TestFileMMapStorage_Reopen(t *testing.T) {
++	path := "test_mmap_reopen.log"
++	defer os.Remove(path)
+ 
+-	// Test Rotate
+-	err = fs.Rotate(achivedPath)
+-	assert.NoError(t, err)
++	// 1. Create and write to the mmap storage
++	fs1, err := storage.NewFileMMapStorage(path, 0, storage.FileMMapStorageOps{MMapFileSizeInBytes: 1024})
++	require.NoError(t, err)
++	initialData := []byte("initial data")
++	err = fs1.Write(initialData)
++	require.NoError(t, err)
++	err = fs1.Close()
++	require.NoError(t, err)
+ 
+-	// Verify the content of the archived file
+-	archivedContent, err := os.ReadFile(achivedPath)
+-	assert.NoError(t, err)
+-	assert.Contains(t, string(archivedContent), string(initialData))
++	// 2. Re-open the storage
++	fs2, err := storage.NewFileMMapStorage(path, 0, storage.FileMMapStorageOps{MMapFileSizeInBytes: 1024})
++	require.NoError(t, err)
+ 
+-	// Write new data after rotation to the original path
+-	newData := []byte("new data")
+-	err = fs.Write(newData)
+-	assert.NoError(t, err)
+-	err = fs.Flush()
+-	assert.NoError(t, err)
++	// 3. Write more data
++	secondData := []byte(" and more data")
++	err = fs2.Write(secondData)
++	require.NoError(t, err)
++	err = fs2.Close()
++	require.NoError(t, err)
+ 
+-	// Verify the content of the new file at the original path
+-	newContent, err := os.ReadFile(path)
+-	assert.NoError(t, err)
+-	assert.Contains(t, string(newContent), string(newData))
++	// 4. Verify the content
++	finalContent, err := os.ReadFile(path)
++	require.NoError(t, err)
+ 
+-	// Close the storage
+-	err = fs.Close()
++	expectedContent := append(initialData, secondData...)
++	assert.Contains(t, string(finalContent[types.WALHeaderSize:]), string(expectedContent))
+ }
+diff --git a/tiny-reward-pool-go/internal/wal/storage/file_storage.go b/tiny-reward-pool-go/internal/wal/storage/file_storage.go
+index a0040b9..efcf905 100644
+--- a/tiny-reward-pool-go/internal/wal/storage/file_storage.go
++++ b/tiny-reward-pool-go/internal/wal/storage/file_storage.go
+@@ -1,6 +1,9 @@
+ package storage
+ 
+ import (
++	"bytes"
++	"encoding/binary"
++	"io"
+ 	"math"
+ 	"os"
+ 
+@@ -19,24 +22,61 @@ type FileStorageOpt struct {
+ 	SizeFileInBytes int
+ }
+ 
+-func NewFileStorage(path string, ops ...FileStorageOpt) (*FileStorage, error) {
+-	maxEntry := math.MaxInt
++func NewFileStorage(path string, seqNo uint64, ops ...FileStorageOpt) (*FileStorage, error) {
++	maxSize := math.MaxInt
+ 	for _, v := range ops {
+-		maxEntry = v.SizeFileInBytes
++		if v.SizeFileInBytes > 0 {
++			maxSize = v.SizeFileInBytes
++		}
+ 	}
+ 
+-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
++	// Use O_RDWR instead of O_APPEND and O_WRONLY to allow seeking back to write the header
++	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0644)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+-	return &FileStorage{file: f, capacity: maxEntry}, nil
++
++	s := &FileStorage{file: f, capacity: maxSize}
++
++	info, err := f.Stat()
++	if err != nil {
++		f.Close()
++		return nil, err
++	}
++
++	if info.Size() == 0 {
++		// New file, write header
++		hdr := types.WALHeader{
++			Magic:   types.WALMagic,
++			Version: types.WALVersion1,
++			Status:  types.WALStatusOpen,
++			SeqNo:   seqNo,
++		}
++		if err := binary.Write(f, binary.LittleEndian, &hdr); err != nil {
++			f.Close()
++			return nil, err
++		}
++		s.usage = types.WALHeaderSize
++	} else {
++		// Existing file, just record usage
++		s.usage = int(info.Size())
++	}
++
++	// Seek to the end for subsequent writes
++	if _, err := f.Seek(0, io.SeekEnd); err != nil {
++		f.Close()
++		return nil, err
++	}
++
++	return s, nil
+ }
+ 
+ func (s *FileStorage) Write(data []byte) error {
+-	if _, err := s.file.Write(data); err != nil {
++	n, err := s.file.Write(data)
++	if err != nil {
+ 		return err
+ 	}
+-	s.usage += len(data)
++	s.usage += n
+ 	return nil
+ }
+ 
+@@ -52,32 +92,46 @@ func (s *FileStorage) Flush() error {
+ 	return s.file.Sync()
+ }
+ 
+-func (s *FileStorage) Close() error {
+-	return s.file.Close()
+-}
+-
+-func (s *FileStorage) Rotate(archivePath string) error {
+-	// Get the path of the current file.
+-	originalPath := s.file.Name()
+-
+-	// Close the current file.
+-	if err := s.file.Close(); err != nil {
++func (s *FileStorage) FinalizeAndClose() error {
++	if err := s.file.Sync(); err != nil {
+ 		return err
+ 	}
+ 
+-	// Rename the old file to the new path (archive it).
+-	if err := os.Rename(originalPath, archivePath); err != nil {
++	// Seek to the beginning to write the header
++	if _, err := s.file.Seek(0, io.SeekStart); err != nil {
+ 		return err
+ 	}
+ 
+-	// Create a new file at the original path.
+-	newFile, err := os.OpenFile(originalPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
++	// Read the original header to preserve SeqNo
++	originalHdrBytes := make([]byte, types.WALHeaderSize)
++	_, err := s.file.ReadAt(originalHdrBytes, 0)
+ 	if err != nil {
+ 		return err
+ 	}
++	var originalHdr types.WALHeader
++	if err := binary.Read(bytes.NewReader(originalHdrBytes), binary.LittleEndian, &originalHdr); err != nil {
++		return err
++	}
+ 
+-	// Update the storage with the new file.
+-	s.file = newFile
+-	s.usage = 0
+-	return nil
++	hdr := types.WALHeader{
++		Magic:      types.WALMagic,
++		Version:    types.WALVersion1,
++		Status:     types.WALStatusClosed,
++		SeqNo:      originalHdr.SeqNo,
++		DataLength: uint64(s.usage - types.WALHeaderSize),
++	}
++
++	if err := binary.Write(s.file, binary.LittleEndian, &hdr); err != nil {
++		return err
++	}
++
++	if err := s.file.Sync(); err != nil {
++        return err
++    }
++
++	return s.file.Close()
+ }
++
++func (s *FileStorage) Close() error {
++	return s.FinalizeAndClose()
++}
+\ No newline at end of file
+diff --git a/tiny-reward-pool-go/internal/wal/storage/file_storage_test.go b/tiny-reward-pool-go/internal/wal/storage/file_storage_test.go
+index 0267b0a..7fae181 100644
+--- a/tiny-reward-pool-go/internal/wal/storage/file_storage_test.go
++++ b/tiny-reward-pool-go/internal/wal/storage/file_storage_test.go
+@@ -1,60 +1,46 @@
+ package storage_test
+ 
+ import (
++	"io"
+ 	"os"
++	"path/filepath"
+ 	"testing"
+ 
+ 	"github.com/stretchr/testify/assert"
++	"github.com/stretchr/testify/require"
++	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
+ 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/storage"
+ )
+ 
+ func TestFileStorage(t *testing.T) {
+-	path := "test.log"
+-	defer os.Remove(path)
++	tempDir := t.TempDir()
++	path := filepath.Join(tempDir, "test.log")
+ 
+ 	// Test NewFileStorage
+-	fs, err := storage.NewFileStorage(path)
+-	assert.NoError(t, err)
+-	assert.NotNil(t, fs)
++	fs, err := storage.NewFileStorage(path, 0)
++	require.NoError(t, err)
++	require.NotNil(t, fs)
+ 
+ 	// Test Write
+ 	data := []byte("hello world")
+ 	err = fs.Write(data)
+-	assert.NoError(t, err)
++	require.NoError(t, err)
+ 
+ 	// Test Flush
+ 	err = fs.Flush()
+-	assert.NoError(t, err)
+-
+-	// Verify content
+-	content, err := os.ReadFile(path)
+-	assert.NoError(t, err)
+-	assert.Equal(t, data, content)
+-
+-	// Test Rotate
+-	achivedPath := "test_achived.log"
+-	defer os.Remove(achivedPath)
+-	err = fs.Rotate(achivedPath)
+-	assert.NoError(t, err)
+-
+-	// Verify content of the old, rotated file
+-	archivedContent, err := os.ReadFile(achivedPath)
+-	assert.NoError(t, err)
+-	assert.Equal(t, data, archivedContent)
+-
+-	// Write to the new file at the original path
+-	newData := []byte("hello new world")
+-	err = fs.Write(newData)
+-	assert.NoError(t, err)
+-	err = fs.Flush()
+-	assert.NoError(t, err)
+-
+-	// Verify new file content at the original path
+-	newContent, err := os.ReadFile(path)
+-	assert.NoError(t, err)
+-	assert.Equal(t, newData, newContent)
++	require.NoError(t, err)
+ 
+ 	// Test Close
+ 	err = fs.Close()
+-	assert.NoError(t, err)
+-}
++	require.NoError(t, err)
++
++	// Verify content
++	file, err := os.Open(path)
++	require.NoError(t, err)
++	_, err = file.Seek(types.WALHeaderSize, io.SeekStart)
++	require.NoError(t, err)
++	content, err := io.ReadAll(file)
++	require.NoError(t, err)
++	file.Close()
++	assert.Equal(t, data, content)
++}
+\ No newline at end of file
+diff --git a/tiny-reward-pool-go/internal/wal/wal.go b/tiny-reward-pool-go/internal/wal/wal.go
+index cd37485..6e41cdd 100644
+--- a/tiny-reward-pool-go/internal/wal/wal.go
++++ b/tiny-reward-pool-go/internal/wal/wal.go
+@@ -1,8 +1,13 @@
+ package wal
+ 
+ import (
++	"bytes"
++	"encoding/binary"
++	"fmt"
++	"io"
++	"os"
++
+ 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
+-	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/utils"
+ 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/formatter"
+ 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/storage"
+ )
+@@ -17,7 +22,11 @@ var _ types.WAL = (*WAL)(nil)
+ 
+ // Size returns the current size of the WAL content.
+ func (w *WAL) Size() (int64, error) {
+-	return w.storage.Size()
++	val, err := w.storage.Size()
++	if err != nil {
++		return 0, err
++	}
++	return val - types.WALHeaderSize, nil
+ }
+ 
+ func (w *WAL) Flush() error {
+@@ -43,13 +52,13 @@ func (w *WAL) Flush() error {
+ 	return w.storage.Flush()
+ }
+ 
+-func NewWAL(path string, format types.LogFormatter, store types.Storage) (*WAL, error) {
++func NewWAL(path string, seqNo uint64, format types.LogFormatter, store types.Storage) (*WAL, error) {
+ 	if format == nil {
+ 		format = formatter.NewJSONFormatter()
+ 	}
+ 	if store == nil {
+ 		var err error
+-		store, err = storage.NewFileStorage(path)
++		store, err = storage.NewFileStorage(path, seqNo)
+ 		if err != nil {
+ 			return nil, err
+ 		}
+@@ -74,29 +83,63 @@ func (w *WAL) LogSnapshot(item types.WalLogSnapshotItem) error {
+ 	return nil
+ }
+ 
+-func (w *WAL) LogRotate(item types.WalLogRotateItem) error {
+-	w.buffer = append(w.buffer, &item)
+-	return nil
+-}
+-
+ func (w *WAL) Close() error {
+-	return w.storage.Close()
++	return w.storage.FinalizeAndClose()
+ }
+ 
+ func (w *WAL) Reset() {
+ 	w.buffer = w.buffer[:0]
+ }
+ 
+-func (w *WAL) Rotate(path string) error {
+-	return w.storage.Rotate(path)
+-}
++// ParseWAL reads the WAL log file, decodes its content, and returns the log entries and the header.
++func ParseWAL(path string, format types.LogFormatter) ([]types.WalLogEntry, *types.WALHeader, error) {
++	f, err := os.Open(path)
++	if err != nil {
++		if os.IsNotExist(err) {
++			return nil, nil, nil // Return empty if file doesn't exist
++		}
++		return nil, nil, err
++	}
++	defer f.Close()
++
++	// Read header
++	hdrBytes := make([]byte, types.WALHeaderSize)
++
++	// Use io.ReadFull to ensure we read the whole header
++	n, err := io.ReadFull(f, hdrBytes)
++	if err != nil {
++		if err == io.EOF || err == io.ErrUnexpectedEOF {
++			// File is smaller than a header, so it's empty/invalid
++			return nil, nil, nil
++		}
++		return nil, nil, fmt.Errorf("failed to read WAL header (read %d bytes): %w", n, err)
++	}
++
++	var hdr types.WALHeader
++	if err := binary.Read(bytes.NewReader(hdrBytes), binary.LittleEndian, &hdr); err != nil {
++		return nil, nil, fmt.Errorf("failed to decode WAL header: %w", err)
++	}
++
++	// Basic validation
++	if hdr.Magic != types.WALMagic {
++		return nil, nil, fmt.Errorf("invalid WAL magic number")
++	}
+ 
+-// ParseWAL reads the WAL log file and returns a slice of WalLogEntry
+-func ParseWAL(path string, format types.LogFormatter) ([]types.WalLogEntry, error) {
+-	data, err := utils.ReadFileContent(path)
++	// Read data
++	data := make([]byte, hdr.DataLength)
++	_, err = io.ReadFull(f, data)
+ 	if err != nil {
+-		return nil, err
++		return nil, &hdr, fmt.Errorf("failed to read WAL data: %w", err)
+ 	}
+ 
+-	return format.Decode(data)
+-}
++	if len(data) == 0 {
++		return []types.WalLogEntry{}, &hdr, nil
++	}
++
++	entries, err := format.Decode(data)
++	if err != nil {
++		return nil, &hdr, err
++	}
++
++	return entries, &hdr, nil
++}
+\ No newline at end of file
+diff --git a/tiny-reward-pool-go/internal/wal/wal_test.go b/tiny-reward-pool-go/internal/wal/wal_test.go
+index 74a2a70..ee8ce34 100644
+--- a/tiny-reward-pool-go/internal/wal/wal_test.go
++++ b/tiny-reward-pool-go/internal/wal/wal_test.go
+@@ -1,114 +1,126 @@
+ package wal_test
+ 
+ import (
+-	"encoding/json"
+-	"os"
++	"path/filepath"
+ 	"testing"
+ 
++	"github.com/stretchr/testify/assert"
++	"github.com/stretchr/testify/require"
+ 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/types"
+ 	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal"
+-	walformatter "github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/formatter"
+-	walstorage "github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/storage"
++	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/formatter"
++	"github.com/tinnguyenhuuletrong/my-small-app-playground/tiny-reward-pool-go/internal/wal/storage"
+ )
+ 
+-func TestParseWAL(t *testing.T) {
+-	path := "test_wal.log"
+-	f, err := os.Create(path)
+-	if err != nil {
+-		t.Fatalf("failed to create wal log: %v", err)
+-	}
++func TestWAL_JSON(t *testing.T) {
++	tempDir := t.TempDir()
++	walPath := filepath.Join(tempDir, "test.wal")
+ 
+-	// Write test data in JSONL format
+-	encoder := json.NewEncoder(f)
+-	_ = encoder.Encode(types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 1, ItemID: "gold", Success: true})
+-	_ = encoder.Encode(types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 2, ItemID: "silver", Success: true})
+-	_ = encoder.Encode(types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw, Error: types.ErrorPoolEmpty}, RequestID: 3, Success: false})
+-	_ = encoder.Encode(types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 4, ItemID: "bronze", Success: true})
+-	f.Close()
+-
+-	items, err := wal.ParseWAL(path, walformatter.NewJSONFormatter())
+-	if err != nil {
+-		t.Fatalf("ParseWAL failed: %v", err)
+-	}
+-	defer os.Remove(path)
++	// Create a new WAL with JSON formatter
++	w, err := wal.NewWAL(walPath, 0, formatter.NewJSONFormatter(), nil)
++	require.NoError(t, err)
+ 
+-	if len(items) != 4 {
+-		t.Fatalf("expected 4 items, got %d", len(items))
+-	}
++	// Log some entries
++	drawItem := types.WalLogDrawItem{
++		WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw},
++		RequestID:       1,
++		ItemID:          "item1",
++		Success:         true,
++	}
++	updateItem := types.WalLogUpdateItem{
++		WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeUpdate},
++		ItemID:          "item2",
++		Quantity:        10,
++		Probability:     100,
++	}
++	w.LogDraw(drawItem)
++	w.LogUpdate(updateItem)
+ 
+-	expectedItem0 := &types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 1, ItemID: "gold", Success: true}
+-	item0, ok := items[0].(*types.WalLogDrawItem)
+-	if !ok {
+-		t.Fatalf("unexpected type for item 0")
+-	}
+-	if item0.Type != expectedItem0.Type || item0.RequestID != expectedItem0.RequestID || item0.ItemID != expectedItem0.ItemID || item0.Success != expectedItem0.Success {
+-		t.Errorf("unexpected item 0: got %+v, want %+v", items[0], expectedItem0)
+-	}
++	// Flush and close the WAL
++	err = w.Flush()
++	require.NoError(t, err)
++	err = w.Close()
++	require.NoError(t, err)
+ 
+-	expectedItem2 := &types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw, Error: types.ErrorPoolEmpty}, RequestID: 3, Success: false}
+-	item2, ok := items[2].(*types.WalLogDrawItem)
+-	if !ok {
+-		t.Fatalf("unexpected type for item 2")
+-	}
+-	if item2.Type != expectedItem2.Type || item2.RequestID != expectedItem2.RequestID || item2.Success != expectedItem2.Success || item2.Error != expectedItem2.Error {
+-		t.Errorf("unexpected item 2: got %+v, want %+v", items[2], expectedItem2)
+-	}
++	// Parse the WAL file
++	entries, hdr, err := wal.ParseWAL(walPath, formatter.NewJSONFormatter())
++	require.NoError(t, err)
++	require.NotNil(t, hdr)
++	assert.Len(t, entries, 2)
++	assert.Equal(t, types.WALStatusClosed, hdr.Status)
++
++	// Check the first entry
++	parsedDrawItem, ok := entries[0].(*types.WalLogDrawItem)
++	require.True(t, ok)
++	assert.Equal(t, drawItem.RequestID, parsedDrawItem.RequestID)
++	assert.Equal(t, drawItem.ItemID, parsedDrawItem.ItemID)
++	assert.Equal(t, drawItem.Success, parsedDrawItem.Success)
++
++	// Check the second entry
++	parsedUpdateItem, ok := entries[1].(*types.WalLogUpdateItem)
++	require.True(t, ok)
++	assert.Equal(t, updateItem.ItemID, parsedUpdateItem.ItemID)
++	assert.Equal(t, updateItem.Quantity, parsedUpdateItem.Quantity)
++	assert.Equal(t, updateItem.Probability, parsedUpdateItem.Probability)
+ }
+ 
+-func TestLogDraw(t *testing.T) {
+-	path := "test_wal.log"
+-	fileStorage, err := walstorage.NewFileStorage(path)
+-	if err != nil {
+-		t.Fatalf("Failed to create file storage: %v", err)
+-	}
+-	w, err := wal.NewWAL(path, walformatter.NewJSONFormatter(), fileStorage)
+-	if err != nil {
+-		t.Fatalf("Failed to create WAL: %v", err)
+-	}
+-	defer os.Remove(path)
+-	defer w.Close()
+-	item := types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 1, ItemID: "gold", Success: true}
+-	if err := w.LogDraw(item); err != nil {
+-		t.Fatalf("LogDraw failed: %v", err)
+-	}
++func TestWAL_StringLine(t *testing.T) {
++	tempDir := t.TempDir()
++	walPath := filepath.Join(tempDir, "test.wal")
++
++	// Create a new WAL with StringLine formatter
++	w, err := wal.NewWAL(walPath, 0, formatter.NewStringLineFormatter(), nil)
++	require.NoError(t, err)
++
++	// Log some entries
++	drawItem := types.WalLogDrawItem{
++		WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw},
++		RequestID:       1,
++		ItemID:          "item1",
++		Success:         true,
++	}
++	w.LogDraw(drawItem)
++
++	// Flush and close
++	err = w.Flush()
++	require.NoError(t, err)
++	err = w.Close()
++	require.NoError(t, err)
++
++	// Parse the WAL file
++	entries, _, err := wal.ParseWAL(walPath, formatter.NewStringLineFormatter())
++	require.NoError(t, err)
++	assert.Len(t, entries, 1)
++
++	// Check the first entry
++	parsedDrawItem, ok := entries[0].(*types.WalLogDrawItem)
++	require.True(t, ok)
++	assert.Equal(t, drawItem.RequestID, parsedDrawItem.RequestID)
+ }
+ 
+-func TestWALFlush(t *testing.T) {
+-	path := "test_wal_flush.log"
+-	fileStorage, err := walstorage.NewFileStorage(path)
+-	if err != nil {
+-		t.Fatalf("Failed to create file storage: %v", err)
+-	}
+-	w, err := wal.NewWAL(path, walformatter.NewJSONFormatter(), fileStorage)
+-	if err != nil {
+-		t.Fatalf("Failed to create WAL: %v", err)
+-	}
+-	defer os.Remove(path)
+-	defer w.Close()
++func TestWAL_Full(t *testing.T) {
++	tempDir := t.TempDir()
++	walPath := filepath.Join(tempDir, "test.wal")
+ 
+-	// Log one item to flush
+-	item := types.WalLogDrawItem{WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw}, RequestID: 1, ItemID: "gold", Success: true}
+-	if err := w.LogDraw(item); err != nil {
+-		t.Fatalf("LogDraw failed: %v", err)
+-	}
++	// Create a file storage with a small capacity
++	// Capacity needs to be larger than header size
++	storage, err := storage.NewFileStorage(walPath, 0, storage.FileStorageOpt{SizeFileInBytes: types.WALHeaderSize + 10})
++	require.NoError(t, err)
+ 
+-	if err := w.Flush(); err != nil {
+-		t.Fatalf("Flush failed: %v", err)
+-	}
++	// Create a new WAL
++	w, err := wal.NewWAL(walPath, 0, formatter.NewJSONFormatter(), storage)
++	require.NoError(t, err)
+ 
+-	// Verify content
+-	items, err := wal.ParseWAL(path, walformatter.NewJSONFormatter())
+-	if err != nil {
+-		t.Fatalf("ParseWAL failed after flush: %v", err)
+-	}
+-	if len(items) != 1 {
+-		t.Fatalf("expected 1 item after flush, got %d", len(items))
+-	}
+-	item0, ok := items[0].(*types.WalLogDrawItem)
+-	if !ok {
+-		t.Fatalf("unexpected type for item 0")
+-	}
+-	if item0.ItemID != "gold" {
+-		t.Errorf("unexpected item after flush: %+v", items[0])
+-	}
++	// Log an entry that will exceed the capacity
++	drawItem := types.WalLogDrawItem{
++		WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw},
++		RequestID:       1,
++		ItemID:          "a-very-long-item-id-to-exceed-capacity",
++		Success:         true,
++	}
++	w.LogDraw(drawItem)
++
++	// Flush should return ErrWALFull
++	err = w.Flush()
++	assert.Equal(t, types.ErrWALFull, err)
+ }
+\ No newline at end of file
