@@ -1,22 +1,21 @@
 {
     "task": "brainstorm then create a planning for next task",
-    "save_to": "create _ai/task_15.md iter_2",
+    "save_to": "create _ai/task_16.md",
     "resources": {
-        "task_15.md": "./_ai/task_15.md"
+        "raft_dragonboat_git": "https://github.com/lni/dragonboat",
+        "raft_dragonboat_wiki": "https://deepwiki.com/lni/dragonboat/1-overview",
+        "raft_dragonboat_example": "https://github.com/lni/dragonboat-example"
     },
     "target": {
-        "goal": "continue enhance wal file structure",
+        "goal": "create pkg/raft-service",
         "note": [
-            "Now we have header for each wal",
-            "simplify wal rotate. should be continuous number 000, 001, .... so one",
-            "header only need to store the wal no. no need previous or next path ( can be computed )",
-            "rework on rotate. should keep old file, move to new one",
-            "remove utils GenRotatedWALPath",
-            "simplify the recovery process. base on path -> search for latest uncomplete wal -> recovery -> continue to use it until full"
+            "Create a raft base services for poolReward",
+            "Master service serve the request, replica service keep synchonize via wal-stream"
         ]
     },
     "steps": {
-        "1": "read current source code",
-        "2": "create implement planning in new task _ai/task_15.md iter_2"
+        "1": "read resources",
+        "2": "read current source code",
+        "3": "create implement planning in new task _ai/task_16.md"
     }
 }
