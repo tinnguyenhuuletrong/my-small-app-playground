@@ -1,6 +1,7 @@
 package raft_service
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -103,28 +104,12 @@ func (s *RewardPoolStateMachine) Close() error {
 
 // Node is a wrapper around the dragonboat NodeHost.
 type Node struct {
-	nh *dragonboat.NodeHost
+	nh      *dragonboat.NodeHost
+	shardID uint64
 }
 
 // NewNode creates and starts a new dragonboat node.
-func NewNode(replicaID uint64, raftAddress string, initialMembers map[uint64]string) (*Node, error) {
-	rc := config.Config{
-		ReplicaID:          replicaID,
-		ShardID:            1,
-		ElectionRTT:        10,
-		HeartbeatRTT:       1,
-		CheckQuorum:        true,
-		SnapshotEntries:    10000,
-		CompactionOverhead: 5000,
-	}
-
-	nhc := config.NodeHostConfig{
-		WALDir:         "wal",
-		NodeHostDir:    "dragonboat",
-		RaftAddress:    raftAddress,
-		RTTMillisecond: 200,
-	}
-
+func NewNode(nhc config.NodeHostConfig, rc config.Config, initialMembers map[uint64]string, join bool) (*Node, error) {
 	nh, err := dragonboat.NewNodeHost(nhc)
 	if err != nil {
 		return nil, err
@@ -136,9 +121,63 @@ func NewNode(replicaID uint64, raftAddress string, initialMembers map[uint64]str
 		return sm
 	}
 
-	if err := nh.StartReplica(initialMembers, false, createStateMachine, rc); err != nil {
+	if err := nh.StartReplica(initialMembers, join, createStateMachine, rc); err != nil {
 		return nil, err
 	}
 
-	return &Node{nh: nh}, nil
+	return &Node{nh: nh, shardID: rc.ShardID}, nil
+}
+
+func (n *Node) GetLeaderID() (uint64, uint64, bool, error) {
+	return n.nh.GetLeaderID(n.shardID)
+}
+
+func (n *Node) Close() {
+	n.nh.Close()
+}
+
+func (n *Node) Draw(ctx context.Context, itemID string) error {
+	drawLog := &types.WalLogDrawItem{
+		WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeDraw},
+		ItemID:          itemID,
+		Success:         true,
+	}
+	data, err := json.Marshal(drawLog)
+	if err != nil {
+		return err
+	}
+
+	cs := n.nh.GetNoOPSession(n.shardID)
+	_, err = n.nh.SyncPropose(ctx, cs, data)
+	return err
+}
+
+func (n *Node) Update(ctx context.Context, itemID string, quantity int, probability int64) error {
+	updateLog := &types.WalLogUpdateItem{
+		WalLogEntryBase: types.WalLogEntryBase{Type: types.LogTypeUpdate},
+		ItemID:          itemID,
+		Quantity:        quantity,
+		Probability:     probability,
+	}
+	data, err := json.Marshal(updateLog)
+	if err != nil {
+		return err
+	}
+
+	cs := n.nh.GetNoOPSession(n.shardID)
+	_, err = n.nh.SyncPropose(ctx, cs, data)
+	return err
+}
+
+func (n *Node) GetState(ctx context.Context) ([]types.PoolReward, error) {
+	result, err := n.nh.SyncRead(ctx, n.shardID, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var state []types.PoolReward
+	if err := json.Unmarshal(result.([]byte), &state); err != nil {
+		return nil, err
+	}
+	return state, nil
 }

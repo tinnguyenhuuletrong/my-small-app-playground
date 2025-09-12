@@ -2,9 +2,8 @@
     "task": "brainstorm then create a planning for next task",
     "save_to": "create _ai/task_16.md",
     "resources": {
-        "raft_dragonboat_git": "https://github.com/lni/dragonboat",
-        "raft_dragonboat_wiki": "https://deepwiki.com/lni/dragonboat/1-overview",
-        "raft_dragonboat_example": "https://github.com/lni/dragonboat-example"
+        "repomix-output-lni-dragonboat-example.md": "_ai/ref/repomix-output-lni-dragonboat-example.md",
+        "repomix-output-lni-dragonboat.md": "_ai/ref/repomix-output-lni-dragonboat.md"
     },
     "target": {
         "goal": "create pkg/raft-service",
@@ -16,6 +15,6 @@
     "steps": {
         "1": "read resources",
         "2": "read current source code",
-        "3": "create implement planning in new task _ai/task_16.md"
+        "3": "create the _ai/task_16.md"
     }
 }
