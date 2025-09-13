@@ -13,7 +13,11 @@ Add new tab for prediction
 
 ```
 
-finally what we have <video controls src="media/demo.mp4" title="Title"></video>
+finally what we have 
+
+
+<video controls src="https://github.com/user-attachments/assets/99af3afd-4226-4e01-a0c2-292ab775468b" title="Demo"></video>
+
 
 ## Install
 ```sh
