@@ -4,7 +4,16 @@
 ## Prompt with
 ```
 Go with @data/<any>.csv
+
+....
+
+Add new tab for prediction
+
+....
+
 ```
+
+finally what we have <video controls src="media/demo.mp4" title="Title"></video>
 
 ## Install
 ```sh
@@ -16,3 +25,11 @@ uv sync
 ```sh
 uv run streamlit run app.py
 ```
+
+## Using Makefile
+
+To simplify development, a `Makefile` has been provided with the following commands:
+
+- `make init`: Initializes the virtual environment and installs all necessary dependencies.
+- `make run`: Starts the Streamlit application.
+- `make clean`: Removes the virtual environment.

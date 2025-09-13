@@ -2,6 +2,13 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.compose import ColumnTransformer
 
 # Set page configuration
 st.set_page_config(layout="wide")
@@ -20,7 +27,7 @@ df = load_data()
 
 # Sidebar for navigation
 st.sidebar.title("Navigation")
-page = st.sidebar.radio("Go to", ["Data Overview", "Survival Analysis", "Passenger Demographics"])
+page = st.sidebar.radio("Go to", ["Data Overview", "Survival Analysis", "Passenger Demographics", "Prediction"])
 
 # Main content based on navigation
 if page == "Data Overview":
@@ -111,3 +118,69 @@ elif page == "Passenger Demographics":
     # Create and display a scatter plot for age vs. fare, colored by class
     fig = px.scatter(df, x='Age', y='Fare', color='Pclass', title='Age vs. Fare by Pclass')
     st.plotly_chart(fig)
+
+elif page == "Prediction":
+    st.title("Survival Prediction")
+
+    # Function to train the model
+    @st.cache_resource
+    def train_model(data):
+        # Define features and target
+        features = ['Pclass', 'Sex', 'Age', 'SibSp', 'Parch', 'Fare', 'Embarked']
+        target = 'Survived'
+
+        X = data[features]
+        y = data[target]
+
+        # Preprocessing steps
+        numeric_features = ['Age', 'SibSp', 'Parch', 'Fare']
+        numeric_transformer = Pipeline(steps=[
+            ('imputer', SimpleImputer(strategy='median')),
+            ('scaler', StandardScaler())])
+
+        categorical_features = ['Pclass', 'Sex', 'Embarked']
+        categorical_transformer = Pipeline(steps=[
+            ('imputer', SimpleImputer(strategy='most_frequent')),
+            ('onehot', OneHotEncoder(handle_unknown='ignore'))])
+
+        preprocessor = ColumnTransformer(
+            transformers=[
+                ('num', numeric_transformer, numeric_features),
+                ('cat', categorical_transformer, categorical_features)])
+
+        # Create and train the pipeline
+        pipeline = Pipeline(steps=[('preprocessor', preprocessor),
+                                   ('classifier', LogisticRegression())])
+
+        pipeline.fit(X, y)
+        return pipeline
+
+    model = train_model(df)
+
+    # User input
+    pclass = st.selectbox('Passenger Class', [1, 2, 3])
+    sex = st.selectbox('Sex', ['male', 'female'])
+    age = st.slider('Age', 0, 100, 25)
+    sibsp = st.slider('Siblings/Spouses Aboard', 0, 10, 0)
+    parch = st.slider('Parents/Children Aboard', 0, 10, 0)
+    fare = st.slider('Fare', 0.0, 513.0, 32.0)
+    embarked = st.selectbox('Port of Embarkation', ['S', 'C', 'Q'])
+
+    if st.button("Predict Survival"):
+        input_data = pd.DataFrame({
+            'Pclass': [pclass],
+            'Sex': [sex],
+            'Age': [age],
+            'SibSp': [sibsp],
+            'Parch': [parch],
+            'Fare': [fare],
+            'Embarked': [embarked]
+        })
+
+        prediction = model.predict(input_data)
+        prediction_proba = model.predict_proba(input_data)
+
+        if prediction[0] == 1:
+            st.success(f"This passenger is predicted to survive with a probability of {prediction_proba[0][1]:.2f}.")
+        else:
+            st.error(f"This passenger is predicted to not survive with a probability of {prediction_proba[0][0]:.2f}.")
